@@ -1018,9 +1018,19 @@ def api_detect_language():
             }
         )
         resp = json.loads(ureq.urlopen(req, timeout=30).read())
-        lang = resp.get("language", "")
+        lang_raw = resp.get("language", "")
+        _lang_to_iso2 = {
+            "english":"en","spanish":"es","french":"fr","german":"de",
+            "italian":"it","portuguese":"pt","dutch":"nl","russian":"ru",
+            "japanese":"ja","korean":"ko","chinese":"zh","arabic":"ar",
+            "hindi":"hi","turkish":"tr","vietnamese":"vi","thai":"th",
+            "indonesian":"id","swedish":"sv","ukrainian":"uk","polish":"pl",
+            "czech":"cs","danish":"da","finnish":"fi","greek":"el",
+            "hebrew":"he","hungarian":"hu","norwegian":"no","romanian":"ro",
+        }
+        lang_iso = _lang_to_iso2.get(lang_raw.lower(), lang_raw)
         shutil.rmtree(tmpdir, ignore_errors=True)
-        return jsonify({"language": lang})
+        return jsonify({"language": lang_iso, "language_name": lang_raw})
     except Exception as e:
         shutil.rmtree(tmpdir, ignore_errors=True)
         return jsonify({"language": None, "error": str(e)})
@@ -1565,6 +1575,20 @@ def api_transcribe():
 
             if OPENAI_API_KEY:
                 tc_language = jobs[result_id].get("tc_language", "auto")
+                # Whisper only accepts ISO-639-1 codes (e.g. "en"), not full names
+                # (e.g. "english"). Normalize full names to codes.
+                _lang_to_iso = {
+                    "english":"en","spanish":"es","french":"fr","german":"de",
+                    "italian":"it","portuguese":"pt","dutch":"nl","russian":"ru",
+                    "japanese":"ja","korean":"ko","chinese":"zh","arabic":"ar",
+                    "hindi":"hi","turkish":"tr","vietnamese":"vi","thai":"th",
+                    "indonesian":"id","swedish":"sv","ukrainian":"uk","polish":"pl",
+                    "czech":"cs","danish":"da","finnish":"fi","greek":"el",
+                    "hebrew":"he","hungarian":"hu","norwegian":"no","romanian":"ro",
+                }
+                tc_language_iso = _lang_to_iso.get(
+                    (tc_language or "").lower(), tc_language
+                ) if tc_language and tc_language != "auto" else "auto"
                 # Use OpenAI Whisper API
                 import urllib.request as ureq
                 import urllib.parse
@@ -1573,12 +1597,12 @@ def api_transcribe():
 
                 boundary = "----FormBoundary" + uuid.uuid4().hex
                 nl = "\r\n"
-                # Add language if specified
+                # Add language if specified (use ISO code only)
                 lang_part = ""
-                if tc_language and tc_language != "auto":
+                if tc_language_iso and tc_language_iso != "auto":
                     lang_part = (
                         f"--{boundary}{nl}"
-                        f'Content-Disposition: form-data; name="language"{nl}{nl}{tc_language}{nl}'
+                        f'Content-Disposition: form-data; name="language"{nl}{nl}{tc_language_iso}{nl}'
                     )
                 body = (
                     f"--{boundary}{nl}"
@@ -3986,28 +4010,32 @@ async function handleFile(prefix, file) {
       const langNames = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',
         pt:'Portuguese',nl:'Dutch',ru:'Russian',ja:'Japanese',ko:'Korean',zh:'Chinese',
         ar:'Arabic',hi:'Hindi',tr:'Turkish',vi:'Vietnamese',th:'Thai',id:'Indonesian',
-        sv:'Swedish',uk:'Ukrainian'};
-      const lang = ld.language || '';
+        sv:'Swedish',uk:'Ukrainian',pl:'Polish',cs:'Czech',da:'Danish',fi:'Finnish',
+        el:'Greek',he:'Hebrew',hu:'Hungarian',no:'Norwegian',ro:'Romanian'};
+      const lang = ld.language || '';          // ISO code e.g. "en"
+      const langRaw = ld.language_name || lang; // readable e.g. "english"
       if (lang) {
-        // Update dropdown
+        // Update dropdown — try existing option first, then add detected option
         const langSel = document.getElementById('tc-language');
         if (langSel) {
-          const opt = langSel.querySelector(`option[value="${lang}"]`);
-          if (opt) {
+          const prev = langSel.querySelector('option[data-detected]');
+          if (prev) prev.remove();
+          const existingOpt = langSel.querySelector(`option[value="${lang}"]`);
+          if (existingOpt) {
             langSel.value = lang;
           } else {
-            const prev = langSel.querySelector('option[data-detected]');
-            if (prev) prev.remove();
             const newOpt = document.createElement('option');
-            newOpt.value = lang; newOpt.setAttribute('data-detected','1');
-            newOpt.textContent = '✓ ' + (langNames[lang] || lang.charAt(0).toUpperCase()+lang.slice(1)) + ' (detected)';
+            const displayName = langNames[lang] || (langRaw.charAt(0).toUpperCase()+langRaw.slice(1));
+            newOpt.value = lang;
+            newOpt.setAttribute('data-detected','1');
+            newOpt.textContent = '✓ ' + displayName + ' (detected)';
             langSel.insertBefore(newOpt, langSel.firstChild);
             langSel.value = lang;
           }
         }
-        // Show badge
-        const langDisplay = langNames[lang] || (lang.charAt(0).toUpperCase()+lang.slice(1));
-        if (badge) { badge.textContent = '✓ ' + langDisplay + ' detected'; badge.style.display = 'inline'; }
+        // Show badge with readable name
+        const displayName = langNames[lang] || (langRaw.charAt(0).toUpperCase()+langRaw.slice(1));
+        if (badge) { badge.textContent = '✓ ' + displayName + ' detected'; badge.style.display = 'inline'; }
       } else {
         if (badge) { badge.textContent = ''; badge.style.display = 'none'; }
       }
