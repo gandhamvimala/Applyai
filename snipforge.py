@@ -1615,8 +1615,12 @@ def api_transcribe():
                     burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
                     tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
                     tmp_srt    = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.srt")
+                    # Check source exists
+                    if not os.path.exists(str(p)):
+                        raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
                     shutil.copy2(srt_file, tmp_srt)
+                    jobs[result_id]["log"].append(f"Video copied: {os.path.getsize(tmp_vid_in)} bytes")
                     # Try method 1: soft subtitles (embedded, no libass needed)
                     _, err, rc = run([_FFMPEG_EXE, "-y",
                         "-i", tmp_vid_in,
