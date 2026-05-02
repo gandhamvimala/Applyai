@@ -180,32 +180,36 @@ def op_crop(jid, src, dst, preset):
     except Exception as e: fail(jid,e)
 
 def op_watermark(jid, src, dst, text):
-    """Add watermark using Pillow PNG overlay — no FFmpeg font required."""
+    """Add watermark by compositing a Pillow-rendered image directly onto each frame."""
     try:
         prog(jid, "Adding watermark...", 10)
         safe_text = re.sub(r"[^a-zA-Z0-9 @._\-]", "", text)[:50] or "Watermark"
 
         tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
         tmp_out = os.path.join(tempfile.gettempdir(), f"snip_wm_out_{jid}.mp4")
-        wm_png  = os.path.join(tempfile.gettempdir(), f"snip_wm_{jid}.png")
         shutil.copy2(str(src), tmp_in)
 
-        # Get video dimensions
+        # Get video info
         info = get_info(tmp_in)
         vs = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
         vid_w = int(vs.get("width",  1280) or 1280)
         vid_h = int(vs.get("height",  720) or 720)
+        fps_raw = vs.get("r_frame_rate","25/1")
+        try:
+            num,den = fps_raw.split("/"); fps = round(float(num)/float(den),3)
+        except: fps = 25.0
+        fps = max(1.0, min(fps, 60.0))
+        total_dur = get_duration(tmp_in)
+        total_frames = int(round(total_dur * fps))
 
-        prog(jid, "Rendering watermark image...", 30)
+        prog(jid, "Rendering watermark...", 20)
 
-        # Render watermark as PNG with Pillow — no FFmpeg font needed
         try:
             from PIL import Image, ImageDraw, ImageFont
         except ImportError:
             subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
             from PIL import Image, ImageDraw, ImageFont
 
-        # Find a font
         font = None
         for fp in [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -213,51 +217,81 @@ def op_watermark(jid, src, dst, text):
             "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
         ]:
             if os.path.exists(fp):
-                try: font = ImageFont.truetype(fp, 28); break
+                try: font = ImageFont.truetype(fp, 24); break
                 except: pass
         if font is None:
             font = ImageFont.load_default()
 
-        # Measure text
-        dummy = Image.new("RGBA", (1,1))
-        draw  = ImageDraw.Draw(dummy)
-        bbox  = draw.textbbox((0,0), safe_text, font=font)
-        tw = bbox[2]-bbox[0]; th = bbox[3]-bbox[1]
-        pad = 12
-        wm_w = tw + pad*2; wm_h = th + pad*2
+        # Measure watermark
+        dummy = Image.new("RGB",(1,1)); d = ImageDraw.Draw(dummy)
+        bb = d.textbbox((0,0), safe_text, font=font)
+        tw,th = bb[2]-bb[0], bb[3]-bb[1]
+        pad = 10
+        wm_w, wm_h = tw+pad*2, th+pad*2
 
-        # Draw watermark: semi-transparent black box + white text
-        wm_img = Image.new("RGBA", (wm_w, wm_h), (0,0,0,0))
-        wm_draw = ImageDraw.Draw(wm_img)
-        wm_draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,160))
-        wm_draw.text((pad, pad), safe_text, font=font, fill=(255,255,255,230))
-        wm_img.save(wm_png, "PNG")
+        # Render watermark as solid RGB patch (no alpha — avoids overlay issues)
+        wm_img = Image.new("RGB", (wm_w, wm_h), (30,30,30))
+        wd = ImageDraw.Draw(wm_img)
+        wd.text((pad,pad), safe_text, font=font, fill=(255,255,255))
+        wm_bytes = wm_img.tobytes()  # raw RGB bytes of watermark patch
 
-        # Position: bottom-right corner
-        x_pos = vid_w - wm_w - 20
-        y_pos = vid_h - wm_h - 20
+        # Position: bottom-right
+        x_pos = vid_w - wm_w - 15
+        y_pos = vid_h - wm_h - 15
 
-        prog(jid, "Applying watermark to video...", 60)
+        prog(jid, "Processing video frames...", 40)
 
-        _, err, rc = run([_FFMPEG_EXE, "-y",
-            "-i", tmp_in,
-            "-i", wm_png,
-            "-filter_complex",
-            f"[0:v][1:v]overlay={x_pos}:{y_pos}[vout]",
-            "-map", "[vout]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-            "-c:a", "copy", "-movflags", "+faststart",
-            tmp_out])
+        # Decode video to raw RGB frames, composite watermark, re-encode via pipe
+        decode = subprocess.Popen(
+            [_FFMPEG_EXE, "-i", tmp_in,
+             "-f", "rawvideo", "-pix_fmt", "rgb24",
+             "-vf", f"scale={vid_w}:{vid_h}",
+             "pipe:1"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
 
-        for f_ in [tmp_in, wm_png]:
-            try: os.unlink(f_)
-            except: pass
+        encode = subprocess.Popen(
+            [_FFMPEG_EXE, "-y",
+             "-f", "rawvideo", "-pix_fmt", "rgb24",
+             "-s", f"{vid_w}x{vid_h}", "-r", str(fps),
+             "-i", "pipe:0",
+             "-i", tmp_in,          # for audio
+             "-map", "0:v", "-map", "1:a?",
+             "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+             "-pix_fmt", "yuv420p",
+             "-c:a", "copy", "-movflags", "+faststart",
+             "-shortest",
+             tmp_out],
+            stdin=subprocess.PIPE, stderr=subprocess.PIPE
+        )
 
-        if rc != 0:
-            raise RuntimeError("Watermark failed: " + err[-300:])
+        frame_size = vid_w * vid_h * 3
+        frames_done = 0
+        while True:
+            raw = decode.stdout.read(frame_size)
+            if len(raw) < frame_size:
+                break
+            # Composite watermark onto frame using Pillow
+            frame = Image.frombytes("RGB", (vid_w, vid_h), raw)
+            frame.paste(wm_img, (x_pos, y_pos))
+            encode.stdin.write(frame.tobytes())
+            frames_done += 1
+            if frames_done % 30 == 0:
+                pct = min(90, 40 + int(frames_done/max(total_frames,1)*50))
+                jobs[jid]["progress"] = pct
+
+        decode.stdout.close(); decode.wait()
+        encode.stdin.close();  encode.wait()
+
+        try: os.unlink(tmp_in)
+        except: pass
+
+        if encode.returncode != 0 or not os.path.exists(tmp_out) or os.path.getsize(tmp_out) < 1000:
+            err_msg = encode.stderr.read().decode(errors="ignore")[-300:]
+            raise RuntimeError("Watermark failed: " + err_msg)
 
         shutil.move(tmp_out, str(dst))
-        prog(jid, "Done! Watermark added.", 100)
+        prog(jid, f"Done! Watermark added ({frames_done} frames).", 100)
         done(jid, dst, {})
     except Exception as e:
         fail(jid, e)
