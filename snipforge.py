@@ -1689,41 +1689,83 @@ def api_transcribe():
                         raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
 
-                    # Strategy: write each caption line to its own text file and
-                    # use drawtext with textfile= — avoids ALL shell escaping issues
-                    # since text never touches the filter string.
-                    # Write filter_script file — no length limit, no escaping issues
-                    filter_script = os.path.join(tempfile.gettempdir(), f"snip_fs_{result_id}.txt")
-                    text_files = []
-                    vf_parts = []
+                    # Get video dimensions
+                    info2 = get_info(tmp_vid_in)
+                    vs2 = next((s for s in info2.get("streams",[]) if s.get("codec_type")=="video"), {})
+                    vid_w = int(vs2.get("width",  1280) or 1280)
+                    vid_h = int(vs2.get("height",  720) or 720)
+
+                    # Render caption PNGs with Pillow then overlay with FFmpeg.
+                    # This completely bypasses FFmpeg font/drawtext requirements.
+                    try:
+                        from PIL import Image, ImageDraw, ImageFont
+                    except ImportError:
+                        subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
+                        from PIL import Image, ImageDraw, ImageFont
+
+                    jobs[result_id]["log"].append("Rendering caption images…")
+
+                    # Find a usable TTF font
+                    font = None
+                    for fp in [
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+                        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+                    ]:
+                        if os.path.exists(fp):
+                            try: font = ImageFont.truetype(fp, 28); break
+                            except: pass
+                    if font is None:
+                        font = ImageFont.load_default()
+
+                    bar_h  = 60  # caption bar height
+                    png_paths = []
                     for i, cap_line in enumerate(cap_lines):
-                        tf = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}_{i}.txt")
-                        with open(tf, 'w', encoding='utf-8') as f_:
-                            f_.write(cap_line)
-                        text_files.append(tf)
-                        t_start = round(i * line_dur, 3)
-                        t_end   = round(min((i + 1) * line_dur, dur), 3)
-                        tf_fwd  = tf.replace("\\", "/")
-                        vf_parts.append(
-                            f"drawtext=textfile=\'{tf_fwd}\'"
-                            f":fontsize=24:fontcolor=white"
-                            f":x=(w-text_w)/2:y=h-th-40"
-                            f":box=1:boxcolor=black@0.6:boxborderw=8"
-                            f":enable=\'between(t,{t_start},{t_end})\'"
+                        img  = Image.new("RGBA", (vid_w, bar_h), (0, 0, 0, 0))
+                        draw = ImageDraw.Draw(img)
+                        bbox = draw.textbbox((0, 0), cap_line, font=font)
+                        tw   = bbox[2] - bbox[0]
+                        th   = bbox[3] - bbox[1]
+                        tx   = max(0, (vid_w - tw) // 2)
+                        ty   = max(0, (bar_h - th) // 2)
+                        pad  = 8
+                        draw.rectangle([tx-pad, ty-pad, tx+tw+pad, ty+th+pad], fill=(0,0,0,170))
+                        draw.text((tx, ty), cap_line, font=font, fill=(255,255,255,255))
+                        png_path = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}_{i}.png")
+                        img.save(png_path, "PNG")
+                        png_paths.append(png_path)
+
+                    # Build FFmpeg command: one -i per PNG, overlay filter per segment
+                    cmd = [_FFMPEG_EXE, "-y", "-i", tmp_vid_in]
+                    for png_path in png_paths:
+                        cmd += ["-loop", "1", "-framerate", "1", "-i", png_path]
+
+                    fc_parts = []
+                    prev = "[0:v]"
+                    n = len(cap_lines)
+                    for i in range(n):
+                        t_s = round(i * line_dur, 3)
+                        t_e = round(min((i+1) * line_dur, dur), 3)
+                        inp = f"[{i+1}:v]"
+                        out = "[vout]" if i == n-1 else f"[v{i}]"
+                        y_pos = vid_h - bar_h - 10
+                        fc_parts.append(
+                            f"{prev}{inp}overlay=0:{y_pos}"
+                            f":enable='between(t,{t_s},{t_e})'{out}"
                         )
+                        prev = f"[v{i}]"
 
-                    with open(filter_script, 'w', encoding='utf-8') as fs:
-                        fs.write(",".join(vf_parts))
-
-                    _, err, rc = run([_FFMPEG_EXE, "-y",
-                        "-i", tmp_vid_in,
-                        "-filter_script:v", filter_script,
+                    cmd += [
+                        "-filter_complex", ";".join(fc_parts),
+                        "-map", "[vout]", "-map", "0:a?",
                         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                         "-c:a", "copy", "-movflags", "+faststart",
-                        burned_out])
+                        burned_out
+                    ]
+                    _, err, rc = run(cmd)
 
-                    # Cleanup temp files
-                    for f_ in [tmp_vid_in, filter_script] + text_files:
+                    for f_ in [tmp_vid_in] + png_paths:
                         try: os.unlink(f_)
                         except: pass
 
