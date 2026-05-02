@@ -1431,9 +1431,17 @@ def api_transcribe():
 
                 boundary = "----FormBoundary" + uuid.uuid4().hex
                 nl = "\r\n"
+                # Add language if specified
+                lang_part = ""
+                if tc_language and tc_language != "auto":
+                    lang_part = (
+                        f"--{boundary}{nl}"
+                        f'Content-Disposition: form-data; name="language"{nl}{nl}{tc_language}{nl}'
+                    )
                 body = (
                     f"--{boundary}{nl}"
                     f'Content-Disposition: form-data; name="model"{nl}{nl}whisper-1{nl}'
+                    + lang_part +
                     f"--{boundary}{nl}"
                     f'Content-Disposition: form-data; name="file"; filename="audio.mp3"{nl}'
                     f"Content-Type: audio/mpeg{nl}{nl}"
@@ -1573,6 +1581,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);height:
 .snipforge-promo{text-align:center;padding:32px 20px;color:var(--muted);font-size:.88rem}
 .snipforge-promo a{color:var(--accent);text-decoration:none;font-weight:600}
 </style>
+<script type="text/javascript">
+window.$crisp=[];
+window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
+(function(){
+  d=document;s=d.createElement("script");
+  s.src="https://client.crisp.chat/l.js";
+  s.async=1;
+  d.getElementsByTagName("head")[0].appendChild(s);
+})();
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -1732,6 +1750,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   .history-table th:nth-child(4),.history-table td:nth-child(4){display:none}
 }
 </style>
+<script type="text/javascript">
+window.$crisp=[];
+window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
+(function(){
+  d=document;s=d.createElement("script");
+  s.src="https://client.crisp.chat/l.js";
+  s.async=1;
+  d.getElementsByTagName("head")[0].appendChild(s);
+})();
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -2024,6 +2052,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 
 @media(max-width:640px){.plans-grid{grid-template-columns:1fr}}
 </style>
+<script type="text/javascript">
+window.$crisp=[];
+window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
+(function(){
+  d=document;s=d.createElement("script");
+  s.src="https://client.crisp.chat/l.js";
+  s.async=1;
+  d.getElementsByTagName("head")[0].appendChild(s);
+})();
+</script>
 </head>
 <body>
 <header class="topbar">
@@ -2809,6 +2847,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   .nav-item{min-width:54px;padding:6px 8px;font-size:.5rem}
 }
 </style>
+<script type="text/javascript">
+window.$crisp=[];
+window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
+(function(){
+  d=document;s=d.createElement("script");
+  s.src="https://client.crisp.chat/l.js";
+  s.async=1;
+  d.getElementsByTagName("head")[0].appendChild(s);
+})();
+</script>
 </head>
 <body>
 <div class="app">
@@ -3411,7 +3459,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 <div class="panel" id="panel-transcribe">
   <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text using OpenAI Whisper — any language</div></div>
   <div class="upload-zone" id="tc-dropzone"><input type="file" id="tc-file" accept="video/*,audio/*">
-    <div class="upload-zone-icon">📝</div><h3>Drop your video or audio here</h3><p>MP4 · MOV · MP3 · WAV · any language</p>
+    <div class="upload-zone-icon">📝</div><h3>Drop your video or audio here</h3><p>MP4 · MOV · MP3 · WAV</p>
   </div>
   <div class="recent-files-list"></div>
   <div class="file-card" id="tc-filecard">
@@ -4184,16 +4232,6 @@ if(_urlTool){
   const navItem = document.querySelector(`.nav-item[data-panel="${_urlTool}"]`);
   if(navItem) switchPanel(navItem);
 }
-</script>
-<script type="text/javascript">
-window.$crisp=[];
-window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
-(function(){
-  d=document;s=d.createElement("script");
-  s.src="https://client.crisp.chat/l.js";
-  s.async=1;
-  d.getElementsByTagName("head")[0].appendChild(s);
-})();
 </script>
 </body>
 </html>"""
