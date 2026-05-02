@@ -1689,14 +1689,20 @@ def api_transcribe():
                         raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
 
-                    # Get video dimensions
+                    # Get video dimensions and fps
                     info2 = get_info(tmp_vid_in)
                     vs2 = next((s for s in info2.get("streams",[]) if s.get("codec_type")=="video"), {})
                     vid_w = int(vs2.get("width",  1280) or 1280)
                     vid_h = int(vs2.get("height",  720) or 720)
+                    fps_str = vs2.get("r_frame_rate","25/1")
+                    try:
+                        num, den = fps_str.split("/")
+                        fps = float(num) / float(den)
+                    except:
+                        fps = 25.0
+                    fps = max(1.0, min(fps, 60.0))
+                    total_frames = int(round(dur * fps))
 
-                    # Render caption PNGs with Pillow then overlay with FFmpeg.
-                    # This completely bypasses FFmpeg font/drawtext requirements.
                     try:
                         from PIL import Image, ImageDraw, ImageFont
                     except ImportError:
@@ -1705,13 +1711,14 @@ def api_transcribe():
 
                     jobs[result_id]["log"].append("Rendering caption images…")
 
-                    # Find a usable TTF font
+                    # Find a font
                     font = None
                     for fp in [
                         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
                         "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+                        "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
                     ]:
                         if os.path.exists(fp):
                             try: font = ImageFont.truetype(fp, 28); break
@@ -1719,53 +1726,71 @@ def api_transcribe():
                     if font is None:
                         font = ImageFont.load_default()
 
-                    bar_h  = 60  # caption bar height
-                    png_paths = []
+                    # Build a single caption overlay VIDEO (RGBA, same duration as source)
+                    # by writing frames to a raw pipe into FFmpeg.
+                    # Each frame is either blank (transparent=black,alpha=0) or shows
+                    # the current caption. We write as rawvideo RGBA piped to FFmpeg
+                    # which then overlays it onto the source.
+                    bar_h   = 70
+                    y_pos   = vid_h - bar_h - 10
+                    overlay_vid = os.path.join(tempfile.gettempdir(), f"snip_ov_{result_id}.mp4")
+
+                    # Pre-render one RGBA frame per unique caption (+ one blank)
+                    blank_frame = bytes(vid_w * bar_h * 4)  # all zeros = transparent
+                    cap_frames  = {}
                     for i, cap_line in enumerate(cap_lines):
                         img  = Image.new("RGBA", (vid_w, bar_h), (0, 0, 0, 0))
                         draw = ImageDraw.Draw(img)
-                        bbox = draw.textbbox((0, 0), cap_line, font=font)
-                        tw   = bbox[2] - bbox[0]
-                        th   = bbox[3] - bbox[1]
-                        tx   = max(0, (vid_w - tw) // 2)
-                        ty   = max(0, (bar_h - th) // 2)
-                        pad  = 8
-                        draw.rectangle([tx-pad, ty-pad, tx+tw+pad, ty+th+pad], fill=(0,0,0,170))
+                        bbox = draw.textbbox((0,0), cap_line, font=font)
+                        tw   = bbox[2]-bbox[0]; th = bbox[3]-bbox[1]
+                        tx   = max(4, (vid_w-tw)//2); ty = max(4, (bar_h-th)//2)
+                        pad  = 10
+                        draw.rectangle([tx-pad, ty-pad, tx+tw+pad, ty+th+pad], fill=(0,0,0,180))
                         draw.text((tx, ty), cap_line, font=font, fill=(255,255,255,255))
-                        png_path = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}_{i}.png")
-                        img.save(png_path, "PNG")
-                        png_paths.append(png_path)
+                        cap_frames[i] = img.tobytes()
 
-                    # Build FFmpeg command: one -i per PNG, overlay filter per segment
-                    cmd = [_FFMPEG_EXE, "-y", "-i", tmp_vid_in]
-                    for png_path in png_paths:
-                        cmd += ["-loop", "1", "-framerate", "1", "-i", png_path]
+                    # Pipe raw RGBA frames into FFmpeg to create overlay video
+                    ov_proc = subprocess.Popen(
+                        [_FFMPEG_EXE, "-y",
+                         "-f", "rawvideo", "-pix_fmt", "rgba",
+                         "-s", f"{vid_w}x{bar_h}",
+                         "-r", str(fps),
+                         "-i", "pipe:0",
+                         "-c:v", "png",   # lossless, supports alpha
+                         "-frames:v", str(total_frames),
+                         overlay_vid],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    for frame_idx in range(total_frames):
+                        t = frame_idx / fps
+                        cap_idx = min(int(t / line_dur), len(cap_lines)-1)
+                        # Which caption segment are we in?
+                        seg_start = cap_idx * line_dur
+                        seg_end   = min((cap_idx+1) * line_dur, dur)
+                        if seg_start <= t < seg_end:
+                            ov_proc.stdin.write(cap_frames[cap_idx])
+                        else:
+                            ov_proc.stdin.write(blank_frame)
+                    ov_proc.stdin.close()
+                    ov_proc.wait()
 
-                    fc_parts = []
-                    prev = "[0:v]"
-                    n = len(cap_lines)
-                    for i in range(n):
-                        t_s = round(i * line_dur, 3)
-                        t_e = round(min((i+1) * line_dur, dur), 3)
-                        inp = f"[{i+1}:v]"
-                        out = "[vout]" if i == n-1 else f"[v{i}]"
-                        y_pos = vid_h - bar_h - 10
-                        fc_parts.append(
-                            f"{prev}{inp}overlay=0:{y_pos}"
-                            f":enable='between(t,{t_s},{t_e})'{out}"
-                        )
-                        prev = f"[v{i}]"
+                    if not os.path.exists(overlay_vid) or os.path.getsize(overlay_vid) < 100:
+                        raise RuntimeError("Overlay video generation failed")
 
-                    cmd += [
-                        "-filter_complex", ";".join(fc_parts),
+                    # Overlay the caption video onto the source video
+                    _, err, rc = run([_FFMPEG_EXE, "-y",
+                        "-i", tmp_vid_in,
+                        "-i", overlay_vid,
+                        "-filter_complex",
+                        f"[0:v][1:v]overlay=0:{y_pos}[vout]",
                         "-map", "[vout]", "-map", "0:a?",
                         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                         "-c:a", "copy", "-movflags", "+faststart",
-                        burned_out
-                    ]
-                    _, err, rc = run(cmd)
+                        burned_out])
 
-                    for f_ in [tmp_vid_in] + png_paths:
+                    for f_ in [tmp_vid_in, overlay_vid]:
                         try: os.unlink(f_)
                         except: pass
 
