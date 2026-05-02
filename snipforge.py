@@ -355,34 +355,81 @@ def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3,
 
         # Build valid segment list with sequential indices
         valid_segs = [(ts,te) for ts,te in segments if (te-ts)>=0.05]
-        if not valid_segs:
-            # No silences found — just copy the whole file
-            prog(jid,"No silences found — copying original…",40)
-            shutil.copy2(src, str(dst).replace(".tmp.mp4","")+".mp4")
-            dst = str(dst).replace(".tmp.mp4","")+".mp4"
-            new_dur=get_duration(dst)
-            prog(jid,f"Done! Duration unchanged: {fmt_time(new_dur)}",100)
-            done(jid, dst, {"original":round(total,2),"new":round(new_dur,2),"saved":0,"pct":0})
-            return
+
+        # If only 1 segment = full video, skip complex filtering
+        single_seg = len(valid_segs) == 1 and abs(valid_segs[0][0]) < 0.1 and abs(valid_segs[0][1] - total) < 0.5
+
+        if not valid_segs or single_seg:
+            if not do_speed or abs(speed-1.0) < 0.01:
+                # No silences, no speed — just copy
+                prog(jid,"No silences found — copying original…",40)
+                out = str(dst).replace(".tmp.mp4","")+".mp4"
+                shutil.copy2(src, out)
+                new_dur = get_duration(out)
+                prog(jid,f"Done! Duration unchanged: {fmt_time(new_dur)}",100)
+                done(jid, out, {"original":round(total,2),"new":round(new_dur,2),"saved":0,"pct":0})
+                return
+            else:
+                # No silences but speed requested — apply speed directly
+                prog(jid,f"No silences — applying {speed:.2f}× speed…",40)
+                out = str(dst).replace(".tmp.mp4","")+".mp4"
+                rem=speed; atempos=[]
+                while rem>2.0: atempos.append("atempo=2.0"); rem/=2.0
+                atempos.append(f"atempo={rem:.4f}")
+                _, err2, rc2 = run([_FFMPEG_EXE,"-y","-i",src,
+                                    "-vf",f"setpts={1/speed:.6f}*PTS",
+                                    "-af",",".join(atempos),
+                                    "-c:v","libx264","-preset","fast","-crf","20",
+                                    "-c:a","aac","-b:a","128k", out])
+                if rc2 != 0:
+                    # Try without audio if no audio stream
+                    _, err2, rc2 = run([_FFMPEG_EXE,"-y","-i",src,
+                                        "-vf",f"setpts={1/speed:.6f}*PTS",
+                                        "-an","-c:v","libx264","-preset","fast","-crf","20", out])
+                new_dur = get_duration(out)
+                saved = total - new_dur
+                prog(jid,f"Done! {fmt_time(total)} → {fmt_time(new_dur)}",100)
+                done(jid, out, {"original":round(total,2),"new":round(new_dur,2),
+                                "saved":round(max(0,saved),2),"pct":round(max(0,saved)/total*100,1)})
+                return
 
         nv = len(valid_segs)
+
+        # Check if video has audio stream
+        _, probe_err, _ = run([_FFMPEG_EXE, "-i", src])
+        has_audio = "Audio:" in probe_err
+
         filter_parts=[]
         for i,(ts,te) in enumerate(valid_segs):
-            filter_parts.append(
-                f"[0:v]trim=start={ts:.4f}:end={te:.4f},setpts=PTS-STARTPTS[v{i}];"
-                f"[0:a]atrim=start={ts:.4f}:end={te:.4f},asetpts=PTS-STARTPTS[a{i}]"
-            )
+            if has_audio:
+                filter_parts.append(
+                    f"[0:v]trim=start={ts:.4f}:end={te:.4f},setpts=PTS-STARTPTS[v{i}];"
+                    f"[0:a]atrim=start={ts:.4f}:end={te:.4f},asetpts=PTS-STARTPTS[a{i}]"
+                )
+            else:
+                filter_parts.append(
+                    f"[0:v]trim=start={ts:.4f}:end={te:.4f},setpts=PTS-STARTPTS[v{i}]"
+                )
+
         vi="".join(f"[v{i}]" for i in range(nv))
-        ai="".join(f"[a{i}]" for i in range(nv))
         fc=";".join(filter_parts)
-        fc+=f";{vi}concat=n={nv}:v=1:a=0[vout];{ai}concat=n={nv}:v=0:a=1[aout]"
 
         prog(jid,"Cutting silences…",40)
         tmp = str(dst)+".tmp.mp4"
-        _, err, rc = run([_FFMPEG_EXE,"-y","-i",src,"-filter_complex",fc,
-                          "-map","[vout]","-map","[aout]",
-                          "-c:v","libx264","-preset","fast","-crf","20",
-                          "-c:a","aac","-b:a","128k", tmp])
+
+        if has_audio:
+            ai="".join(f"[a{i}]" for i in range(nv))
+            fc+=f";{vi}concat=n={nv}:v=1:a=0[vout];{ai}concat=n={nv}:v=0:a=1[aout]"
+            _, err, rc = run([_FFMPEG_EXE,"-y","-i",src,"-filter_complex",fc,
+                              "-map","[vout]","-map","[aout]",
+                              "-c:v","libx264","-preset","fast","-crf","20",
+                              "-c:a","aac","-b:a","128k", tmp])
+        else:
+            fc+=f";{vi}concat=n={nv}:v=1:a=0[vout]"
+            _, err, rc = run([_FFMPEG_EXE,"-y","-i",src,"-filter_complex",fc,
+                              "-map","[vout]",
+                              "-c:v","libx264","-preset","fast","-crf","20", tmp])
+
         if rc!=0: raise RuntimeError(f"Silence cut failed: {err[-300:]}")
 
         src2=tmp
