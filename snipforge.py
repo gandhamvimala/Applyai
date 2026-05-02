@@ -301,7 +301,8 @@ def done(jid, path, stats=None):
             if ext in ('.mp4','.mov','.webm','.avi'):
                 wm_path = str(path)
                 tmp_wm = os.path.join(tempfile.gettempdir(), f"snip_autowm_{jid}.mp4")
-                shutil.copy2(wm_path, os.path.join(tempfile.gettempdir(), "snip_wm_in.mp4"))
+                tmp_in = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
+                shutil.copy2(wm_path, tmp_in)
                 font_paths = [
                     os.path.join(os.environ.get("WINDIR","C:/Windows"), "Fonts", "arial.ttf"),
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -310,12 +311,13 @@ def done(jid, path, stats=None):
                 ff = font_file.replace("\\","/").replace("\\","/") if font_file else None
                 vf = (f"drawtext=fontfile='{ff}':text='Made with Snipforge':fontsize=16:fontcolor=white@0.7:x=10:y=h-th-10:box=1:boxcolor=black@0.3:boxborderw=3"
                       if ff else "drawtext=text='Made with Snipforge':fontsize=16:fontcolor=white@0.7:x=10:y=h-th-10:box=1:boxcolor=black@0.3:boxborderw=3")
-                tmp_in = os.path.join(tempfile.gettempdir(), "snip_wm_in.mp4")
                 r = subprocess.run([_FFMPEG_EXE,"-y","-i",tmp_in,"-vf",vf,
                     "-c:v","libx264","-preset","fast","-crf","22","-c:a","copy",tmp_wm],
                     capture_output=True)
                 if r.returncode == 0:
                     shutil.move(tmp_wm, wm_path)
+                try: os.unlink(tmp_in)
+                except: pass
     except Exception:
         pass  # Never fail due to watermark issues
 
@@ -1071,6 +1073,13 @@ def api_merge():
     ip = get_ip()
     if not check_rate_limit(ip):
         return jsonify({"error":f"Rate limit exceeded."}),429
+    user = get_current_user()
+    if not user:
+        return jsonify({"error":"login_required"}),401
+    ok, msg = check_plan_limit(user)
+    if not ok:
+        return jsonify({"error": msg, "upgrade":True}),403
+    increment_usage(user["id"])
 
     data = request.get_json()
     if not data: return jsonify({"error":"Invalid request"}),400
@@ -1600,15 +1609,15 @@ def api_transcribe():
                     words_per_line = 8
                     lines = [' '.join(words[i:i+words_per_line]) for i in range(0, len(words), words_per_line)]
                     line_dur = dur / max(len(lines), 1)
+                    def fmt_srt(t):
+                        h,m = int(t//3600), int((t%3600)//60)
+                        s, ms = int(t%60), int((t%1)*1000)
+                        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
                     srt_content = ""
                     for i, line in enumerate(lines):
                         start = i * line_dur
                         end = (i + 1) * line_dur
-                        def fmt_time(t):
-                            h,m = int(t//3600), int((t%3600)//60)
-                            s, ms = int(t%60), int((t%1)*1000)
-                            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-                        srt_content += f"{i+1}\n{fmt_time(start)} --> {fmt_time(end)}\n{line}\n\n"
+                        srt_content += f"{i+1}\n{fmt_srt(start)} --> {fmt_srt(end)}\n{line}\n\n"
                     with open(srt_file, 'w', encoding='utf-8') as f:
                         f.write(srt_content)
                     # Embed subtitles as soft subs (no libass needed)
@@ -1749,7 +1758,21 @@ def delete_history(hid):
         db.execute('DELETE FROM video_history WHERE id=? AND user_id=?', (hid, user['id']))
     return jsonify({"success": True})
 
-# ─── HTML/CSS/JS frontend ─────────────────────────────────────────────────────
+@app.route("/api/history/<hid>/rename", methods=["PATCH"])
+@login_required
+def rename_history(hid):
+    user = get_current_user()
+    data = request.get_json()
+    new_name = (data.get("filename") or "").strip()
+    if not new_name:
+        return jsonify({"error": "Name cannot be empty"}), 400
+    if len(new_name) > 200:
+        return jsonify({"error": "Name too long"}), 400
+    safe_name = secure_filename(new_name) or new_name
+    with get_db() as db:
+        db.execute('UPDATE video_history SET filename=? WHERE id=? AND user_id=?',
+                   (safe_name, hid, user['id']))
+    return jsonify({"success": True, "filename": safe_name})# ─── HTML/CSS/JS frontend ─────────────────────────────────────────────────────
 
 
 SHARE_HTML = r"""<!DOCTYPE html>
@@ -2079,8 +2102,13 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <tbody id="history-body">
         {% for h in history %}
         <tr id="row-{{ h.id }}">
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ h.filename }}">
-            {{ h.filename or 'Unknown' }}
+          <td style="max-width:220px">
+            <span class="fname-display" id="fname-{{ h.id }}" title="Click to rename" onclick="startRename('{{ h.id }}')">{{ h.filename or 'Unknown' }}</span>
+            <span class="fname-edit" id="fedit-{{ h.id }}" style="display:none">
+              <input class="fname-input" id="finput-{{ h.id }}" value="{{ h.filename or '' }}" onkeydown="handleRenameKey(event,'{{ h.id }}')" />
+              <button class="fname-save" onclick="saveRename('{{ h.id }}')">✓</button>
+              <button class="fname-cancel" onclick="cancelRename('{{ h.id }}')">✕</button>
+            </span>
           </td>
           <td>
             <span class="op-badge op-{{ h.operation or 'other' }}">{{ (h.operation or 'process').replace('_',' ') }}</span>
@@ -2144,6 +2172,40 @@ document.querySelectorAll('.time-ago[data-ts]').forEach(el=>{
   else el.textContent=Math.floor(diff/86400)+'d ago';
 });
 
+function startRename(id){
+  document.getElementById('fname-'+id).style.display='none';
+  const edit=document.getElementById('fedit-'+id);
+  edit.style.display='inline-flex';
+  const inp=document.getElementById('finput-'+id);
+  inp.focus(); inp.select();
+}
+function cancelRename(id){
+  document.getElementById('fname-'+id).style.display='';
+  document.getElementById('fedit-'+id).style.display='none';
+}
+function handleRenameKey(e,id){
+  if(e.key==='Enter'){e.preventDefault();saveRename(id);}
+  if(e.key==='Escape'){cancelRename(id);}
+}
+async function saveRename(id){
+  const inp=document.getElementById('finput-'+id);
+  const name=inp.value.trim();
+  if(!name){inp.focus();return;}
+  const r=await fetch('/api/history/'+id+'/rename',{
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({filename:name})
+  });
+  const d=await r.json();
+  if(d.success){
+    const display=document.getElementById('fname-'+id);
+    display.textContent=d.filename;
+    display.title='Click to rename';
+    cancelRename(id);
+  } else {
+    alert(d.error||'Rename failed');
+  }
+}
 async function deleteHistory(id){
   if(!confirm('Remove from history?')) return;
   const r=await fetch('/api/history/'+id,{method:'DELETE'});
@@ -2156,6 +2218,23 @@ async function deleteHistory(id){
 }
 </script>
 <style>
+.fname-display{
+  display:inline-block;max-width:190px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;cursor:pointer;border-radius:4px;padding:2px 4px;
+  transition:background .15s;vertical-align:middle}
+.fname-display:hover{background:var(--bg3);color:var(--accent)}
+.fname-display:hover::after{content:' ✎';font-size:.7rem;opacity:.6}
+.fname-edit{display:inline-flex;align-items:center;gap:4px;width:100%}
+.fname-input{flex:1;min-width:0;font-size:.82rem;font-family:var(--mono);
+  padding:3px 7px;border:1px solid var(--accent);border-radius:5px;
+  background:var(--bg2);color:var(--text);outline:none}
+.fname-save,.fname-cancel{flex-shrink:0;width:24px;height:24px;border:none;
+  border-radius:4px;cursor:pointer;font-size:.8rem;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center}
+.fname-save{background:var(--green-bg);color:var(--green)}
+.fname-save:hover{background:var(--green);color:#fff}
+.fname-cancel{background:var(--bg3);color:var(--muted)}
+.fname-cancel:hover{background:#fee;color:#c00}
 @keyframes fadeOut{to{opacity:0;transform:translateX(20px)}}
 </style>
 </body>
@@ -3757,6 +3836,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <div id="tc-text" style="font-size:.9rem;line-height:1.7;color:var(--text);white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
     </div>
     <a class="dl-btn" id="tc-dl-txt" href="#" download="transcript.txt">⬇ Download Transcript (.txt)</a>
+    <a class="dl-btn" id="tc-dl-video" href="#" download="captioned.mp4" style="display:none;margin-top:10px;background:linear-gradient(135deg,#1a7a3c,#2aa55a)">⬇ Download Captioned Video (.mp4)</a>
   </div>
 </div>
 
@@ -4418,6 +4498,15 @@ async function runTranscribe(){
       const dl=document.getElementById('tc-dl-txt');
       dl.href=url;
       dl.download=(s.filename||'transcript').replace(/[.][^.]+$/,'')+'.txt';
+      // Captioned video download (shown only when burn_captions succeeded)
+      const dlVideo=document.getElementById('tc-dl-video');
+      if(stats.burned && stats.video_result){
+        dlVideo.href='/api/download/'+d.job_id;
+        dlVideo.download=(s.filename||'video').replace(/[.][^.]+$/,'')+'_captioned.mp4';
+        dlVideo.style.display='inline-flex';
+      } else {
+        dlVideo.style.display='none';
+      }
       // Stats
       const el=document.getElementById('tc-rstats');
       el.innerHTML=`
