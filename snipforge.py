@@ -4807,11 +4807,13 @@ if(_urlTool){
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Snipforge Video Toolkit")
-    parser.add_argument("--port",   type=int, default=5000)
+    parser.add_argument("--port",   type=int, default=int(os.environ.get("PORT", 5000)))
     parser.add_argument("--host",   default="0.0.0.0")
     parser.add_argument("--server", action="store_true", help="Start web server")
     parser.add_argument("--workers",type=int, default=4, help="Number of worker threads (Waitress)")
     args = parser.parse_args()
+    # Always respect $PORT env var (Railway, Heroku, etc.)
+    args.port = int(os.environ.get("PORT", args.port))
 
     print(f"\n✂️  Snipforge — Video Toolkit")
     print(f"   Open: http://localhost:{args.port}")
