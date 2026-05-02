@@ -206,7 +206,9 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
             from PIL import Image, ImageDraw, ImageFont
 
         # Find font
-        fsize = max(16, min(72, int(fontsize)))
+        # Scale font size relative to video width so it looks consistent across resolutions
+        base_fsize = max(24, min(120, int(fontsize)))
+        fsize = max(24, int(base_fsize * vid_w / 1280))
         font = None
         for fp in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
@@ -1131,7 +1133,7 @@ def api_process():
                 data.get("text","Watermark"),
                 data.get("position","bottom-right"),
                 data.get("opacity",80),
-                data.get("fontsize",28))).start()
+                data.get("fontsize",48))).start()
         elif op=="stabilize":
             threading.Thread(target=op_stabilize, args=(jid,src,str(dst))).start()
         elif op=="denoise":
@@ -3575,8 +3577,8 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       </select>
     </div>
     <div class="field field-row" style="margin-bottom:10px">
-      <label>Font Size <span id="wm-fs-val" style="color:var(--accent)">28px</span></label>
-      <input type="range" id="wm-fontsize" min="16" max="72" value="28" style="flex:1"
+      <label>Font Size <span id="wm-fs-val" style="color:var(--accent)">48px</span></label>
+      <input type="range" id="wm-fontsize" min="24" max="120" value="48" style="flex:1"
              oninput="document.getElementById('wm-fs-val').textContent=this.value+'px'">
     </div>
     <div class="field field-row">
