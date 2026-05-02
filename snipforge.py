@@ -1621,46 +1621,67 @@ def api_transcribe():
                     with open(srt_file, 'w', encoding='utf-8') as f:
                         f.write(srt_content)
 
-                    burned_out  = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
-                    tmp_vid_in  = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
+                    burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
+                    tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
+                    ass_file   = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.ass")
                     if not os.path.exists(str(p)):
                         raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
 
-                    # Build drawtext filter — one entry per caption line, timed evenly
-                    def esc(t):
-                        return t.replace('\\','').replace("'",'').replace('"','').replace(':','').replace('%','')
-                    vf_parts = []
-                    for i, line in enumerate(lines):
-                        safe_line = esc(line)[:60]
-                        if not safe_line: continue
-                        t_start = i * line_dur
-                        t_end   = (i + 1) * line_dur
-                        vf_parts.append(
-                            f"drawtext=text='{safe_line}'"
-                            f":fontsize=22:fontcolor=white"
-                            f":x=(w-text_w)/2:y=h-th-40"
-                            f":box=1:boxcolor=black@0.65:boxborderw=8"
-                            f":enable='between(t,{t_start:.3f},{t_end:.3f})'"
-                        )
-                    vf = ",".join(vf_parts) if vf_parts else "null"
+                    # Write ASS subtitle file — handles all unicode/special chars safely
+                    def fmt_ass(t):
+                        h = int(t // 3600)
+                        m = int((t % 3600) // 60)
+                        s = t % 60
+                        return f"{h}:{m:02d}:{s:05.2f}"
 
+                    ass_header = (
+                        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\n\n"
+                        "[V4+ Styles]\n"
+                        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,"
+                        "Bold,Italic,Underline,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV\n"
+                        "Style: Cap,Arial,28,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,"
+                        "1,0,0,1,2,1,2,20,20,30\n\n"
+                        "[Events]\n"
+                        "Format: Start,End,Style,Text\n"
+                    )
+                    ass_events = ""
+                    for i, line in enumerate(lines):
+                        clean = line.replace("\n", " ").replace("{", "").replace("}", "")
+                        t_start = i * line_dur
+                        t_end   = min((i + 1) * line_dur, dur)
+                        ass_events += f"Dialogue: {fmt_ass(t_start)},{fmt_ass(t_end)},Cap,{clean}\n"
+
+                    with open(ass_file, 'w', encoding='utf-8') as af:
+                        af.write(ass_header + ass_events)
+
+                    # Burn ASS subtitles — works on Railway (libass is included in ffmpeg builds)
+                    ass_safe = ass_file.replace("\\", "/").replace(":", "\\:")
                     _, err, rc = run([_FFMPEG_EXE, "-y",
                         "-i", tmp_vid_in,
-                        "-vf", vf,
+                        "-vf", f"subtitles='{ass_safe}'",
                         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                        "-c:a", "copy",
-                        "-movflags", "+faststart",
+                        "-c:a", "copy", "-movflags", "+faststart",
                         burned_out])
 
-                    try: os.unlink(tmp_vid_in)
-                    except: pass
+                    # Fallback: if subtitles filter fails (no libass), use subtitles with filename= syntax
+                    if rc != 0:
+                        _, err, rc = run([_FFMPEG_EXE, "-y",
+                            "-i", tmp_vid_in,
+                            "-vf", f"ass={ass_safe}",
+                            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                            "-c:a", "copy", "-movflags", "+faststart",
+                            burned_out])
+
+                    for f_ in [tmp_vid_in, ass_file]:
+                        try: os.unlink(f_)
+                        except: pass
 
                     if rc == 0:
                         output_file = burned_out
                         jobs[result_id]["log"].append("Captions burned into video!")
                     else:
-                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-200:]}")
+                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-300:]}")
                 except Exception as ce:
                     jobs[result_id]["log"].append(f"Caption error: {ce}")
 
@@ -3741,7 +3762,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     </div>
   </div>
   <div style="margin-bottom:12px">
-    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Language</div>
+    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span>Language</span><span id="tc-lang-detected" style="display:none;font-size:.62rem;color:var(--green);padding:2px 8px;background:var(--green-bg);border-radius:4px;font-weight:600"></span></div>
     <select id="tc-language" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem;font-family:var(--sans)">
       <option value="auto">🌐 Auto-detect</option>
       <option value="en">🇺🇸 English</option>
@@ -3957,6 +3978,16 @@ function resetUpload(prefix) {
   const rb = document.getElementById(prefix+'-result');
   if (pb) pb.classList.remove('show');
   if (rb) rb.classList.remove('show');
+  if (prefix === 'tc') {
+    const badge = document.getElementById('tc-lang-detected');
+    if (badge) { badge.textContent = ''; badge.style.display = 'none'; }
+    const langSel = document.getElementById('tc-language');
+    if (langSel) {
+      const detected = langSel.querySelector('option[data-detected]');
+      if (detected) detected.remove();
+      langSel.value = 'auto';
+    }
+  }
   delete state[prefix];
 }
 
@@ -4518,16 +4549,14 @@ async function runTranscribe(){
             langSel.value = detectedLang;
           }
         }
-        // Show detected language badge
-        let badge = document.getElementById('tc-lang-detected');
-        if (!badge) {
-          badge = document.createElement('div');
-          badge.id = 'tc-lang-detected';
-          badge.style.cssText = 'font-family:var(--mono);font-size:.65rem;color:var(--green);margin-top:4px;padding:3px 8px;background:var(--green-bg);border-radius:4px;display:inline-block';
-          document.getElementById('tc-language').parentNode.appendChild(badge);
-        }
-        badge.textContent = '✓ Detected: ' + detectedLang;
-        badge.style.display = 'inline-block';
+        // Show detected language badge in the pre-existing slot
+        const langNames = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',
+          pt:'Portuguese',nl:'Dutch',ru:'Russian',ja:'Japanese',ko:'Korean',zh:'Chinese',
+          ar:'Arabic',hi:'Hindi',tr:'Turkish',vi:'Vietnamese',th:'Thai',id:'Indonesian',
+          sv:'Swedish',uk:'Ukrainian'};
+        const langDisplay = langNames[detectedLang] || (detectedLang.charAt(0).toUpperCase()+detectedLang.slice(1));
+        const badge = document.getElementById('tc-lang-detected');
+        if (badge) { badge.textContent = '✓ ' + langDisplay + ' detected'; badge.style.display = 'inline'; }
       }
       document.getElementById('tc-result').classList.add('show');
       run.disabled=false; run.textContent=getRunLabel('tc'); run.classList.remove('working');
