@@ -974,6 +974,57 @@ def api_info():
         "ext":      ext.lstrip(".")
     })
 
+@app.route("/api/detect-language", methods=["POST"])
+@login_required
+def api_detect_language():
+    """Quick language detection: extract 10s clip, send to Whisper, return language code."""
+    if not OPENAI_API_KEY:
+        return jsonify({"language": None, "error": "no_api_key"})
+    data = request.get_json()
+    file_id = (data or {}).get("file_id", "")
+    if not re.match(r'^[a-f0-9]{8}$', file_id):
+        return jsonify({"error": "invalid_file_id"}), 400
+    src = _save_file(file_id, "")
+    if not src:
+        return jsonify({"error": "file_not_found"}), 404
+    try:
+        tmpdir = tempfile.mkdtemp()
+        sample = os.path.join(tmpdir, "sample.mp3")
+        # Extract first 10 seconds as low-bitrate mono MP3 for speed
+        run([_FFMPEG_EXE, "-y", "-i", src, "-t", "10",
+             "-vn", "-c:a", "libmp3lame", "-b:a", "32k", "-ar", "16000", "-ac", "1", sample])
+        if not os.path.exists(sample):
+            return jsonify({"language": None})
+        import urllib.request as ureq
+        with open(sample, "rb") as af:
+            audio_data = af.read()
+        boundary = "----LangDetect" + uuid.uuid4().hex
+        nl = "\r\n"
+        body = (
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="model"{nl}{nl}whisper-1{nl}'
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="response_format"{nl}{nl}verbose_json{nl}'
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="file"; filename="sample.mp3"{nl}'
+            f"Content-Type: audio/mpeg{nl}{nl}"
+        ).encode() + audio_data + f"{nl}--{boundary}--{nl}".encode()
+        req = ureq.Request(
+            "https://api.openai.com/v1/audio/transcriptions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}"
+            }
+        )
+        resp = json.loads(ureq.urlopen(req, timeout=30).read())
+        lang = resp.get("language", "")
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        return jsonify({"language": lang})
+    except Exception as e:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        return jsonify({"language": None, "error": str(e)})
+
 def _save_file(file_id, filename):
     # find upload by file_id prefix
     for f in UPLOAD_DIR.iterdir():
@@ -1592,7 +1643,7 @@ def api_transcribe():
                     translated_text = translate_resp["choices"][0]["message"]["content"].strip()
                     text = translated_text
                     jobs[result_id]["log"].append(f"Translation to {translate_to} complete!")
-                    jobs[result_id]["stats"] = {"text": text, "language": translate_to, "duration": round(dur,2), "words": len(text.split()), "translated": True}
+                    jobs[result_id]["stats"] = {"text": text, "language": translate_to, "detected_language": lang, "duration": round(dur,2), "words": len(text.split()), "translated": True}
                 except Exception as te:
                     jobs[result_id]["log"].append(f"Translation failed: {te}, using original transcript.")
 
@@ -1603,77 +1654,52 @@ def api_transcribe():
                 jobs[result_id]["log"].append("Burning captions into video…")
                 jobs[result_id]["progress"] = 90
                 try:
-                    # Create SRT subtitle file
-                    srt_file = os.path.join(tmpdir, "captions.srt")
                     words = text.split()
                     words_per_line = 8
-                    lines = [' '.join(words[i:i+words_per_line]) for i in range(0, len(words), words_per_line)]
-                    line_dur = dur / max(len(lines), 1)
-                    def fmt_srt(t):
-                        h,m = int(t//3600), int((t%3600)//60)
-                        s, ms = int(t%60), int((t%1)*1000)
-                        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-                    srt_content = ""
-                    for i, line in enumerate(lines):
-                        start = i * line_dur
-                        end = (i + 1) * line_dur
-                        srt_content += f"{i+1}\n{fmt_srt(start)} --> {fmt_srt(end)}\n{line}\n\n"
-                    with open(srt_file, 'w', encoding='utf-8') as f:
-                        f.write(srt_content)
+                    cap_lines = [' '.join(words[i:i+words_per_line]) for i in range(0, len(words), words_per_line)]
+                    line_dur = dur / max(len(cap_lines), 1)
 
                     burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
                     tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
-                    ass_file   = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.ass")
                     if not os.path.exists(str(p)):
                         raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
 
-                    # Write ASS subtitle file — handles all unicode/special chars safely
-                    def fmt_ass(t):
-                        h = int(t // 3600)
-                        m = int((t % 3600) // 60)
-                        s = t % 60
-                        return f"{h}:{m:02d}:{s:05.2f}"
+                    # Strategy: write each caption line to its own text file and
+                    # use drawtext with textfile= — avoids ALL shell escaping issues
+                    # since text never touches the filter string.
+                    # Write filter_script file — no length limit, no escaping issues
+                    filter_script = os.path.join(tempfile.gettempdir(), f"snip_fs_{result_id}.txt")
+                    text_files = []
+                    vf_parts = []
+                    for i, cap_line in enumerate(cap_lines):
+                        tf = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}_{i}.txt")
+                        with open(tf, 'w', encoding='utf-8') as f_:
+                            f_.write(cap_line)
+                        text_files.append(tf)
+                        t_start = round(i * line_dur, 3)
+                        t_end   = round(min((i + 1) * line_dur, dur), 3)
+                        tf_fwd  = tf.replace("\\", "/")
+                        vf_parts.append(
+                            f"drawtext=textfile=\'{tf_fwd}\'"
+                            f":fontsize=24:fontcolor=white"
+                            f":x=(w-text_w)/2:y=h-th-40"
+                            f":box=1:boxcolor=black@0.6:boxborderw=8"
+                            f":enable=\'between(t,{t_start},{t_end})\'"
+                        )
 
-                    ass_header = (
-                        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\n\n"
-                        "[V4+ Styles]\n"
-                        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,"
-                        "Bold,Italic,Underline,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV\n"
-                        "Style: Cap,Arial,28,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,"
-                        "1,0,0,1,2,1,2,20,20,30\n\n"
-                        "[Events]\n"
-                        "Format: Start,End,Style,Text\n"
-                    )
-                    ass_events = ""
-                    for i, line in enumerate(lines):
-                        clean = line.replace("\n", " ").replace("{", "").replace("}", "")
-                        t_start = i * line_dur
-                        t_end   = min((i + 1) * line_dur, dur)
-                        ass_events += f"Dialogue: {fmt_ass(t_start)},{fmt_ass(t_end)},Cap,{clean}\n"
+                    with open(filter_script, 'w', encoding='utf-8') as fs:
+                        fs.write(",".join(vf_parts))
 
-                    with open(ass_file, 'w', encoding='utf-8') as af:
-                        af.write(ass_header + ass_events)
-
-                    # Burn ASS subtitles — works on Railway (libass is included in ffmpeg builds)
-                    ass_safe = ass_file.replace("\\", "/").replace(":", "\\:")
                     _, err, rc = run([_FFMPEG_EXE, "-y",
                         "-i", tmp_vid_in,
-                        "-vf", f"subtitles='{ass_safe}'",
+                        "-filter_script:v", filter_script,
                         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                         "-c:a", "copy", "-movflags", "+faststart",
                         burned_out])
 
-                    # Fallback: if subtitles filter fails (no libass), use subtitles with filename= syntax
-                    if rc != 0:
-                        _, err, rc = run([_FFMPEG_EXE, "-y",
-                            "-i", tmp_vid_in,
-                            "-vf", f"ass={ass_safe}",
-                            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                            "-c:a", "copy", "-movflags", "+faststart",
-                            burned_out])
-
-                    for f_ in [tmp_vid_in, ass_file]:
+                    # Cleanup temp files
+                    for f_ in [tmp_vid_in, filter_script] + text_files:
                         try: os.unlink(f_)
                         except: pass
 
@@ -3831,7 +3857,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <div id="tc-text" style="font-size:.9rem;line-height:1.7;color:var(--text);white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
     </div>
     <a class="dl-btn" id="tc-dl-txt" href="#" download="transcript.txt">⬇ Download Transcript (.txt)</a>
-    <a class="dl-btn" id="tc-dl-video" href="#" download="captioned.mp4" style="display:none;margin-top:10px;background:linear-gradient(135deg,#1a7a3c,#2aa55a)">⬇ Download Captioned Video (.mp4)</a>
+    <a class="dl-btn" id="tc-dl-video" href="#" download="captioned.mp4" style="display:none;margin-top:10px;background:linear-gradient(135deg,#1a7a3c,#2aa55a);color:#fff">⬇ Download Captioned Video (.mp4)</a>
   </div>
 </div>
 
@@ -3946,17 +3972,49 @@ async function handleFile(prefix, file) {
   if (document.getElementById(prefix+'-res') && d.width) document.getElementById(prefix+'-res').textContent = d.width+'×'+d.height;
   if (prefix==='tr') document.getElementById('tr-end').value = d.duration.toFixed(1);
   if (prefix==='mt' && document.getElementById('mt-segments').children.length===0) addSegment();
-  // Auto-detect language label for transcribe panel
-  if (prefix==='tc') {
-    const langSel = document.getElementById('tc-language');
-    if (langSel) {
-      langSel.value = 'auto';
-      const langLabel = document.getElementById('tc-lang-detected');
-      if (langLabel) { langLabel.textContent = ''; langLabel.style.display='none'; }
-    }
-  }
   run.disabled = false;
   run.textContent = getRunLabel(prefix);
+  // For transcribe panel: detect language immediately after upload
+  if (prefix === 'tc' && d.file_id) {
+    const badge = document.getElementById('tc-lang-detected');
+    if (badge) { badge.textContent = '⏳ Detecting…'; badge.style.display = 'inline'; }
+    fetch('/api/detect-language', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({file_id: d.file_id})
+    }).then(r => r.json()).then(ld => {
+      const langNames = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',
+        pt:'Portuguese',nl:'Dutch',ru:'Russian',ja:'Japanese',ko:'Korean',zh:'Chinese',
+        ar:'Arabic',hi:'Hindi',tr:'Turkish',vi:'Vietnamese',th:'Thai',id:'Indonesian',
+        sv:'Swedish',uk:'Ukrainian'};
+      const lang = ld.language || '';
+      if (lang) {
+        // Update dropdown
+        const langSel = document.getElementById('tc-language');
+        if (langSel) {
+          const opt = langSel.querySelector(`option[value="${lang}"]`);
+          if (opt) {
+            langSel.value = lang;
+          } else {
+            const prev = langSel.querySelector('option[data-detected]');
+            if (prev) prev.remove();
+            const newOpt = document.createElement('option');
+            newOpt.value = lang; newOpt.setAttribute('data-detected','1');
+            newOpt.textContent = '✓ ' + (langNames[lang] || lang.charAt(0).toUpperCase()+lang.slice(1)) + ' (detected)';
+            langSel.insertBefore(newOpt, langSel.firstChild);
+            langSel.value = lang;
+          }
+        }
+        // Show badge
+        const langDisplay = langNames[lang] || (lang.charAt(0).toUpperCase()+lang.slice(1));
+        if (badge) { badge.textContent = '✓ ' + langDisplay + ' detected'; badge.style.display = 'inline'; }
+      } else {
+        if (badge) { badge.textContent = ''; badge.style.display = 'none'; }
+      }
+    }).catch(() => {
+      if (badge) { badge.textContent = ''; badge.style.display = 'none'; }
+    });
+  }
 }
 
 function getRunLabel(p) {
