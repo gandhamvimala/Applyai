@@ -1620,73 +1620,47 @@ def api_transcribe():
                         srt_content += f"{i+1}\n{fmt_srt(start)} --> {fmt_srt(end)}\n{line}\n\n"
                     with open(srt_file, 'w', encoding='utf-8') as f:
                         f.write(srt_content)
-                    # Embed subtitles as soft subs (no libass needed)
-                    burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
-                    tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
-                    tmp_srt    = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.srt")
-                    # Check source exists
+
+                    burned_out  = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
+                    tmp_vid_in  = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
                     if not os.path.exists(str(p)):
                         raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
-                    shutil.copy2(srt_file, tmp_srt)
-                    # Try method 1: soft subtitles (embedded, no libass needed)
+
+                    # Build drawtext filter — one entry per caption line, timed evenly
+                    def esc(t):
+                        return t.replace('\\','').replace("'",'').replace('"','').replace(':','').replace('%','')
+                    vf_parts = []
+                    for i, line in enumerate(lines):
+                        safe_line = esc(line)[:60]
+                        if not safe_line: continue
+                        t_start = i * line_dur
+                        t_end   = (i + 1) * line_dur
+                        vf_parts.append(
+                            f"drawtext=text='{safe_line}'"
+                            f":fontsize=22:fontcolor=white"
+                            f":x=(w-text_w)/2:y=h-th-40"
+                            f":box=1:boxcolor=black@0.65:boxborderw=8"
+                            f":enable='between(t,{t_start:.3f},{t_end:.3f})'"
+                        )
+                    vf = ",".join(vf_parts) if vf_parts else "null"
+
                     _, err, rc = run([_FFMPEG_EXE, "-y",
                         "-i", tmp_vid_in,
-                        "-i", tmp_srt,
-                        "-c:v", "copy",
+                        "-vf", vf,
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                         "-c:a", "copy",
-                        "-c:s", "mov_text",
-                        "-metadata:s:s:0", "language=eng",
                         "-movflags", "+faststart",
                         burned_out])
-                    if rc != 0:
-                        # Try method 2: re-encode with drawtext (no subtitle file needed)
-                        words = text.split()
-                        words_per_seg = max(6, len(words)//10)
-                        segments_text = [' '.join(words[i:i+words_per_seg]) for i in range(0, min(len(words), words_per_seg*3), words_per_seg)]
-                        vf_parts = []
-                        seg_dur = dur / max(len(segments_text),1)
-                        for i, seg in enumerate(segments_text[:3]):
-                            safe_seg = seg[:50].replace("'","").replace('"','').replace(':','').replace('\\','')
-                            t_start = i * seg_dur
-                            t_end = (i+1) * seg_dur
-                            vf_parts.append(
-                                f"drawtext=text='{safe_seg}':fontsize=18:fontcolor=white"
-                                f":x=(w-text_w)/2:y=h-th-30"
-                                f":box=1:boxcolor=black@0.6:boxborderw=6"
-                                f":enable='between(t,{t_start:.1f},{t_end:.1f})'"
-                            )
-                        vf = ",".join(vf_parts) if vf_parts else "null"
-                        _, err, rc = run([_FFMPEG_EXE, "-y",
-                            "-i", tmp_vid_in,
-                            "-vf", vf,
-                            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                            "-c:a", "copy",
-                            "-movflags", "+faststart",
-                            burned_out])
+
+                    try: os.unlink(tmp_vid_in)
+                    except: pass
+
                     if rc == 0:
                         output_file = burned_out
                         jobs[result_id]["log"].append("Captions burned into video!")
                     else:
-                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-150:]}")
-                        # Try fallback: use drawtext instead of subtitles filter
-                        try:
-                            first_line = text[:60].replace("'","").replace('"','').replace(':','')
-                            vf_fallback = (f"drawtext=text='{first_line}...'"
-                                          f":fontsize=16:fontcolor=white:x=(w-text_w)/2:y=h-th-20"
-                                          f":box=1:boxcolor=black@0.5:boxborderw=5")
-                            burned_out2 = os.path.join(tempfile.gettempdir(), f"snip_cap2_{result_id}.mp4")
-                            _, err2, rc2 = run([_FFMPEG_EXE, "-y", "-i", tmp_vid_in,
-                                "-vf", vf_fallback,
-                                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                                "-c:a", "copy", "-movflags", "+faststart", burned_out2])
-                            if rc2 == 0:
-                                output_file = burned_out2
-                                jobs[result_id]["log"].append("Captions burned (simplified)!")
-                            else:
-                                jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
-                        except Exception:
-                            jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
+                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-200:]}")
                 except Exception as ce:
                     jobs[result_id]["log"].append(f"Caption error: {ce}")
 
@@ -3951,6 +3925,15 @@ async function handleFile(prefix, file) {
   if (document.getElementById(prefix+'-res') && d.width) document.getElementById(prefix+'-res').textContent = d.width+'×'+d.height;
   if (prefix==='tr') document.getElementById('tr-end').value = d.duration.toFixed(1);
   if (prefix==='mt' && document.getElementById('mt-segments').children.length===0) addSegment();
+  // Auto-detect language label for transcribe panel
+  if (prefix==='tc') {
+    const langSel = document.getElementById('tc-language');
+    if (langSel) {
+      langSel.value = 'auto';
+      const langLabel = document.getElementById('tc-lang-detected');
+      if (langLabel) { langLabel.textContent = ''; langLabel.style.display='none'; }
+    }
+  }
   run.disabled = false;
   run.textContent = getRunLabel(prefix);
 }
@@ -4514,6 +4497,38 @@ async function runTranscribe(){
         <div class="rstat"><div class="rstat-val">${(stats.language||'').toUpperCase()||'—'}</div><div class="rstat-lbl">Language</div></div>
         <div class="rstat"><div class="rstat-val">${fmtTime(stats.duration||0)}</div><div class="rstat-lbl">Duration</div></div>
       `;
+      // Auto-populate language dropdown with detected language
+      const detectedLang = stats.detected_language || '';
+      if (detectedLang) {
+        const langSel = document.getElementById('tc-language');
+        if (langSel) {
+          // Try to match detected language code to dropdown option
+          const opt = langSel.querySelector(`option[value="${detectedLang}"]`);
+          if (opt) {
+            langSel.value = detectedLang;
+          } else {
+            // Add a dynamic option showing the detected language name
+            const existing = langSel.querySelector('option[data-detected]');
+            if (existing) existing.remove();
+            const newOpt = document.createElement('option');
+            newOpt.value = detectedLang;
+            newOpt.setAttribute('data-detected','1');
+            newOpt.textContent = '✓ ' + detectedLang.charAt(0).toUpperCase() + detectedLang.slice(1) + ' (detected)';
+            langSel.insertBefore(newOpt, langSel.firstChild);
+            langSel.value = detectedLang;
+          }
+        }
+        // Show detected language badge
+        let badge = document.getElementById('tc-lang-detected');
+        if (!badge) {
+          badge = document.createElement('div');
+          badge.id = 'tc-lang-detected';
+          badge.style.cssText = 'font-family:var(--mono);font-size:.65rem;color:var(--green);margin-top:4px;padding:3px 8px;background:var(--green-bg);border-radius:4px;display:inline-block';
+          document.getElementById('tc-language').parentNode.appendChild(badge);
+        }
+        badge.textContent = '✓ Detected: ' + detectedLang;
+        badge.style.display = 'inline-block';
+      }
       document.getElementById('tc-result').classList.add('show');
       run.disabled=false; run.textContent=getRunLabel('tc'); run.classList.remove('working');
     }
