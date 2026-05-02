@@ -1550,7 +1550,7 @@ def api_transcribe():
                        "orig_size_mb":round(os.path.getsize(str(p))/1e6,1),
                        "tc_language": request.form.get("language","auto"),
                        "tc_translate": request.form.get("translate_to","none"),
-                       "tc_burn": request.form.get("burn_captions","false").lower()=="true"}
+                       "tc_burn": False}
 
     def do_transcribe():
         try:
@@ -1671,150 +1671,18 @@ def api_transcribe():
                 except Exception as te:
                     jobs[result_id]["log"].append(f"Translation failed: {te}, using original transcript.")
 
-            # Burn captions into video if requested
-            burn_captions = jobs[result_id].get("tc_burn", False)
-            output_file = audio  # default: return audio
-            if burn_captions and ext in ('.mp4', '.mov', '.webm', '.avi'):
-                jobs[result_id]["log"].append("Burning captions into video…")
-                jobs[result_id]["progress"] = 90
-                try:
-                    words = text.split()
-                    words_per_line = 8
-                    cap_lines = [' '.join(words[i:i+words_per_line]) for i in range(0, len(words), words_per_line)]
-                    line_dur = dur / max(len(cap_lines), 1)
-
-                    burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
-                    tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
-                    if not os.path.exists(str(p)):
-                        raise RuntimeError(f"Source video not found: {p}")
-                    shutil.copy2(str(p), tmp_vid_in)
-
-                    # Get video dimensions and fps
-                    info2 = get_info(tmp_vid_in)
-                    vs2 = next((s for s in info2.get("streams",[]) if s.get("codec_type")=="video"), {})
-                    vid_w = int(vs2.get("width",  1280) or 1280)
-                    vid_h = int(vs2.get("height",  720) or 720)
-                    fps_raw = vs2.get("r_frame_rate","25/1")
-                    try:
-                        num, den = fps_raw.split("/")
-                        fps = round(float(num)/float(den), 3)
-                    except:
-                        fps = 25.0
-                    fps = max(1.0, min(fps, 60.0))
-
-                    jobs[result_id]["log"].append(f"Video: {vid_w}x{vid_h} @ {fps}fps, {round(dur,1)}s")
-
-                    try:
-                        from PIL import Image, ImageDraw, ImageFont
-                    except ImportError:
-                        subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
-                        from PIL import Image, ImageDraw, ImageFont
-
-                    jobs[result_id]["log"].append("Rendering caption images…")
-
-                    # Find a font
-                    font = None
-                    for fp in [
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-                        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-                    ]:
-                        if os.path.exists(fp):
-                            try: font = ImageFont.truetype(fp, 28); break
-                            except: pass
-                    if font is None:
-                        font = ImageFont.load_default()
-                    jobs[result_id]["log"].append(f"Font: {font}")
-
-                    # Strategy: build one caption PNG per segment, then
-                    # create a timed image sequence video from them using concat demuxer.
-                    # concat demuxer just needs a text file listing durations — no pipe, no alpha.
-                    # We composite each caption onto a black bar frame (no alpha needed).
-                    bar_h   = 68
-                    png_dir = tempfile.mkdtemp()
-                    concat_file = os.path.join(png_dir, "concat.txt")
-                    concat_lines = []
-
-                    for i, cap_line in enumerate(cap_lines):
-                        seg_dur = round(min(line_dur, dur - i*line_dur), 3)
-                        if seg_dur <= 0:
-                            continue
-                        img  = Image.new("RGB", (vid_w, bar_h), (0, 0, 0))  # black bar, no alpha
-                        draw = ImageDraw.Draw(img)
-                        bbox = draw.textbbox((0,0), cap_line, font=font)
-                        tw   = bbox[2]-bbox[0]; th = bbox[3]-bbox[1]
-                        tx   = max(4, (vid_w-tw)//2)
-                        ty   = max(4, (bar_h-th)//2)
-                        draw.text((tx, ty), cap_line, font=font, fill=(255,255,255))
-                        png_path = os.path.join(png_dir, f"cap_{i:04d}.png")
-                        img.save(png_path)
-                        concat_lines.append(f"file '{png_path}'")
-                        concat_lines.append(f"duration {seg_dur}")
-
-                    # Pad with last frame to avoid ffmpeg concat truncation
-                    if concat_lines:
-                        concat_lines.append(f"file '{os.path.join(png_dir, f"cap_{len(cap_lines)-1:04d}.png")}'")
-
-                    with open(concat_file, "w") as cf:
-                        cf.write("\n".join(concat_lines))
-
-                    # Step 1: build caption bar video from image sequence
-                    cap_vid = os.path.join(png_dir, "capbar.mp4")
-                    _, err1, rc1 = run([_FFMPEG_EXE, "-y",
-                        "-f", "concat", "-safe", "0", "-i", concat_file,
-                        "-vf", f"scale={vid_w}:{bar_h},setsar=1",
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-                        "-pix_fmt", "yuv420p", "-r", str(fps),
-                        cap_vid])
-                    jobs[result_id]["log"].append(f"Caption bar video: rc={rc1}")
-
-                    if rc1 == 0:
-                        # Step 2: stack caption bar below main video using vstack
-                        stacked = os.path.join(png_dir, "stacked.mp4")
-                        y_offset = vid_h - bar_h
-                        _, err2, rc2 = run([_FFMPEG_EXE, "-y",
-                            "-i", tmp_vid_in,
-                            "-i", cap_vid,
-                            "-filter_complex",
-                            f"[0:v]pad={vid_w}:{vid_h+bar_h}:0:0:black[bg];"
-                            f"[bg][1:v]overlay=0:{vid_h}[vout]",
-                            "-map", "[vout]", "-map", "0:a?",
-                            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                            "-c:a", "copy", "-movflags", "+faststart",
-                            burned_out])
-                        jobs[result_id]["log"].append(f"Overlay: rc={rc2}")
-                        rc = rc2
-                        err = err2
-                    else:
-                        rc = rc1
-                        err = err1
-
-                    shutil.rmtree(png_dir, ignore_errors=True)
-                    try: os.unlink(tmp_vid_in)
-                    except: pass
-
-                    if rc == 0:
-                        output_file = burned_out
-                        jobs[result_id]["log"].append("Captions burned into video!")
-                    else:
-                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-400:]}")
-                except Exception as ce:
-                    import traceback
-                    jobs[result_id]["log"].append(f"Caption error: {ce} | {traceback.format_exc()[-300:]}")
-
-            # Save transcript as txt file for download
+            # Caption burning removed
+            output_file = audio
+                        # Save transcript as txt file for download
             txt_file = OUTPUT_DIR / f"{result_id}_transcript.txt"
             with open(str(txt_file), 'w', encoding='utf-8') as tf:
                 tf.write(text)
 
             jobs[result_id]["status"]   = "done"
             jobs[result_id]["progress"] = 100
-            jobs[result_id]["result"]   = output_file if burn_captions else str(txt_file)
+            jobs[result_id]["result"]   = str(txt_file)
             jobs[result_id]["stats"]    = {"text": text, "language": lang, "duration": round(dur,2), "words": len(text.split()),
-                                           "burned": burn_captions, "detected_language": lang,
-                                           "txt_result": str(txt_file),
-                                           "video_result": output_file if burn_captions else None}
+                                           "detected_language": lang}
             jobs[result_id]["log"].append(f"Done! {len(text.split())} words transcribed.")
 
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -3930,13 +3798,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <option value="Polish">🇵🇱 Polish</option>
     </select>
   </div>
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
-    <div>
-      <div style="font-size:.9rem;font-weight:600;color:var(--text)">Burn captions into video</div>
-      <div style="font-size:.75rem;color:var(--muted);margin-top:2px">Embed subtitles directly into the video file</div>
-    </div>
-    <label class="toggle"><input type="checkbox" id="tc-burn-captions"><span class="toggle-slider"></span></label>
-  </div>
+
   <button class="run-btn" id="tc-run" disabled onclick="runTranscribe()">Upload a video first</button>
   <div class="progress-box" id="tc-progress"><div class="progress-track"><div class="progress-fill" id="tc-pfill"></div></div><div class="log" id="tc-log"></div></div>
   <div class="result-box" id="tc-result">
@@ -3949,7 +3811,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <div id="tc-text" style="font-size:.9rem;line-height:1.7;color:var(--text);white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
     </div>
     <a class="dl-btn" id="tc-dl-txt" href="#" download="transcript.txt">⬇ Download Transcript (.txt)</a>
-    <a class="dl-btn" id="tc-dl-video" href="#" download="captioned.mp4" style="display:none;margin-top:10px;background:linear-gradient(135deg,#1a7a3c,#2aa55a);color:#fff">⬇ Download Captioned Video (.mp4)</a>
   </div>
 </div>
 
@@ -4638,12 +4499,12 @@ async function runTranscribe(){
   if(!fileInput.files[0]){run.disabled=false;run.textContent=getRunLabel('tc');return;}
   const lang = document.getElementById('tc-language')?.value || 'auto';
   const translate = document.getElementById('tc-translate')?.value || 'none';
-  const burn = document.getElementById('tc-burn-captions')?.checked || false;
+  const burn = false; // caption burning removed
   const fd=new FormData(); 
   fd.append('file',fileInput.files[0]);
   fd.append('language', lang);
   fd.append('translate_to', translate);
-  fd.append('burn_captions', burn ? 'true' : 'false');
+
   const r=await fetch('/api/transcribe',{method:'POST',body:fd});
   const d=await r.json();
   if(d.error){log('tc',d.error,'err');run.disabled=false;run.textContent=getRunLabel('tc');run.classList.remove('working');return;}
@@ -4666,15 +4527,7 @@ async function runTranscribe(){
       const dl=document.getElementById('tc-dl-txt');
       dl.href=url;
       dl.download=(s.filename||'transcript').replace(/[.][^.]+$/,'')+'.txt';
-      // Captioned video download (shown only when burn_captions succeeded)
-      const dlVideo=document.getElementById('tc-dl-video');
-      if(stats.burned && stats.video_result){
-        dlVideo.href='/api/download/'+d.job_id;
-        dlVideo.download=(s.filename||'video').replace(/[.][^.]+$/,'')+'_captioned.mp4';
-        dlVideo.style.display='inline-flex';
-      } else {
-        dlVideo.style.display='none';
-      }
+
       // Stats
       const el=document.getElementById('tc-rstats');
       el.innerHTML=`
