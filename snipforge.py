@@ -3458,7 +3458,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── TRANSCRIBE ── -->
 <div class="panel" id="panel-transcribe">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text using OpenAI Whisper — any language</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text — any language</div></div>
   <div class="upload-zone" id="tc-dropzone"><input type="file" id="tc-file" accept="video/*,audio/*">
     <div class="upload-zone-icon">📝</div><h3>Drop your video or audio here</h3><p>MP4 · MOV · MP3 · WAV</p>
   </div>
@@ -3471,6 +3471,31 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       </div>
       <button class="file-change" onclick="resetUpload('tc')">Change</button>
     </div>
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Language</div>
+    <select id="tc-language" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem;font-family:var(--sans)">
+      <option value="auto">🌐 Auto-detect</option>
+      <option value="en">🇺🇸 English</option>
+      <option value="es">🇪🇸 Spanish</option>
+      <option value="fr">🇫🇷 French</option>
+      <option value="de">🇩🇪 German</option>
+      <option value="it">🇮🇹 Italian</option>
+      <option value="pt">🇧🇷 Portuguese</option>
+      <option value="nl">🇳🇱 Dutch</option>
+      <option value="ru">🇷🇺 Russian</option>
+      <option value="ja">🇯🇵 Japanese</option>
+      <option value="ko">🇰🇷 Korean</option>
+      <option value="zh">🇨🇳 Chinese</option>
+      <option value="ar">🇸🇦 Arabic</option>
+      <option value="hi">🇮🇳 Hindi</option>
+      <option value="tr">🇹🇷 Turkish</option>
+      <option value="vi">🇻🇳 Vietnamese</option>
+      <option value="th">🇹🇭 Thai</option>
+      <option value="id">🇮🇩 Indonesian</option>
+      <option value="sv">🇸🇪 Swedish</option>
+      <option value="uk">🇺🇦 Ukrainian</option>
+    </select>
   </div>
   <button class="run-btn" id="tc-run" disabled onclick="runTranscribe()">Upload a video first</button>
   <div class="progress-box" id="tc-progress"><div class="progress-track"><div class="progress-fill" id="tc-pfill"></div></div><div class="log" id="tc-log"></div></div>
