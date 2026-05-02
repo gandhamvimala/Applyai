@@ -1477,7 +1477,10 @@ def api_transcribe():
     result_id = str(uuid.uuid4())[:8]
     jobs[result_id] = {"status":"running","progress":0,"log":[],"result":None,"error":None,
                        "orig_filename":safe_name,"user_id":user["id"],"operation":"transcribe",
-                       "orig_size_mb":round(os.path.getsize(str(p))/1e6,1)}
+                       "orig_size_mb":round(os.path.getsize(str(p))/1e6,1),
+                       "tc_language": request.form.get("language","auto"),
+                       "tc_translate": request.form.get("translate_to","none"),
+                       "tc_burn": request.form.get("burn_captions","false").lower()=="true"}
 
     def do_transcribe():
         try:
@@ -4323,7 +4326,14 @@ async function runTranscribe(){
   // Re-upload file for transcription endpoint
   const fileInput=document.getElementById('tc-file');
   if(!fileInput.files[0]){run.disabled=false;run.textContent=getRunLabel('tc');return;}
-  const fd=new FormData(); fd.append('file',fileInput.files[0]);
+  const lang = document.getElementById('tc-language')?.value || 'auto';
+  const translate = document.getElementById('tc-translate')?.value || 'none';
+  const burn = document.getElementById('tc-burn-captions')?.checked || false;
+  const fd=new FormData(); 
+  fd.append('file',fileInput.files[0]);
+  fd.append('language', lang);
+  fd.append('translate_to', translate);
+  fd.append('burn_captions', burn ? 'true' : 'false');
   const r=await fetch('/api/transcribe',{method:'POST',body:fd});
   const d=await r.json();
   if(d.error){log('tc',d.error,'err');run.disabled=false;run.textContent=getRunLabel('tc');run.classList.remove('working');return;}
