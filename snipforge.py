@@ -385,16 +385,21 @@ def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3,
                 rem=speed; atempos=[]
                 while rem>2.0: atempos.append("atempo=2.0"); rem/=2.0
                 atempos.append(f"atempo={rem:.4f}")
+                # Write to temp file first, then move to final destination
+                tmp_speed = os.path.join(tempfile.gettempdir(), f"snip_speed_{jid}.mp4")
                 _, err2, rc2 = run([_FFMPEG_EXE,"-y","-i",src,
                                     "-vf",f"setpts={1/speed:.6f}*PTS",
                                     "-af",",".join(atempos),
                                     "-c:v","libx264","-preset","fast","-crf","20",
-                                    "-c:a","aac","-b:a","128k", out])
+                                    "-c:a","aac","-b:a","128k", tmp_speed])
                 if rc2 != 0:
                     # Try without audio if no audio stream
                     _, err2, rc2 = run([_FFMPEG_EXE,"-y","-i",src,
                                         "-vf",f"setpts={1/speed:.6f}*PTS",
-                                        "-an","-c:v","libx264","-preset","fast","-crf","20", out])
+                                        "-an","-c:v","libx264","-preset","fast","-crf","20", tmp_speed])
+                if rc2 != 0:
+                    raise RuntimeError(f"Speed failed: {err2[-200:]}")
+                shutil.move(tmp_speed, out)
                 new_dur = get_duration(out)
                 saved = total - new_dur
                 prog(jid,f"Done! {fmt_time(total)} → {fmt_time(new_dur)}",100)
