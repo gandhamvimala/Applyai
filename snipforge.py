@@ -1611,13 +1611,24 @@ def api_transcribe():
                         srt_content += f"{i+1}\n{fmt_time(start)} --> {fmt_time(end)}\n{line}\n\n"
                     with open(srt_file, 'w', encoding='utf-8') as f:
                         f.write(srt_content)
-                    # Burn subtitles into video
-                    burned_out = os.path.join(tmpdir, "captioned.mp4")
-                    srt_safe = srt_file.replace("\\", "/").replace(":", "\\:")
-                    _, err, rc = run([_FFMPEG_EXE, "-y", "-i", str(p),
-                        "-vf", f"subtitles='{srt_safe}':force_style='FontSize=18,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2'",
+                    # Burn subtitles into video using temp paths (no spaces)
+                    burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
+                    tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
+                    tmp_srt    = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.srt")
+                    shutil.copy2(str(p), tmp_vid_in)
+                    shutil.copy2(srt_file, tmp_srt)
+                    # Use forward slashes for FFmpeg
+                    srt_ffmpeg = tmp_srt.replace("\\", "/")
+                    if ":" in srt_ffmpeg:
+                        # Escape drive letter colon on Windows e.g. C:/ -> C\:/
+                        parts = srt_ffmpeg.split(":", 1)
+                        srt_ffmpeg = parts[0] + "\\:" + parts[1]
+                    _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_vid_in,
+                        "-vf", f"subtitles='{srt_ffmpeg}':force_style='FontSize=16,PrimaryColour=&H00ffffff,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2'",
                         "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                        "-c:a", "copy", burned_out])
+                        "-c:a", "copy",
+                        "-movflags", "+faststart",
+                        burned_out])
                     if rc == 0:
                         output_file = burned_out
                         jobs[result_id]["log"].append("Captions burned into video!")
