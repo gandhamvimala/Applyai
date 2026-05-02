@@ -1582,7 +1582,7 @@ def api_transcribe():
                        "orig_size_mb":round(os.path.getsize(str(p))/1e6,1),
                        "tc_language": request.form.get("language","auto"),
                        "tc_translate": request.form.get("translate_to","none"),
-                       "tc_burn": False}
+                       "tc_burn": request.form.get("burn_captions","false").lower()=="true"}
 
     def do_transcribe():
         try:
@@ -1703,18 +1703,120 @@ def api_transcribe():
                 except Exception as te:
                     jobs[result_id]["log"].append(f"Translation failed: {te}, using original transcript.")
 
-            # Caption burning removed
+            # Burn captions into video using Pillow frame-pipe (same as watermark)
+            burn_captions = jobs[result_id].get("tc_burn", False)
             output_file = audio
-                        # Save transcript as txt file for download
+            if burn_captions and ext in ('.mp4', '.mov', '.webm', '.avi'):
+                jobs[result_id]["log"].append("Burning captions into video…")
+                jobs[result_id]["progress"] = 90
+                try:
+                    import io as _io, base64 as _b64
+                    from PIL import Image, ImageDraw, ImageFont
+
+                    # Get video info
+                    tmp_cap_in  = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
+                    tmp_cap_out = os.path.join(tempfile.gettempdir(), f"snip_cap_out_{result_id}.mp4")
+                    shutil.copy2(str(p), tmp_cap_in)
+                    info2 = get_info(tmp_cap_in)
+                    vs2   = next((s for s in info2.get("streams",[]) if s.get("codec_type")=="video"), {})
+                    vid_w = int(vs2.get("width",  1280) or 1280)
+                    vid_h = int(vs2.get("height",  720) or 720)
+                    fps_raw2 = vs2.get("r_frame_rate","25/1")
+                    try:
+                        n2,d2 = fps_raw2.split("/"); fps2 = round(float(n2)/float(d2), 3)
+                    except: fps2 = 25.0
+                    fps2 = max(1.0, min(fps2, 60.0))
+
+                    # Load embedded font
+                    fsize = max(20, int(vid_w * 4 // 100))  # 4% of video width
+                    font_bytes = _b64.b64decode(_EMBEDDED_FONT_B64)
+                    cap_font = ImageFont.truetype(_io.BytesIO(font_bytes), fsize)
+
+                    # Build caption lines timed evenly
+                    words = text.split()
+                    words_per_line = 8
+                    cap_lines = [' '.join(words[i:i+words_per_line])
+                                 for i in range(0, len(words), words_per_line)]
+                    line_dur = dur / max(len(cap_lines), 1)
+
+                    # Pre-render one RGBA patch per caption line
+                    pad = max(8, fsize // 3)
+                    cap_patches = []
+                    for cap_line in cap_lines:
+                        dummy = Image.new("RGBA",(1,1))
+                        bb = ImageDraw.Draw(dummy).textbbox((0,0), cap_line, font=cap_font)
+                        tw, th = bb[2]-bb[0], bb[3]-bb[1]
+                        wm_w, wm_h = tw+pad*2, th+pad*2
+                        patch = Image.new("RGBA", (wm_w, wm_h), (0,0,0,0))
+                        draw  = ImageDraw.Draw(patch)
+                        draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,180))
+                        draw.text((pad,pad), cap_line, font=cap_font, fill=(255,255,255,255))
+                        # Center horizontally, near bottom
+                        x = max(0, (vid_w - wm_w) // 2)
+                        y = vid_h - wm_h - max(20, int(vid_h * 0.05))
+                        cap_patches.append((patch, x, y))
+
+                    jobs[result_id]["log"].append(f"Rendering {len(cap_lines)} caption segments…")
+
+                    dec2 = subprocess.Popen(
+                        [_FFMPEG_EXE, "-i", tmp_cap_in,
+                         "-f","rawvideo","-pix_fmt","rgba",
+                         "-vf", f"scale={vid_w}:{vid_h}", "pipe:1"],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+                    enc2 = subprocess.Popen(
+                        [_FFMPEG_EXE, "-y",
+                         "-f","rawvideo","-pix_fmt","rgba",
+                         "-s",f"{vid_w}x{vid_h}","-r",str(fps2),"-i","pipe:0",
+                         "-i", tmp_cap_in,
+                         "-map","0:v","-map","1:a?",
+                         "-c:v","libx264","-preset","fast","-crf","20",
+                         "-pix_fmt","yuv420p","-c:a","copy",
+                         "-movflags","+faststart","-shortest",
+                         tmp_cap_out],
+                        stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+                    frame_size2 = vid_w * vid_h * 4
+                    n_frames = 0
+                    while True:
+                        raw2 = b""
+                        while len(raw2) < frame_size2:
+                            chunk2 = dec2.stdout.read(frame_size2 - len(raw2))
+                            if not chunk2: break
+                            raw2 += chunk2
+                        if len(raw2) < frame_size2: break
+                        t_now = n_frames / fps2
+                        cap_idx = min(int(t_now / line_dur), len(cap_patches)-1)
+                        frame2 = Image.frombytes("RGBA", (vid_w, vid_h), raw2)
+                        patch, px, py = cap_patches[cap_idx]
+                        frame2.alpha_composite(patch, dest=(px, py))
+                        enc2.stdin.write(frame2.tobytes())
+                        n_frames += 1
+                        if n_frames % 30 == 0:
+                            jobs[result_id]["progress"] = min(98, 90 + n_frames//60)
+
+                    dec2.stdout.close(); dec2.wait()
+                    enc2.stdin.close();  enc2.wait()
+                    try: os.unlink(tmp_cap_in)
+                    except: pass
+
+                    if os.path.exists(tmp_cap_out) and os.path.getsize(tmp_cap_out) > 1000:
+                        output_file = tmp_cap_out
+                        jobs[result_id]["log"].append("Captions burned into video!")
+                    else:
+                        jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
+                except Exception as ce:
+                    jobs[result_id]["log"].append(f"Caption error: {ce}")
+
+            # Save transcript as txt file for download
             txt_file = OUTPUT_DIR / f"{result_id}_transcript.txt"
             with open(str(txt_file), 'w', encoding='utf-8') as tf:
                 tf.write(text)
 
             jobs[result_id]["status"]   = "done"
             jobs[result_id]["progress"] = 100
-            jobs[result_id]["result"]   = str(txt_file)
-            jobs[result_id]["stats"]    = {"text": text, "language": lang, "duration": round(dur,2), "words": len(text.split()),
-                                           "detected_language": lang}
+            jobs[result_id]["result"]   = output_file if (burn_captions and output_file != audio) else str(txt_file)
+            jobs[result_id]["stats"]    = {"text": text, "language": lang, "detected_language": lang, "duration": round(dur,2), "words": len(text.split()), "burned": burn_captions and output_file != audio, "video_result": output_file if (burn_captions and output_file != audio) else None}
             jobs[result_id]["log"].append(f"Done! {len(text.split())} words transcribed.")
 
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -3866,6 +3968,13 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     </select>
   </div>
 
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
+    <div>
+      <div style="font-size:.9rem;font-weight:600;color:var(--text)">Burn captions into video</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:2px">Embed subtitles directly into the video file</div>
+    </div>
+    <label class="toggle"><input type="checkbox" id="tc-burn-captions"><span class="toggle-slider"></span></label>
+  </div>
   <button class="run-btn" id="tc-run" disabled onclick="runTranscribe()">Upload a video first</button>
   <div class="progress-box" id="tc-progress"><div class="progress-track"><div class="progress-fill" id="tc-pfill"></div></div><div class="log" id="tc-log"></div></div>
   <div class="result-box" id="tc-result">
@@ -3878,6 +3987,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <div id="tc-text" style="font-size:.9rem;line-height:1.7;color:var(--text);white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
     </div>
     <a class="dl-btn" id="tc-dl-txt" href="#" download="transcript.txt">⬇ Download Transcript (.txt)</a>
+    <a class="dl-btn" id="tc-dl-video" href="#" download="captioned.mp4" style="display:none;margin-top:10px;background:linear-gradient(135deg,#1a7a3c,#2aa55a);color:#fff">⬇ Download Captioned Video (.mp4)</a>
   </div>
 </div>
 
@@ -4574,10 +4684,11 @@ async function runTranscribe(){
   if(!fileInput.files[0]){run.disabled=false;run.textContent=getRunLabel('tc');return;}
   const lang = document.getElementById('tc-language')?.value || 'auto';
   const translate = document.getElementById('tc-translate')?.value || 'none';
-  const burn = false; // caption burning removed
+  const burn = document.getElementById('tc-burn-captions')?.checked || false;
   const fd=new FormData(); 
   fd.append('file',fileInput.files[0]);
   fd.append('language', lang);
+  fd.append('burn_captions', burn ? 'true' : 'false');
   fd.append('translate_to', translate);
 
   const r=await fetch('/api/transcribe',{method:'POST',body:fd});
@@ -4602,7 +4713,17 @@ async function runTranscribe(){
       const dl=document.getElementById('tc-dl-txt');
       dl.href=url;
       dl.download=(s.filename||'transcript').replace(/[.][^.]+$/,'')+'.txt';
-
+      // Captioned video download
+      const dlVideo=document.getElementById('tc-dl-video');
+      if(dlVideo){
+        if(stats.burned && stats.video_result){
+          dlVideo.href='/api/download/'+d.job_id;
+          dlVideo.download=(s.filename||'video').replace(/[.][^.]+$/,'')+'_captioned.mp4';
+          dlVideo.style.display='inline-flex';
+        } else {
+          dlVideo.style.display='none';
+        }
+      }
       // Stats
       const el=document.getElementById('tc-rstats');
       el.innerHTML=`
