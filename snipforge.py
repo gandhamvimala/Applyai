@@ -1620,7 +1620,6 @@ def api_transcribe():
                         raise RuntimeError(f"Source video not found: {p}")
                     shutil.copy2(str(p), tmp_vid_in)
                     shutil.copy2(srt_file, tmp_srt)
-                    jobs[result_id]["log"].append(f"Video copied: {os.path.getsize(tmp_vid_in)} bytes")
                     # Try method 1: soft subtitles (embedded, no libass needed)
                     _, err, rc = run([_FFMPEG_EXE, "-y",
                         "-i", tmp_vid_in,
@@ -1682,11 +1681,18 @@ def api_transcribe():
                 except Exception as ce:
                     jobs[result_id]["log"].append(f"Caption error: {ce}")
 
+            # Save transcript as txt file for download
+            txt_file = OUTPUT_DIR / f"{result_id}_transcript.txt"
+            with open(str(txt_file), 'w', encoding='utf-8') as tf:
+                tf.write(text)
+
             jobs[result_id]["status"]   = "done"
             jobs[result_id]["progress"] = 100
-            jobs[result_id]["result"]   = output_file
+            jobs[result_id]["result"]   = output_file if burn_captions else str(txt_file)
             jobs[result_id]["stats"]    = {"text": text, "language": lang, "duration": round(dur,2), "words": len(text.split()),
-                                           "burned": burn_captions}
+                                           "burned": burn_captions, "detected_language": lang,
+                                           "txt_result": str(txt_file),
+                                           "video_result": output_file if burn_captions else None}
             jobs[result_id]["log"].append(f"Done! {len(text.split())} words transcribed.")
 
             shutil.rmtree(tmpdir, ignore_errors=True)
