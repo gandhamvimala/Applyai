@@ -1694,14 +1694,15 @@ def api_transcribe():
                     vs2 = next((s for s in info2.get("streams",[]) if s.get("codec_type")=="video"), {})
                     vid_w = int(vs2.get("width",  1280) or 1280)
                     vid_h = int(vs2.get("height",  720) or 720)
-                    fps_str = vs2.get("r_frame_rate","25/1")
+                    fps_raw = vs2.get("r_frame_rate","25/1")
                     try:
-                        num, den = fps_str.split("/")
-                        fps = float(num) / float(den)
+                        num, den = fps_raw.split("/")
+                        fps = round(float(num)/float(den), 3)
                     except:
                         fps = 25.0
                     fps = max(1.0, min(fps, 60.0))
-                    total_frames = int(round(dur * fps))
+
+                    jobs[result_id]["log"].append(f"Video: {vid_w}x{vid_h} @ {fps}fps, {round(dur,1)}s")
 
                     try:
                         from PIL import Image, ImageDraw, ImageFont
@@ -1718,89 +1719,89 @@ def api_transcribe():
                         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
                         "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-                        "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
                     ]:
                         if os.path.exists(fp):
                             try: font = ImageFont.truetype(fp, 28); break
                             except: pass
                     if font is None:
                         font = ImageFont.load_default()
+                    jobs[result_id]["log"].append(f"Font: {font}")
 
-                    # Build a single caption overlay VIDEO (RGBA, same duration as source)
-                    # by writing frames to a raw pipe into FFmpeg.
-                    # Each frame is either blank (transparent=black,alpha=0) or shows
-                    # the current caption. We write as rawvideo RGBA piped to FFmpeg
-                    # which then overlays it onto the source.
-                    bar_h   = 70
-                    y_pos   = vid_h - bar_h - 10
-                    overlay_vid = os.path.join(tempfile.gettempdir(), f"snip_ov_{result_id}.mp4")
+                    # Strategy: build one caption PNG per segment, then
+                    # create a timed image sequence video from them using concat demuxer.
+                    # concat demuxer just needs a text file listing durations — no pipe, no alpha.
+                    # We composite each caption onto a black bar frame (no alpha needed).
+                    bar_h   = 68
+                    png_dir = tempfile.mkdtemp()
+                    concat_file = os.path.join(png_dir, "concat.txt")
+                    concat_lines = []
 
-                    # Pre-render one RGBA frame per unique caption (+ one blank)
-                    blank_frame = bytes(vid_w * bar_h * 4)  # all zeros = transparent
-                    cap_frames  = {}
                     for i, cap_line in enumerate(cap_lines):
-                        img  = Image.new("RGBA", (vid_w, bar_h), (0, 0, 0, 0))
+                        seg_dur = round(min(line_dur, dur - i*line_dur), 3)
+                        if seg_dur <= 0:
+                            continue
+                        img  = Image.new("RGB", (vid_w, bar_h), (0, 0, 0))  # black bar, no alpha
                         draw = ImageDraw.Draw(img)
                         bbox = draw.textbbox((0,0), cap_line, font=font)
                         tw   = bbox[2]-bbox[0]; th = bbox[3]-bbox[1]
-                        tx   = max(4, (vid_w-tw)//2); ty = max(4, (bar_h-th)//2)
-                        pad  = 10
-                        draw.rectangle([tx-pad, ty-pad, tx+tw+pad, ty+th+pad], fill=(0,0,0,180))
-                        draw.text((tx, ty), cap_line, font=font, fill=(255,255,255,255))
-                        cap_frames[i] = img.tobytes()
+                        tx   = max(4, (vid_w-tw)//2)
+                        ty   = max(4, (bar_h-th)//2)
+                        draw.text((tx, ty), cap_line, font=font, fill=(255,255,255))
+                        png_path = os.path.join(png_dir, f"cap_{i:04d}.png")
+                        img.save(png_path)
+                        concat_lines.append(f"file '{png_path}'")
+                        concat_lines.append(f"duration {seg_dur}")
 
-                    # Pipe raw RGBA frames into FFmpeg to create overlay video
-                    ov_proc = subprocess.Popen(
-                        [_FFMPEG_EXE, "-y",
-                         "-f", "rawvideo", "-pix_fmt", "rgba",
-                         "-s", f"{vid_w}x{bar_h}",
-                         "-r", str(fps),
-                         "-i", "pipe:0",
-                         "-c:v", "png",   # lossless, supports alpha
-                         "-frames:v", str(total_frames),
-                         overlay_vid],
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    for frame_idx in range(total_frames):
-                        t = frame_idx / fps
-                        cap_idx = min(int(t / line_dur), len(cap_lines)-1)
-                        # Which caption segment are we in?
-                        seg_start = cap_idx * line_dur
-                        seg_end   = min((cap_idx+1) * line_dur, dur)
-                        if seg_start <= t < seg_end:
-                            ov_proc.stdin.write(cap_frames[cap_idx])
-                        else:
-                            ov_proc.stdin.write(blank_frame)
-                    ov_proc.stdin.close()
-                    ov_proc.wait()
+                    # Pad with last frame to avoid ffmpeg concat truncation
+                    if concat_lines:
+                        concat_lines.append(f"file '{os.path.join(png_dir, f"cap_{len(cap_lines)-1:04d}.png")}'")
 
-                    if not os.path.exists(overlay_vid) or os.path.getsize(overlay_vid) < 100:
-                        raise RuntimeError("Overlay video generation failed")
+                    with open(concat_file, "w") as cf:
+                        cf.write("\n".join(concat_lines))
 
-                    # Overlay the caption video onto the source video
-                    _, err, rc = run([_FFMPEG_EXE, "-y",
-                        "-i", tmp_vid_in,
-                        "-i", overlay_vid,
-                        "-filter_complex",
-                        f"[0:v][1:v]overlay=0:{y_pos}[vout]",
-                        "-map", "[vout]", "-map", "0:a?",
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                        "-c:a", "copy", "-movflags", "+faststart",
-                        burned_out])
+                    # Step 1: build caption bar video from image sequence
+                    cap_vid = os.path.join(png_dir, "capbar.mp4")
+                    _, err1, rc1 = run([_FFMPEG_EXE, "-y",
+                        "-f", "concat", "-safe", "0", "-i", concat_file,
+                        "-vf", f"scale={vid_w}:{bar_h},setsar=1",
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                        "-pix_fmt", "yuv420p", "-r", str(fps),
+                        cap_vid])
+                    jobs[result_id]["log"].append(f"Caption bar video: rc={rc1}")
 
-                    for f_ in [tmp_vid_in, overlay_vid]:
-                        try: os.unlink(f_)
-                        except: pass
+                    if rc1 == 0:
+                        # Step 2: stack caption bar below main video using vstack
+                        stacked = os.path.join(png_dir, "stacked.mp4")
+                        y_offset = vid_h - bar_h
+                        _, err2, rc2 = run([_FFMPEG_EXE, "-y",
+                            "-i", tmp_vid_in,
+                            "-i", cap_vid,
+                            "-filter_complex",
+                            f"[0:v]pad={vid_w}:{vid_h+bar_h}:0:0:black[bg];"
+                            f"[bg][1:v]overlay=0:{vid_h}[vout]",
+                            "-map", "[vout]", "-map", "0:a?",
+                            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                            "-c:a", "copy", "-movflags", "+faststart",
+                            burned_out])
+                        jobs[result_id]["log"].append(f"Overlay: rc={rc2}")
+                        rc = rc2
+                        err = err2
+                    else:
+                        rc = rc1
+                        err = err1
+
+                    shutil.rmtree(png_dir, ignore_errors=True)
+                    try: os.unlink(tmp_vid_in)
+                    except: pass
 
                     if rc == 0:
                         output_file = burned_out
                         jobs[result_id]["log"].append("Captions burned into video!")
                     else:
-                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-300:]}")
+                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-400:]}")
                 except Exception as ce:
-                    jobs[result_id]["log"].append(f"Caption error: {ce}")
+                    import traceback
+                    jobs[result_id]["log"].append(f"Caption error: {ce} | {traceback.format_exc()[-300:]}")
 
             # Save transcript as txt file for download
             txt_file = OUTPUT_DIR / f"{result_id}_transcript.txt"
