@@ -179,85 +179,118 @@ def op_crop(jid, src, dst, preset):
         done(jid,dst,{"preset":preset})
     except Exception as e: fail(jid,e)
 
-def op_watermark(jid, src, dst, text):
-    """Add watermark: Pillow renders PNG, saved as JPEG (no alpha), overlaid via FFmpeg."""
+def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
+    """Render watermark text with Pillow, composite onto every frame via pipe."""
     try:
-        prog(jid, "Adding watermark...", 10)
-        safe_text = re.sub(r"[^a-zA-Z0-9 @._\-]", "", text)[:50] or "Watermark"
+        prog(jid, "Rendering watermark...", 10)
+        safe_text = (text or "Watermark").strip()[:60]
 
         tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
         tmp_out = os.path.join(tempfile.gettempdir(), f"snip_wm_out_{jid}.mp4")
-        wm_jpg  = os.path.join(tempfile.gettempdir(), f"snip_wm_{jid}.jpg")
         shutil.copy2(str(src), tmp_in)
 
-        # Get video dimensions
         info = get_info(tmp_in)
         vs   = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
         vid_w = int(vs.get("width",  1280) or 1280)
         vid_h = int(vs.get("height",  720) or 720)
-
-        prog(jid, "Rendering watermark...", 30)
+        fps_raw = vs.get("r_frame_rate","25/1")
+        try:
+            num,den = fps_raw.split("/"); fps = round(float(num)/float(den),3)
+        except: fps = 25.0
+        fps = max(1.0, min(fps, 60.0))
 
         try:
             from PIL import Image, ImageDraw, ImageFont
         except ImportError:
-            subprocess.run(["pip","install","Pillow","--break-system-packages","-q"],
-                           capture_output=True)
+            subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
             from PIL import Image, ImageDraw, ImageFont
 
         # Find font
+        fsize = max(16, min(72, int(fontsize)))
         font = None
         for fp in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
                    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"]:
             if os.path.exists(fp):
-                try: font = ImageFont.truetype(fp, 24); break
+                try: font = ImageFont.truetype(fp, fsize); break
                 except: pass
         if font is None:
             font = ImageFont.load_default()
 
-        # Measure
-        dummy = Image.new("RGB", (1,1))
-        bb    = ImageDraw.Draw(dummy).textbbox((0,0), safe_text, font=font)
+        # Measure and render watermark as RGBA patch
+        dummy = Image.new("RGBA",(1,1))
+        bb = ImageDraw.Draw(dummy).textbbox((0,0), safe_text, font=font)
         tw, th = bb[2]-bb[0], bb[3]-bb[1]
         pad = 10
-        wm_w, wm_h = tw + pad*2, th + pad*2
+        wm_w, wm_h = tw+pad*2, th+pad*2
+        wm_img = Image.new("RGBA", (wm_w, wm_h), (0,0,0,0))
+        draw = ImageDraw.Draw(wm_img)
+        op_val = max(10, min(100, int(opacity)))
+        bg_alpha = int(160 * op_val / 100)
+        tx_alpha = int(255 * op_val / 100)
+        draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,bg_alpha))
+        draw.text((pad,pad), safe_text, font=font, fill=(255,255,255,tx_alpha))
 
-        # Render as solid RGB JPEG — no alpha, guaranteed to work with FFmpeg overlay
-        img = Image.new("RGB", (wm_w, wm_h), (20, 20, 20))
-        ImageDraw.Draw(img).text((pad, pad), safe_text, font=font, fill=(255, 255, 255))
-        img.save(wm_jpg, "JPEG", quality=95)
+        # Position
+        margin = 18
+        pos_map = {
+            "bottom-right": (vid_w-wm_w-margin, vid_h-wm_h-margin),
+            "bottom-left":  (margin,             vid_h-wm_h-margin),
+            "top-right":    (vid_w-wm_w-margin,  margin),
+            "top-left":     (margin,              margin),
+            "center":       ((vid_w-wm_w)//2,    (vid_h-wm_h)//2),
+        }
+        x_pos, y_pos = pos_map.get(position, pos_map["bottom-right"])
 
-        x_pos = vid_w - wm_w - 15
-        y_pos = vid_h - wm_h - 15
+        prog(jid, "Processing frames...", 30)
 
-        prog(jid, "Applying watermark to video...", 50)
+        dec = subprocess.Popen(
+            [_FFMPEG_EXE, "-i", tmp_in,
+             "-f","rawvideo","-pix_fmt","rgba",
+             "-vf", f"scale={vid_w}:{vid_h}", "pipe:1"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-        # Use -loop 1 to make the still image last the full video duration
-        _, err, rc = run([_FFMPEG_EXE, "-y",
-            "-i", tmp_in,
-            "-loop", "1", "-i", wm_jpg,
-            "-filter_complex",
-            f"[0:v][1:v]overlay={x_pos}:{y_pos}:shortest=1[vout]",
-            "-map", "[vout]", "-map", "0:a?",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "copy", "-movflags", "+faststart",
-            tmp_out])
+        enc = subprocess.Popen(
+            [_FFMPEG_EXE, "-y",
+             "-f","rawvideo","-pix_fmt","rgba",
+             "-s",f"{vid_w}x{vid_h}","-r",str(fps),"-i","pipe:0",
+             "-i", tmp_in,
+             "-map","0:v","-map","1:a?",
+             "-c:v","libx264","-preset","fast","-crf","20",
+             "-pix_fmt","yuv420p","-c:a","copy",
+             "-movflags","+faststart","-shortest",
+             tmp_out],
+            stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
-        for f_ in [tmp_in, wm_jpg]:
-            try: os.unlink(f_)
-            except: pass
+        frame_size = vid_w * vid_h * 4
+        n = 0
+        while True:
+            raw = b""
+            while len(raw) < frame_size:
+                chunk = dec.stdout.read(frame_size - len(raw))
+                if not chunk: break
+                raw += chunk
+            if len(raw) < frame_size: break
+            frame = Image.frombytes("RGBA", (vid_w, vid_h), raw)
+            frame.alpha_composite(wm_img, dest=(x_pos, y_pos))
+            enc.stdin.write(frame.tobytes())
+            n += 1
+            if n % 30 == 0:
+                jobs[jid]["progress"] = min(90, 30 + n//8)
 
-        if rc != 0:
-            raise RuntimeError("Watermark failed: " + err[-400:])
+        dec.stdout.close(); dec.wait()
+        enc.stdin.close();  enc.wait()
+        try: os.unlink(tmp_in)
+        except: pass
+
+        if not os.path.exists(tmp_out) or os.path.getsize(tmp_out) < 1000:
+            raise RuntimeError(f"Output empty after {n} frames processed")
 
         shutil.move(tmp_out, str(dst))
-        prog(jid, "Done! Watermark added.", 100)
-        done(jid, dst, {})
+        prog(jid, f"Done! Watermark applied.", 100)
+        done(jid, dst, {"frames": n})
     except Exception as e:
         fail(jid, e)
-
 def op_stabilize(jid, src, dst):
     try:
         prog(jid,"Analysing shake…",10)
@@ -295,50 +328,7 @@ def prog(jid, msg, pct=None):
 
 def done(jid, path, stats=None):
     # Auto-watermark for free plan users
-    try:
-        if jobs[jid].get('add_watermark') and path and os.path.exists(str(path)):
-            ext = Path(str(path)).suffix.lower()
-            if ext in ('.mp4','.mov','.webm','.avi'):
-                wm_path = str(path)
-                tmp_wm  = os.path.join(tempfile.gettempdir(), f"snip_autowm_{jid}.mp4")
-                tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
-                wm_png  = os.path.join(tempfile.gettempdir(), f"snip_autowm_{jid}.png")
-                shutil.copy2(wm_path, tmp_in)
-                # Render watermark PNG with Pillow — no FFmpeg font needed
-                try:
-                    from PIL import Image, ImageDraw, ImageFont
-                    wm_text = "Made with Snipforge"
-                    font = None
-                    for fp in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                               "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"]:
-                        if os.path.exists(fp):
-                            try: font = ImageFont.truetype(fp, 18); break
-                            except: pass
-                    if font is None: font = ImageFont.load_default()
-                    dummy = Image.new("RGBA",(1,1)); d = ImageDraw.Draw(dummy)
-                    bb = d.textbbox((0,0), wm_text, font=font)
-                    tw,th = bb[2]-bb[0], bb[3]-bb[1]
-                    pad = 6
-                    img = Image.new("RGBA", (tw+pad*2, th+pad*2), (0,0,0,0))
-                    draw = ImageDraw.Draw(img)
-                    draw.rectangle([0,0,tw+pad*2-1,th+pad*2-1], fill=(0,0,0,120))
-                    draw.text((pad,pad), wm_text, font=font, fill=(255,255,255,200))
-                    img.save(wm_png, "PNG")
-                    r = subprocess.run([_FFMPEG_EXE,"-y","-i",tmp_in,"-i",wm_png,
-                        "-filter_complex","[0:v][1:v]overlay=10:H-h-10[vout]",
-                        "-map","[vout]","-map","0:a?",
-                        "-c:v","libx264","-preset","fast","-crf","22",
-                        "-c:a","copy","-movflags","+faststart",tmp_wm],
-                        capture_output=True)
-                    if r.returncode == 0:
-                        shutil.move(tmp_wm, wm_path)
-                    for f_ in [tmp_in, wm_png]:
-                        try: os.unlink(f_)
-                        except: pass
-                except Exception:
-                    pass
-    except Exception:
-        pass  # Never fail due to watermark issues
+    # auto-watermark removed
 
     jobs[jid]["status"]="done"; jobs[jid]["result"]=str(path)
     jobs[jid]["stats"]=stats; jobs[jid]["progress"]=100
@@ -714,9 +704,9 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 # Plan limits
 PLANS = {
-    'free':  {'name':'Free',  'price':0,  'videos_per_month':3,  'max_duration':300,  'max_file_mb':100, 'watermark':True,  'team_seats':1},
-    'pro':   {'name':'Pro',   'price':8,  'videos_per_month':999,'max_duration':9999, 'max_file_mb':500, 'watermark':False, 'team_seats':1},
-    'team':  {'name':'Team',  'price':20, 'videos_per_month':999,'max_duration':9999, 'max_file_mb':500, 'watermark':False, 'team_seats':5},
+    'free':  {'name':'Free',  'price':0,  'videos_per_month':3,  'max_duration':300,  'max_file_mb':100, 'team_seats':1},
+    'pro':   {'name':'Pro',   'price':8,  'videos_per_month':999,'max_duration':9999, 'max_file_mb':500, 'team_seats':1},
+    'team':  {'name':'Team',  'price':20, 'videos_per_month':999,'max_duration':9999, 'max_file_mb':500, 'team_seats':5},
 }
 
 # ─── Database ─────────────────────────────────────────────────────────────────
@@ -1096,8 +1086,7 @@ def api_process():
     jobs[jid]['user_id']        = user['id']
     jobs[jid]['operation']      = data.get('op','process')
     jobs[jid]['orig_size_mb']   = float(data.get('size_mb', 0))
-    jobs[jid]['add_watermark']  = (PLANS.get(user['plan'], PLANS['free'])['watermark'] and
-                                   data.get('op') not in ('watermark','extract_audio','convert','mute'))
+    jobs[jid]['wm_file_id']     = data.get('wm_file_id', '')
 
     def run_op():
         if op=="shorten":
@@ -1137,6 +1126,12 @@ def api_process():
         elif op=="watermark":
             threading.Thread(target=op_watermark, args=(jid,src,str(dst),
                 data.get("text","Snipforge"))).start()
+        elif op=="watermark_image":
+            threading.Thread(target=op_watermark_image, args=(jid,src,str(dst),
+                data.get("text","Watermark"),
+                data.get("position","bottom-right"),
+                data.get("opacity",80),
+                data.get("fontsize",28))).start()
         elif op=="stabilize":
             threading.Thread(target=op_stabilize, args=(jid,src,str(dst))).start()
         elif op=="denoise":
@@ -1279,7 +1274,6 @@ def api_me():
         "plan_name":plan["name"],
         "videos_used": user["videos_this_month"] or 0,
         "videos_limit": plan["videos_per_month"],
-        "watermark": plan["watermark"],
     })
 
 # ─── Google OAuth ──────────────────────────────────────────────────────────────
@@ -2474,7 +2468,7 @@ async function doRegister(){
         <li>3 videos per month</li>
         <li>Max 5 min per video</li>
         <li>All edit tools</li>
-        <li class="no">Watermark on output</li>
+        
         <li class="no">Priority processing</li>
       </ul>
       <button class="plan-btn free" onclick="window.location='/register'">Get Started Free</button>
@@ -2488,7 +2482,7 @@ async function doRegister(){
         <li>Unlimited videos</li>
         <li>Any duration</li>
         <li>All edit tools</li>
-        <li>No watermark</li>
+        
         <li>Priority processing</li>
       </ul>
       <button class="plan-btn paid" onclick="checkout('pro')">Get Pro</button>
@@ -2501,7 +2495,7 @@ async function doRegister(){
         <li>Everything in Pro</li>
         <li>5 team seats</li>
         <li>Shared workspace</li>
-        <li>No watermark</li>
+        
         <li>Priority processing</li>
       </ul>
       <button class="plan-btn paid" onclick="checkout('team')">Get Team</button>
@@ -3201,8 +3195,9 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="1" y="4" width="9" height="7" rx="1"/><rect x="6" y="2" width="9" height="7" rx="1" opacity=".5"/></svg></span>
     <span class="nav-full">Resize for Social</span><span class="nav-short">Resize</span>
   </div>
+
   <div class="nav-item" data-panel="watermark" onclick="switchPanel(this)">
-    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4.5 9h4M4.5 11h2.5"/></svg></span>
+    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><circle cx="5" cy="7" r="1.5"/></svg></span>
     <span class="nav-full">Watermark</span><span class="nav-short">Wmark</span>
   </div>
 
@@ -3538,31 +3533,65 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 </div>
 
 <!-- ── WATERMARK ── -->
+
+<!-- ── WATERMARK IMAGE ── -->
 <div class="panel" id="panel-watermark">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🏷️</span>Watermark</div><div class="panel-sub">Add your brand name or text to your video</div></div>
+  <div class="panel-header">
+    <div class="panel-title"><span class="panel-title-icon">🏷️</span>Watermark</div>
+    <div class="panel-sub">Add text watermark to your video</div>
+  </div>
   <div class="upload-zone" id="wm-dropzone"><input type="file" id="wm-file" accept="video/*">
-    <div class="upload-zone-icon">🏷️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+    <div class="upload-zone-icon">🎬</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
   </div>
   <div class="recent-files-list"></div>
   <div class="file-card" id="wm-filecard">
     <div class="file-card-top">
       <div class="file-thumb"><video id="wm-thumb" muted></video></div>
-      <div class="file-meta"><div class="file-name" id="wm-fname">—</div>
-        <div class="file-stats"><div class="file-stat">Duration <span id="wm-dur">—</span></div><div class="file-stat">Size <span id="wm-size">—</span></div></div>
+      <div class="file-meta">
+        <div class="file-name" id="wm-fname">—</div>
+        <div class="file-stats">
+          <div class="file-stat">Duration <span id="wm-dur">—</span></div>
+          <div class="file-stat">Size <span id="wm-size">—</span></div>
+        </div>
       </div>
       <button class="file-change" onclick="resetUpload('wm')">Change</button>
     </div>
   </div>
   <div class="settings-card">
     <h4>Watermark Text</h4>
-    <div class="field field-row single">
-      <label>Text (bottom-right corner)</label>
-      <input type="text" id="wm-text" placeholder="e.g. Snipforge · @yourname · confidential" maxlength="50">
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Text</label>
+      <input type="text" id="wm-text" placeholder="e.g. © MyBrand · @handle · Confidential" maxlength="60"
+             style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.88rem">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Position</label>
+      <select id="wm-position" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);color:var(--text);font-size:.85rem">
+        <option value="bottom-right">↘ Bottom Right</option>
+        <option value="bottom-left">↙ Bottom Left</option>
+        <option value="top-right">↗ Top Right</option>
+        <option value="top-left">↖ Top Left</option>
+        <option value="center">⊕ Center</option>
+      </select>
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Font Size <span id="wm-fs-val" style="color:var(--accent)">28px</span></label>
+      <input type="range" id="wm-fontsize" min="16" max="72" value="28" style="flex:1"
+             oninput="document.getElementById('wm-fs-val').textContent=this.value+'px'">
+    </div>
+    <div class="field field-row">
+      <label>Opacity <span id="wm-opacity-val" style="color:var(--accent)">80%</span></label>
+      <input type="range" id="wm-opacity" min="10" max="100" value="80" style="flex:1"
+             oninput="document.getElementById('wm-opacity-val').textContent=this.value+'%'">
     </div>
   </div>
-  <button class="run-btn" id="wm-run" disabled onclick="runWatermark()">Upload a video first</button>
+  <button class="run-btn" id="wm-run" disabled onclick="runWatermarkImage()">Upload a video first</button>
   <div class="progress-box" id="wm-progress"><div class="progress-track"><div class="progress-fill" id="wm-pfill"></div></div><div class="log" id="wm-log"></div></div>
-  <div class="result-box" id="wm-result"><video class="result-video" id="wm-rvideo" controls></video><div class="result-stats" id="wm-rstats"></div><a class="dl-btn" id="wm-dl" href="#">⬇ Download Watermarked Video</a></div>
+  <div class="result-box" id="wm-result">
+    <video class="result-video" id="wm-rvideo" controls></video>
+    <div class="result-stats" id="wm-rstats"></div>
+    <a class="dl-btn" id="wm-dl" href="#">⬇ Download Watermarked Video</a>
+  </div>
 </div>
 
 <!-- ── MERGE ── -->
@@ -3997,7 +4026,7 @@ function getRunLabel(p) {
   const m = {sz:'✂ AI Shorten Video',tr:'Trim Video',mt:'Stitch Segments',sp:'Change Speed',
              ro:'Rotate / Flip',cr:'Resize Video',wm:'Add Watermark',
              vl:'Adjust Volume',cm:'Compress Video',cv:'Convert Format',au:'Extract Audio',
-             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech'};
+             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',wm:'Apply Watermark'};
   return m[p] || 'Process';
 }
 
@@ -4248,11 +4277,19 @@ async function runCrop(){
   if(jid) pollJob('cr',jid,'cr-rvideo','cr-dl',s.filename.replace(/[.][^.]+$/,'')+'_'+preset+'.mp4');
 }
 
-async function runWatermark(){
-  const s=state['wm'];if(!s)return;
-  const text=document.getElementById('wm-text').value||'Snipforge';
-  const jid=await startJob('wm',{op:'watermark',text,out_ext:'mp4'});
-  if(jid) pollJob('wm',jid,'wm-rvideo','wm-dl',s.filename.replace(/[.][^.]+$/,'')+'_watermarked.mp4');
+
+async function runWatermarkImage() {
+  const s = state['wm']; if (!s) return;
+  const text = (document.getElementById('wm-text').value || '').trim();
+  if (!text) { alert('Please enter watermark text first.'); return; }
+  const position = document.getElementById('wm-position').value;
+  const opacity  = parseInt(document.getElementById('wm-opacity').value);
+  const fontsize = parseInt(document.getElementById('wm-fontsize').value);
+  const jid = await startJob('wm', {
+    op:'watermark_image', text, position, opacity, fontsize, out_ext:'mp4'
+  });
+  if (jid) pollJob('wm', jid, 'wm-rvideo', 'wm-dl',
+    s.filename.replace(/[.][^.]+$/, '') + '_watermarked.mp4');
 }
 
 async function runVolume(){
