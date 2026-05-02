@@ -205,36 +205,66 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
             subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
             from PIL import Image, ImageDraw, ImageFont
 
-        # Find font
-        # Scale font size relative to video width so it looks consistent across resolutions
-        base_fsize = max(24, min(120, int(fontsize)))
-        fsize = max(24, int(base_fsize * vid_w / 1280))
+        # Font size: user value is a % of video width (more intuitive than px)
+        # fontsize slider 1-30 means 1%-30% of video width
+        size_pct = max(3, min(30, int(fontsize)))
+        fsize = max(20, int(vid_w * size_pct / 100))
+        prog(jid, f"Video: {vid_w}x{vid_h}, font size: {fsize}px ({size_pct}% of width)", 15)
+
+        # Find or install a TTF font — load_default() is a tiny bitmap, never use it
         font = None
-        for fp in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                   "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                   "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"]:
+        font_search = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+        ]
+        for fp in font_search:
             if os.path.exists(fp):
                 try: font = ImageFont.truetype(fp, fsize); break
                 except: pass
         if font is None:
-            font = ImageFont.load_default()
+            # Try installing DejaVu fonts
+            subprocess.run(["apt-get","install","-y","--no-install-recommends",
+                            "fonts-dejavu-core"], capture_output=True)
+            for fp in font_search:
+                if os.path.exists(fp):
+                    try: font = ImageFont.truetype(fp, fsize); break
+                    except: pass
+        if font is None:
+            # Nuclear option: download a font directly
+            import urllib.request
+            font_dl = os.path.join(tempfile.gettempdir(), "snip_font.ttf")
+            try:
+                urllib.request.urlretrieve(
+                    "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf",
+                    font_dl)
+                font = ImageFont.truetype(font_dl, fsize)
+            except Exception:
+                pass
+        if font is None:
+            raise RuntimeError("No TTF font available. Cannot render watermark text.")
+        prog(jid, f"Font: {getattr(font, 'path', 'loaded')} @ {fsize}px", 18)
 
         # Measure and render watermark as RGBA patch
         dummy = Image.new("RGBA",(1,1))
         bb = ImageDraw.Draw(dummy).textbbox((0,0), safe_text, font=font)
         tw, th = bb[2]-bb[0], bb[3]-bb[1]
-        pad = 10
+        pad = max(8, fsize // 3)
         wm_w, wm_h = tw+pad*2, th+pad*2
         wm_img = Image.new("RGBA", (wm_w, wm_h), (0,0,0,0))
         draw = ImageDraw.Draw(wm_img)
         op_val = max(10, min(100, int(opacity)))
-        bg_alpha = int(160 * op_val / 100)
+        bg_alpha = int(180 * op_val / 100)
         tx_alpha = int(255 * op_val / 100)
         draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,bg_alpha))
         draw.text((pad,pad), safe_text, font=font, fill=(255,255,255,tx_alpha))
+        prog(jid, f"Watermark patch: {wm_w}x{wm_h}px", 20)
 
         # Position
-        margin = 18
+        margin = max(20, int(vid_w * 0.02))
         pos_map = {
             "bottom-right": (vid_w-wm_w-margin, vid_h-wm_h-margin),
             "bottom-left":  (margin,             vid_h-wm_h-margin),
@@ -1133,7 +1163,7 @@ def api_process():
                 data.get("text","Watermark"),
                 data.get("position","bottom-right"),
                 data.get("opacity",80),
-                data.get("fontsize",48))).start()
+                data.get("fontsize",8))).start()
         elif op=="stabilize":
             threading.Thread(target=op_stabilize, args=(jid,src,str(dst))).start()
         elif op=="denoise":
@@ -3577,9 +3607,9 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       </select>
     </div>
     <div class="field field-row" style="margin-bottom:10px">
-      <label>Font Size <span id="wm-fs-val" style="color:var(--accent)">48px</span></label>
-      <input type="range" id="wm-fontsize" min="24" max="120" value="48" style="flex:1"
-             oninput="document.getElementById('wm-fs-val').textContent=this.value+'px'">
+      <label>Text Size <span id="wm-fs-val" style="color:var(--accent)">8%</span></label>
+      <input type="range" id="wm-fontsize" min="3" max="25" value="8" style="flex:1"
+             oninput="document.getElementById('wm-fs-val').textContent=this.value+'%'">
     </div>
     <div class="field field-row">
       <label>Opacity <span id="wm-opacity-val" style="color:var(--accent)">80%</span></label>
