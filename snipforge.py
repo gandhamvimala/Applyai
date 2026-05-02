@@ -1633,7 +1633,25 @@ def api_transcribe():
                         output_file = burned_out
                         jobs[result_id]["log"].append("Captions burned into video!")
                     else:
-                        jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
+                        jobs[result_id]["log"].append(f"Caption burning failed: {err[-150:]}")
+                        # Try fallback: use drawtext instead of subtitles filter
+                        try:
+                            first_line = text[:60].replace("'","").replace('"','').replace(':','')
+                            vf_fallback = (f"drawtext=text='{first_line}...'"
+                                          f":fontsize=16:fontcolor=white:x=(w-text_w)/2:y=h-th-20"
+                                          f":box=1:boxcolor=black@0.5:boxborderw=5")
+                            burned_out2 = os.path.join(tempfile.gettempdir(), f"snip_cap2_{result_id}.mp4")
+                            _, err2, rc2 = run([_FFMPEG_EXE, "-y", "-i", tmp_vid_in,
+                                "-vf", vf_fallback,
+                                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                                "-c:a", "copy", "-movflags", "+faststart", burned_out2])
+                            if rc2 == 0:
+                                output_file = burned_out2
+                                jobs[result_id]["log"].append("Captions burned (simplified)!")
+                            else:
+                                jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
+                        except Exception:
+                            jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
                 except Exception as ce:
                     jobs[result_id]["log"].append(f"Caption error: {ce}")
 
