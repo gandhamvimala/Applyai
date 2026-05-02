@@ -1474,10 +1474,82 @@ def api_transcribe():
                     (str(uuid.uuid4())[:8], user["id"], result_id, safe_name, text, lang, round(dur,2))
                 )
 
+            # Translate transcript if requested
+            translate_to = jobs[result_id].get("tc_translate", "none")
+            if translate_to and translate_to != "none" and text and OPENAI_API_KEY:
+                jobs[result_id]["log"].append(f"Translating to {translate_to}...")
+                jobs[result_id]["progress"] = 80
+                try:
+                    import json as _json
+                    translate_body = _json.dumps({
+                        "model": "gpt-4o-mini",
+                        "messages": [
+                            {"role": "system", "content": f"You are a professional translator. Translate the following transcript to {translate_to}. Keep the same meaning and tone. Return ONLY the translated text, nothing else."},
+                            {"role": "user", "content": text}
+                        ],
+                        "max_tokens": 4000
+                    }).encode()
+                    import urllib.request as _ureq
+                    translate_req = _ureq.Request(
+                        "https://api.openai.com/v1/chat/completions",
+                        data=translate_body,
+                        headers={
+                            "Authorization": f"Bearer {OPENAI_API_KEY}",
+                            "Content-Type": "application/json"
+                        }
+                    )
+                    translate_resp = _json.loads(_ureq.urlopen(translate_req, timeout=60).read())
+                    translated_text = translate_resp["choices"][0]["message"]["content"].strip()
+                    text = translated_text
+                    jobs[result_id]["log"].append(f"Translation to {translate_to} complete!")
+                    jobs[result_id]["stats"] = {"text": text, "language": translate_to, "duration": round(dur,2), "words": len(text.split()), "translated": True}
+                except Exception as te:
+                    jobs[result_id]["log"].append(f"Translation failed: {te}, using original transcript.")
+
+            # Burn captions into video if requested
+            burn_captions = jobs[result_id].get("tc_burn", False)
+            output_file = audio  # default: return audio
+            if burn_captions and ext in ('.mp4', '.mov', '.webm', '.avi'):
+                jobs[result_id]["log"].append("Burning captions into video…")
+                jobs[result_id]["progress"] = 90
+                try:
+                    # Create SRT subtitle file
+                    srt_file = os.path.join(tmpdir, "captions.srt")
+                    words = text.split()
+                    words_per_line = 8
+                    lines = [' '.join(words[i:i+words_per_line]) for i in range(0, len(words), words_per_line)]
+                    line_dur = dur / max(len(lines), 1)
+                    srt_content = ""
+                    for i, line in enumerate(lines):
+                        start = i * line_dur
+                        end = (i + 1) * line_dur
+                        def fmt_time(t):
+                            h,m = int(t//3600), int((t%3600)//60)
+                            s, ms = int(t%60), int((t%1)*1000)
+                            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+                        srt_content += f"{i+1}\n{fmt_time(start)} --> {fmt_time(end)}\n{line}\n\n"
+                    with open(srt_file, 'w', encoding='utf-8') as f:
+                        f.write(srt_content)
+                    # Burn subtitles into video
+                    burned_out = os.path.join(tmpdir, "captioned.mp4")
+                    srt_safe = srt_file.replace("\\", "/").replace(":", "\\:")
+                    _, err, rc = run([_FFMPEG_EXE, "-y", "-i", str(p),
+                        "-vf", f"subtitles='{srt_safe}':force_style='FontSize=18,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2'",
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                        "-c:a", "copy", burned_out])
+                    if rc == 0:
+                        output_file = burned_out
+                        jobs[result_id]["log"].append("Captions burned into video!")
+                    else:
+                        jobs[result_id]["log"].append("Caption burning failed, returning transcript only.")
+                except Exception as ce:
+                    jobs[result_id]["log"].append(f"Caption error: {ce}")
+
             jobs[result_id]["status"]   = "done"
             jobs[result_id]["progress"] = 100
-            jobs[result_id]["result"]   = audio
-            jobs[result_id]["stats"]    = {"text": text, "language": lang, "duration": round(dur,2), "words": len(text.split())}
+            jobs[result_id]["result"]   = output_file
+            jobs[result_id]["stats"]    = {"text": text, "language": lang, "duration": round(dur,2), "words": len(text.split()),
+                                           "burned": burn_captions}
             jobs[result_id]["log"].append(f"Done! {len(text.split())} words transcribed.")
 
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -3496,6 +3568,39 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <option value="sv">🇸🇪 Swedish</option>
       <option value="uk">🇺🇦 Ukrainian</option>
     </select>
+  </div>
+  <div style="margin-bottom:12px">
+    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Translate to (optional)</div>
+    <select id="tc-translate" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem;font-family:var(--sans)">
+      <option value="none">— No translation —</option>
+      <option value="English">🇺🇸 English</option>
+      <option value="Spanish">🇪🇸 Spanish</option>
+      <option value="French">🇫🇷 French</option>
+      <option value="German">🇩🇪 German</option>
+      <option value="Italian">🇮🇹 Italian</option>
+      <option value="Portuguese">🇧🇷 Portuguese</option>
+      <option value="Dutch">🇳🇱 Dutch</option>
+      <option value="Russian">🇷🇺 Russian</option>
+      <option value="Japanese">🇯🇵 Japanese</option>
+      <option value="Korean">🇰🇷 Korean</option>
+      <option value="Chinese">🇨🇳 Chinese (Simplified)</option>
+      <option value="Arabic">🇸🇦 Arabic</option>
+      <option value="Hindi">🇮🇳 Hindi</option>
+      <option value="Turkish">🇹🇷 Turkish</option>
+      <option value="Vietnamese">🇻🇳 Vietnamese</option>
+      <option value="Thai">🇹🇭 Thai</option>
+      <option value="Indonesian">🇮🇩 Indonesian</option>
+      <option value="Swedish">🇸🇪 Swedish</option>
+      <option value="Ukrainian">🇺🇦 Ukrainian</option>
+      <option value="Polish">🇵🇱 Polish</option>
+    </select>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
+    <div>
+      <div style="font-size:.9rem;font-weight:600;color:var(--text)">Burn captions into video</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:2px">Embed subtitles directly into the video file</div>
+    </div>
+    <label class="toggle"><input type="checkbox" id="tc-burn-captions"><span class="toggle-slider"></span></label>
   </div>
   <button class="run-btn" id="tc-run" disabled onclick="runTranscribe()">Upload a video first</button>
   <div class="progress-box" id="tc-progress"><div class="progress-track"><div class="progress-fill" id="tc-pfill"></div></div><div class="log" id="tc-log"></div></div>
