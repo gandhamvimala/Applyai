@@ -1423,6 +1423,7 @@ def api_transcribe():
             jobs[result_id]["log"].append("Transcribing audio…")
 
             if OPENAI_API_KEY:
+                tc_language = jobs[jid].get("tc_language", "auto") if jid in jobs else "auto"
                 # Use OpenAI Whisper API
                 import urllib.request as ureq
                 import urllib.parse
