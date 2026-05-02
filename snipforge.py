@@ -363,7 +363,11 @@ def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3,
             if not do_speed or abs(speed-1.0) < 0.01:
                 # No silences, no speed — just copy
                 prog(jid,"No silences found — copying original…",40)
-                out = str(dst).replace(".tmp.mp4","")+".mp4"
+                out = str(dst)
+                if out.endswith(".tmp.mp4"):
+                    out = out.replace(".tmp.mp4", ".mp4")
+                elif not out.endswith(".mp4"):
+                    out = out + ".mp4"
                 shutil.copy2(src, out)
                 new_dur = get_duration(out)
                 prog(jid,f"Done! Duration unchanged: {fmt_time(new_dur)}",100)
@@ -372,7 +376,12 @@ def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3,
             else:
                 # No silences but speed requested — apply speed directly
                 prog(jid,f"No silences — applying {speed:.2f}× speed…",40)
-                out = str(dst).replace(".tmp.mp4","")+".mp4"
+                # Fix path - dst might already have .mp4
+                out = str(dst)
+                if out.endswith(".tmp.mp4"):
+                    out = out.replace(".tmp.mp4", ".mp4")
+                elif not out.endswith(".mp4"):
+                    out = out + ".mp4"
                 rem=speed; atempos=[]
                 while rem>2.0: atempos.append("atempo=2.0"); rem/=2.0
                 atempos.append(f"atempo={rem:.4f}")
