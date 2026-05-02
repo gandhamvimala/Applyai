@@ -180,74 +180,78 @@ def op_crop(jid, src, dst, preset):
     except Exception as e: fail(jid,e)
 
 def op_watermark(jid, src, dst, text):
-    """Add watermark using a 2-pass approach that avoids path/font issues on Windows."""
+    """Add watermark using Pillow PNG overlay — no FFmpeg font required."""
     try:
         prog(jid, "Adding watermark...", 10)
-        safe_text = re.sub(r"[^a-zA-Z0-9 @._-]", "", text)[:50]
+        safe_text = re.sub(r"[^a-zA-Z0-9 @._\-]", "", text)[:50] or "Watermark"
 
-        # Use temp dir (short path, no spaces)
-        tmp_in  = os.path.join(tempfile.gettempdir(), "snip_wm_in.mp4")
-        tmp_out = os.path.join(tempfile.gettempdir(), "snip_wm_out.mp4")
+        tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
+        tmp_out = os.path.join(tempfile.gettempdir(), f"snip_wm_out_{jid}.mp4")
+        wm_png  = os.path.join(tempfile.gettempdir(), f"snip_wm_{jid}.png")
         shutil.copy2(str(src), tmp_in)
 
-        # Try approach 1: drawtext with font file
-        font_paths = [
-            os.path.join(os.environ.get("WINDIR","C:/Windows"), "Fonts", "arial.ttf"),
-            os.path.join(os.environ.get("WINDIR","C:/Windows"), "Fonts", "calibri.ttf"),
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        ]
-        font_file = next((f for f in font_paths if os.path.exists(f)), None)
-        rc = 1
+        # Get video dimensions
+        info = get_info(tmp_in)
+        vs = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
+        vid_w = int(vs.get("width",  1280) or 1280)
+        vid_h = int(vs.get("height",  720) or 720)
 
-        if font_file:
-            ff = font_file.replace("\\", "/")
-            # Use %3A for colon in fontfile path to avoid filter parser issues
-            ff_safe = ff.replace(":", "\\\\:")
-            vf = (f"drawtext=fontfile='{ff_safe}'"
-                  f":text='{safe_text}'"
-                  f":fontsize=32:fontcolor=white@0.9"
-                  f":x=w-tw-20:y=h-th-20"
-                  f":box=1:boxcolor=black@0.5:boxborderw=5")
-            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_in,
-                              "-vf", vf,
-                              "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                              "-c:a", "copy", tmp_out])
+        prog(jid, "Rendering watermark image...", 30)
 
-        # Fallback approach: use subtitles/ass format burned in (no font needed)
-        if rc != 0:
-            prog(jid, "Trying subtitle watermark method...", 40)
-            # Create a simple ASS subtitle file for the watermark
-            ass_file = os.path.join(tempfile.gettempdir(), "snip_wm.ass")
-            ass_content = (
-                "[Script Info]\nScriptType: v4.00+\n"
-                "[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,BackColour,"
-                "Bold,Italic,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV\n"
-                "Style: Watermark,Arial,28,&H00FFFFFF,&H80000000,1,0,3,1,1,3,10,10,10\n"
-                "[Events]\nFormat: Start,End,Style,Text\n"
-            )
-            # Add watermark for full duration (0 to 9 hours)
-            ass_content += f"Dialogue: 0:00:00.00,9:00:00.00,Watermark,{safe_text}\n"
-            with open(ass_file, "w") as f:
-                f.write(ass_content)
-            ass_safe = ass_file.replace("\\", "/").replace(":", "\\\\:")
-            vf2 = f"ass='{ass_safe}'"
-            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_in,
-                              "-vf", vf2,
-                              "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                              "-c:a", "copy", tmp_out])
+        # Render watermark as PNG with Pillow — no FFmpeg font needed
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except ImportError:
+            subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
+            from PIL import Image, ImageDraw, ImageFont
 
-        # Final fallback: overlay a semi-transparent color bar with no text
-        if rc != 0:
-            prog(jid, "Using basic overlay watermark...", 60)
-            vf3 = ("drawbox=x=iw-200:y=ih-40:w=200:h=40:"
-                   "color=black@0.5:t=fill,"
-                   "drawbox=x=iw-200:y=ih-40:w=200:h=40:"
-                   "color=white@0.3:t=2")
-            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_in,
-                              "-vf", vf3,
-                              "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                              "-c:a", "copy", tmp_out])
+        # Find a font
+        font = None
+        for fp in [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        ]:
+            if os.path.exists(fp):
+                try: font = ImageFont.truetype(fp, 28); break
+                except: pass
+        if font is None:
+            font = ImageFont.load_default()
+
+        # Measure text
+        dummy = Image.new("RGBA", (1,1))
+        draw  = ImageDraw.Draw(dummy)
+        bbox  = draw.textbbox((0,0), safe_text, font=font)
+        tw = bbox[2]-bbox[0]; th = bbox[3]-bbox[1]
+        pad = 12
+        wm_w = tw + pad*2; wm_h = th + pad*2
+
+        # Draw watermark: semi-transparent black box + white text
+        wm_img = Image.new("RGBA", (wm_w, wm_h), (0,0,0,0))
+        wm_draw = ImageDraw.Draw(wm_img)
+        wm_draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,160))
+        wm_draw.text((pad, pad), safe_text, font=font, fill=(255,255,255,230))
+        wm_img.save(wm_png, "PNG")
+
+        # Position: bottom-right corner
+        x_pos = vid_w - wm_w - 20
+        y_pos = vid_h - wm_h - 20
+
+        prog(jid, "Applying watermark to video...", 60)
+
+        _, err, rc = run([_FFMPEG_EXE, "-y",
+            "-i", tmp_in,
+            "-i", wm_png,
+            "-filter_complex",
+            f"[0:v][1:v]overlay={x_pos}:{y_pos}[vout]",
+            "-map", "[vout]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-c:a", "copy", "-movflags", "+faststart",
+            tmp_out])
+
+        for f_ in [tmp_in, wm_png]:
+            try: os.unlink(f_)
+            except: pass
 
         if rc != 0:
             raise RuntimeError("Watermark failed: " + err[-300:])
@@ -300,24 +304,43 @@ def done(jid, path, stats=None):
             ext = Path(str(path)).suffix.lower()
             if ext in ('.mp4','.mov','.webm','.avi'):
                 wm_path = str(path)
-                tmp_wm = os.path.join(tempfile.gettempdir(), f"snip_autowm_{jid}.mp4")
-                tmp_in = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
+                tmp_wm  = os.path.join(tempfile.gettempdir(), f"snip_autowm_{jid}.mp4")
+                tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
+                wm_png  = os.path.join(tempfile.gettempdir(), f"snip_autowm_{jid}.png")
                 shutil.copy2(wm_path, tmp_in)
-                font_paths = [
-                    os.path.join(os.environ.get("WINDIR","C:/Windows"), "Fonts", "arial.ttf"),
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                ]
-                font_file = next((f for f in font_paths if os.path.exists(f)), None)
-                ff = font_file.replace("\\","/").replace("\\","/") if font_file else None
-                vf = (f"drawtext=fontfile='{ff}':text='Made with Snipforge':fontsize=16:fontcolor=white@0.7:x=10:y=h-th-10:box=1:boxcolor=black@0.3:boxborderw=3"
-                      if ff else "drawtext=text='Made with Snipforge':fontsize=16:fontcolor=white@0.7:x=10:y=h-th-10:box=1:boxcolor=black@0.3:boxborderw=3")
-                r = subprocess.run([_FFMPEG_EXE,"-y","-i",tmp_in,"-vf",vf,
-                    "-c:v","libx264","-preset","fast","-crf","22","-c:a","copy",tmp_wm],
-                    capture_output=True)
-                if r.returncode == 0:
-                    shutil.move(tmp_wm, wm_path)
-                try: os.unlink(tmp_in)
-                except: pass
+                # Render watermark PNG with Pillow — no FFmpeg font needed
+                try:
+                    from PIL import Image, ImageDraw, ImageFont
+                    wm_text = "Made with Snipforge"
+                    font = None
+                    for fp in ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                               "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"]:
+                        if os.path.exists(fp):
+                            try: font = ImageFont.truetype(fp, 18); break
+                            except: pass
+                    if font is None: font = ImageFont.load_default()
+                    dummy = Image.new("RGBA",(1,1)); d = ImageDraw.Draw(dummy)
+                    bb = d.textbbox((0,0), wm_text, font=font)
+                    tw,th = bb[2]-bb[0], bb[3]-bb[1]
+                    pad = 6
+                    img = Image.new("RGBA", (tw+pad*2, th+pad*2), (0,0,0,0))
+                    draw = ImageDraw.Draw(img)
+                    draw.rectangle([0,0,tw+pad*2-1,th+pad*2-1], fill=(0,0,0,120))
+                    draw.text((pad,pad), wm_text, font=font, fill=(255,255,255,200))
+                    img.save(wm_png, "PNG")
+                    r = subprocess.run([_FFMPEG_EXE,"-y","-i",tmp_in,"-i",wm_png,
+                        "-filter_complex","[0:v][1:v]overlay=10:H-h-10[vout]",
+                        "-map","[vout]","-map","0:a?",
+                        "-c:v","libx264","-preset","fast","-crf","22",
+                        "-c:a","copy","-movflags","+faststart",tmp_wm],
+                        capture_output=True)
+                    if r.returncode == 0:
+                        shutil.move(tmp_wm, wm_path)
+                    for f_ in [tmp_in, wm_png]:
+                        try: os.unlink(f_)
+                        except: pass
+                except Exception:
+                    pass
     except Exception:
         pass  # Never fail due to watermark issues
 
