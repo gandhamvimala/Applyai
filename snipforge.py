@@ -1611,24 +1611,47 @@ def api_transcribe():
                         srt_content += f"{i+1}\n{fmt_time(start)} --> {fmt_time(end)}\n{line}\n\n"
                     with open(srt_file, 'w', encoding='utf-8') as f:
                         f.write(srt_content)
-                    # Burn subtitles into video using temp paths (no spaces)
+                    # Embed subtitles as soft subs (no libass needed)
                     burned_out = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.mp4")
                     tmp_vid_in = os.path.join(tempfile.gettempdir(), f"snip_cap_in_{result_id}.mp4")
                     tmp_srt    = os.path.join(tempfile.gettempdir(), f"snip_cap_{result_id}.srt")
                     shutil.copy2(str(p), tmp_vid_in)
                     shutil.copy2(srt_file, tmp_srt)
-                    # Use forward slashes for FFmpeg
-                    srt_ffmpeg = tmp_srt.replace("\\", "/")
-                    if ":" in srt_ffmpeg:
-                        # Escape drive letter colon on Windows e.g. C:/ -> C\:/
-                        parts = srt_ffmpeg.split(":", 1)
-                        srt_ffmpeg = parts[0] + "\\:" + parts[1]
-                    _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_vid_in,
-                        "-vf", f"subtitles='{srt_ffmpeg}':force_style='FontSize=16,PrimaryColour=&H00ffffff,OutlineColour=&H00000000,Outline=2,Shadow=1,Alignment=2'",
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                    # Try method 1: soft subtitles (embedded, no libass needed)
+                    _, err, rc = run([_FFMPEG_EXE, "-y",
+                        "-i", tmp_vid_in,
+                        "-i", tmp_srt,
+                        "-c:v", "copy",
                         "-c:a", "copy",
+                        "-c:s", "mov_text",
+                        "-metadata:s:s:0", "language=eng",
                         "-movflags", "+faststart",
                         burned_out])
+                    if rc != 0:
+                        # Try method 2: re-encode with drawtext (no subtitle file needed)
+                        words = text.split()
+                        words_per_seg = max(6, len(words)//10)
+                        segments_text = [' '.join(words[i:i+words_per_seg]) for i in range(0, min(len(words), words_per_seg*3), words_per_seg)]
+                        vf_parts = []
+                        seg_dur = dur / max(len(segments_text),1)
+                        for i, seg in enumerate(segments_text[:3]):
+                            safe_seg = seg[:50].replace("'","").replace('"','').replace(':','').replace('\\','')
+                            t_start = i * seg_dur
+                            t_end = (i+1) * seg_dur
+                            vf_parts.append(
+                                f"drawtext=text='{safe_seg}':fontsize=18:fontcolor=white"
+                                f":x=(w-text_w)/2:y=h-th-30"
+                                f":box=1:boxcolor=black@0.6:boxborderw=6"
+                                f":enable='between(t,{t_start:.1f},{t_end:.1f})'"
+                            )
+                        vf = ",".join(vf_parts) if vf_parts else "null"
+                        _, err, rc = run([_FFMPEG_EXE, "-y",
+                            "-i", tmp_vid_in,
+                            "-vf", vf,
+                            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                            "-c:a", "copy",
+                            "-movflags", "+faststart",
+                            burned_out])
                     if rc == 0:
                         output_file = burned_out
                         jobs[result_id]["log"].append("Captions burned into video!")
