@@ -5504,6 +5504,22 @@ async function handleMusicUpload(file) {
   }
 }
 
+// ── Canvas roundRect polyfill ──
+function canvasRoundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
 // ── Live Preview for Text Overlay ──
 function updateTextPreview() {
   const wrap = document.getElementById('to-preview-wrap');
@@ -5530,7 +5546,7 @@ function updateTextPreview() {
   const x = Math.max(0, Math.round(canvas.width  * xPct / 100));
   const y = Math.max(0, Math.round(canvas.height * yPct / 100));
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.roundRect(x - pad, y - pad, tw + pad*2, th + pad*2, 6);
+  canvasRoundRect(ctx, x - pad, y - pad, tw + pad*2, th + pad*2, 6);
   ctx.fill();
   ctx.fillStyle = colorMap[color] || '#ffffff';
   ctx.fillText(text, x, y + th - 2);
@@ -5590,7 +5606,7 @@ function updateWmPreview() {
   const [x, y] = positions[pos] || positions['bottom-right'];
   ctx.globalAlpha = opacity;
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.roundRect(x, y, ww, wh, 6);
+  canvasRoundRect(ctx, x, y, ww, wh, 6);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.fillText(text, x + pad, y + th + pad - 4);
@@ -5724,7 +5740,7 @@ function updateBlurPreview() {
     ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI*2);
   } else if (blurShape === 'rounded') {
     const rad = Math.min(w, h) * 0.15;
-    ctx.roundRect(x, y, w, h, rad);
+    canvasRoundRect(ctx, x, y, w, h, rad);
   } else {
     ctx.rect(x, y, w, h);
   }
@@ -5753,7 +5769,7 @@ function updateBlurPreview() {
   if (blurShape === 'circle') {
     ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI*2);
   } else if (blurShape === 'rounded') {
-    ctx.roundRect(x, y, w, h, Math.min(w,h)*0.15);
+    canvasRoundRect(ctx, x, y, w, h, Math.min(w,h)*0.15);
   } else {
     ctx.rect(x, y, w, h);
   }
