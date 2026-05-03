@@ -10,6 +10,12 @@ Usage:
 """
 
 import os, re, sys, json, uuid, shutil, threading, tempfile, subprocess, time, hashlib, sqlite3, datetime, secrets
+try:
+    import psycopg2
+    import psycopg2.extras
+    HAS_PG = True
+except ImportError:
+    HAS_PG = False
 from pathlib import Path
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -744,9 +750,58 @@ PLANS = {
 }
 
 # ─── Database ─────────────────────────────────────────────────────────────────
-DB_PATH = os.environ.get('DB_PATH', os.path.join(_SCRIPT_DIR, 'snipforge.db'))
+DB_PATH     = os.environ.get('DB_PATH', os.path.join(_SCRIPT_DIR, 'snipforge.db'))
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
+
+class _PGCursor:
+    """Wraps psycopg2 cursor to behave like sqlite3 Row (dict-like access)."""
+    def __init__(self, cur): self._cur = cur
+    def execute(self, sql, params=()): 
+        self._cur.execute(sql.replace('?','%s'), params)
+        return self
+    def executescript(self, sql):
+        for stmt in sql.split(';'):
+            s = stmt.strip()
+            if s: self._cur.execute(s)
+        return self
+    def fetchone(self):
+        row = self._cur.fetchone()
+        if row is None: return None
+        cols = [d[0] for d in self._cur.description]
+        return dict(zip(cols, row))
+    def fetchall(self):
+        rows = self._cur.fetchall()
+        if not rows: return []
+        cols = [d[0] for d in self._cur.description]
+        return [dict(zip(cols, r)) for r in rows]
+    @property
+    def rowcount(self): return self._cur.rowcount
+
+class _PGConn:
+    """Wraps psycopg2 connection to behave like sqlite3 connection."""
+    def __init__(self, conn): self._conn = conn
+    def execute(self, sql, params=()):
+        cur = self._conn.cursor()
+        cur.execute(sql.replace('?','%s'), params)
+        return _PGCursor(cur)
+    def executescript(self, sql):
+        cur = self._conn.cursor()
+        for stmt in sql.split(';'):
+            s = stmt.strip()
+            if s:
+                try: cur.execute(s)
+                except Exception: pass
+        return self
+    def __enter__(self): return self
+    def __exit__(self, *a):
+        if a[0]: self._conn.rollback()
+        else: self._conn.commit()
+    def close(self): self._conn.close()
 
 def get_db():
+    if DATABASE_URL and HAS_PG:
+        conn = psycopg2.connect(DATABASE_URL)
+        return _PGConn(conn)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -1504,11 +1559,11 @@ def payment_success():
             import stripe
             stripe.api_key = STRIPE_SECRET_KEY
             sess = stripe.checkout.Session.retrieve(session_id)
-            customer_id = sess.get("customer")
-            sub_id = sess.get("subscription")
+            customer_id = sess.customer
+            sub_id = sess.subscription
             if customer_id and sub_id:
                 sub = stripe.Subscription.retrieve(sub_id)
-                price_id = sub["items"]["data"][0]["price"]["id"]
+                price_id = sub.items.data[0].price.id
                 plan = "pro" if price_id in (STRIPE_PRO_PRICE_ID, STRIPE_PRO_YEARLY_PRICE_ID) else "team"
                 user = get_current_user()
                 with get_db() as db:
@@ -1532,13 +1587,13 @@ def stripe_webhook():
         event   = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
         if event["type"] == "checkout.session.completed":
             sess = event["data"]["object"]
-            customer_id = sess.get("customer")
-            sub_id      = sess.get("subscription")
-            session_id  = sess.get("id")
+            customer_id = sess.get("customer") if hasattr(sess, "get") else sess.customer
+            sub_id      = sess.get("subscription") if hasattr(sess, "get") else sess.subscription
+            session_id  = sess.get("id") if hasattr(sess, "get") else sess.id
             print(f"[WEBHOOK] checkout.session.completed customer={customer_id} sub={sub_id}")
             # Find plan from subscription
             sub = stripe.Subscription.retrieve(sub_id)
-            price_id = sub["items"]["data"][0]["price"]["id"]
+            price_id = sub.items.data[0].price.id
             plan = "pro" if price_id in (STRIPE_PRO_PRICE_ID, STRIPE_PRO_YEARLY_PRICE_ID) else "team"
             print(f"[WEBHOOK] price_id={price_id} plan={plan}")
             with get_db() as db:
@@ -1549,14 +1604,14 @@ def stripe_webhook():
                 print(f"[WEBHOOK] rows updated: {result.rowcount}")
         elif event["type"] in ("customer.subscription.deleted","customer.subscription.paused"):
             sub = event["data"]["object"]
-            customer_id = sub.get("customer")
+            customer_id = sub.get("customer") if hasattr(sub,"get") else sub.customer
             with get_db() as db:
                 db.execute("UPDATE users SET plan='free',stripe_subscription_id=NULL WHERE stripe_customer_id=?",
                            (customer_id,))
         elif event["type"] == "customer.subscription.updated":
             sub = event["data"]["object"]
-            customer_id = sub.get("customer")
-            price_id = sub["items"]["data"][0]["price"]["id"]
+            customer_id = sub.get("customer") if hasattr(sub,"get") else sub.customer
+            price_id = sub.items.data[0].price.id
             plan = "pro" if price_id in (STRIPE_PRO_PRICE_ID, STRIPE_PRO_YEARLY_PRICE_ID) else "team"
             with get_db() as db:
                 db.execute('UPDATE users SET plan=? WHERE stripe_customer_id=?',(plan, customer_id))
