@@ -2870,8 +2870,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:h
 
 /* ── NAV ── */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-.nav-logo{font-family:var(--tight);font-size:1.2rem;font-weight:900;color:var(--accent);text-decoration:none;letter-spacing:-.02em}
-.nav-logo span{color:var(--text)}
+.nav-logo{font-family:'Space Grotesk',sans-serif;font-size:1.2rem;font-weight:700;color:var(--text);text-decoration:none;letter-spacing:-.02em}
+.nav-logo span{color:var(--accent)}
 .nav-right{display:flex;align-items:center;gap:8px}
 .nav-link{padding:7px 14px;font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;transition:color .15s}
 .nav-link:hover{color:var(--text)}
@@ -2979,7 +2979,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;d
 
 /* ── FOOTER ── */
 footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--bg)}
-.footer-logo{font-family:var(--tight);font-size:1.1rem;font-weight:900;color:var(--accent)}
+.footer-logo{font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700;color:var(--text);letter-spacing:-.02em;text-decoration:none}
 .footer-links{display:flex;gap:24px}
 .footer-links a{font-size:.82rem;color:var(--muted);text-decoration:none;transition:color .15s}
 .footer-links a:hover{color:var(--text)}
@@ -3000,7 +3000,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
 
 <!-- NAV -->
 <nav>
-  <a href="/" class="nav-logo">SNIP<span>FORGE</span></a>
+  <a href="/" class="nav-logo">Snip<span style="color:var(--accent)">forge</span></a>
   <div class="nav-right">
     <a href="/pricing" class="nav-link">Pricing</a>
     <a href="/login" class="nav-link">Log in</a>
@@ -3195,7 +3195,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">SNIPFORGE</div>
+  <div class="footer-logo">Snip<span style="color:var(--accent)">forge</span></div>
   <div class="footer-links">
     <a href="/pricing">Pricing</a>
     <a href="/login">Login</a>
@@ -3276,7 +3276,7 @@ async function doReset(){
 }
 html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;-webkit-font-smoothing:antialiased}
 .topbar{display:flex;align-items:center;padding:0 28px;height:60px;background:rgba(255,255,255,.9);border-bottom:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.04);backdrop-filter:blur(12px);position:sticky;top:0;z-index:50}
-.logo{font-family:var(--cond);font-weight:700;font-size:1.35rem;letter-spacing:-.01em;color:var(--text);text-decoration:none}
+.logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.2rem;letter-spacing:-.02em;color:var(--text);text-decoration:none}
 .logo span{color:var(--accent)}
 .topbar-spacer{flex:1}
 .topbar-link{font-family:var(--body);font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;padding:7px 14px;border-radius:8px;transition:all .15s;margin-left:4px}
@@ -4214,7 +4214,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <div class="app">
 
 <header class="topbar">
-  <div class="logo">Snipforge</div>
+  <div class="logo">Snip<span style="color:var(--accent)">forge</span></div>
   <span class="logo-sub">CUT · FORGE · DELIVER</span>
   <div class="topbar-spacer"></div>
   <a href="/dashboard" style="font-family:var(--mono);font-size:.7rem;padding:5px 12px;border-radius:6px;text-decoration:none;color:var(--muted);border:1px solid var(--border);transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Dashboard</a>
