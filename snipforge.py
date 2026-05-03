@@ -2852,7 +2852,7 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Snipforge — AI Video Toolkit</title>
-<meta name="description" content="14 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur and more. Free to start.">
+<meta name="description" content="18 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur and more. Free to start.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -3013,7 +3013,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
   <div class="hero-glow"></div>
   <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
   <h1>Edit videos.<br><span>Ship faster.</span></h1>
-  <p class="hero-sub">14 professional video tools in your browser. Trim, transcribe, translate, watermark, convert to GIF, blur regions and more.</p>
+  <p class="hero-sub">18 professional video tools in your browser. Trim, transcribe, translate, watermark, convert to GIF, blur regions and more.</p>
   <div class="hero-btns">
     <a href="/register" class="btn-primary">Start for free <span>→</span></a>
     <a href="/pricing" class="btn-secondary">See pricing</a>
