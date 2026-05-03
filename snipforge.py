@@ -1768,7 +1768,7 @@ def api_transcribe():
                         y = vid_h - wm_h - max(20, int(vid_h * 0.05))
                         cap_patches.append((patch, x, y))
 
-                    jobs[result_id]["log"].append(f"Rendering {len(cap_lines)} caption segments…")
+                    jobs[result_id]["log"].append(f"Rendering {len(cap_lines)} caption segments @ {line_dur:.2f}s each, fps={fps2}")
 
                     dec2 = subprocess.Popen(
                         [_FFMPEG_EXE, "-i", tmp_cap_in,
@@ -1812,7 +1812,9 @@ def api_transcribe():
                     try: os.unlink(tmp_cap_in)
                     except: pass
 
-                    if os.path.exists(tmp_cap_out) and os.path.getsize(tmp_cap_out) > 1000:
+                    out_size = os.path.getsize(tmp_cap_out) if os.path.exists(tmp_cap_out) else 0
+                    jobs[result_id]["log"].append(f"Processed {n_frames} frames, output {out_size//1024}KB")
+                    if os.path.exists(tmp_cap_out) and out_size > 1000:
                         output_file = tmp_cap_out
                         jobs[result_id]["log"].append("Captions burned into video!")
                     else:
