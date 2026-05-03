@@ -269,13 +269,18 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
         }
         x_pos, y_pos = pos_map.get(position, pos_map["bottom-right"])
 
-        prog(jid, "Processing frames...", 30)
+        prog(jid, "Decoding video frames...", 30)
 
-        dec = subprocess.Popen(
-            [_FFMPEG_EXE, "-i", tmp_in,
+        # Decode to temp raw file first to avoid pipe deadlock
+        raw_wm = os.path.join(tempfile.gettempdir(), f"snip_wm_raw_{jid}.bin")
+        subprocess.run(
+            [_FFMPEG_EXE, "-y", "-i", tmp_in,
              "-f","rawvideo","-pix_fmt","rgba",
-             "-vf", f"scale={vid_w}:{vid_h}", "pipe:1"],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+             "-vf", f"scale={vid_w}:{vid_h}",
+             raw_wm],
+            capture_output=True)
+
+        prog(jid, "Compositing watermark frames...", 50)
 
         enc = subprocess.Popen(
             [_FFMPEG_EXE, "-y",
@@ -291,24 +296,22 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
 
         frame_size = vid_w * vid_h * 4
         n = 0
-        while True:
-            raw = b""
-            while len(raw) < frame_size:
-                chunk = dec.stdout.read(frame_size - len(raw))
-                if not chunk: break
-                raw += chunk
-            if len(raw) < frame_size: break
-            frame = Image.frombytes("RGBA", (vid_w, vid_h), raw)
-            frame.alpha_composite(wm_img, dest=(x_pos, y_pos))
-            enc.stdin.write(frame.tobytes())
-            n += 1
-            if n % 30 == 0:
-                jobs[jid]["progress"] = min(90, 30 + n//8)
+        with open(raw_wm, "rb") as rf:
+            while True:
+                raw = rf.read(frame_size)
+                if len(raw) < frame_size: break
+                frame = Image.frombytes("RGBA", (vid_w, vid_h), raw)
+                frame.alpha_composite(wm_img, dest=(x_pos, y_pos))
+                enc.stdin.write(frame.tobytes())
+                n += 1
+                if n % 60 == 0:
+                    jobs[jid]["progress"] = min(90, 50 + n//20)
 
-        dec.stdout.close(); dec.wait()
-        enc.stdin.close();  enc.wait()
-        try: os.unlink(tmp_in)
-        except: pass
+        enc.stdin.close()
+        enc.wait()
+        for f_ in [tmp_in, raw_wm]:
+            try: os.unlink(f_)
+            except: pass
 
         if not os.path.exists(tmp_out) or os.path.getsize(tmp_out) < 1000:
             raise RuntimeError(f"Output empty after {n} frames processed")
@@ -1770,12 +1773,18 @@ def api_transcribe():
 
                     jobs[result_id]["log"].append(f"Rendering {len(cap_lines)} caption segments @ {line_dur:.2f}s each, fps={fps2}")
 
-                    dec2 = subprocess.Popen(
-                        [_FFMPEG_EXE, "-i", tmp_cap_in,
+                    # Decode to temp raw file first (avoids pipe deadlock)
+                    raw_file = os.path.join(tempfile.gettempdir(), f"snip_raw_{result_id}.bin")
+                    subprocess.run(
+                        [_FFMPEG_EXE, "-y", "-i", tmp_cap_in,
                          "-f","rawvideo","-pix_fmt","rgba",
-                         "-vf", f"scale={vid_w}:{vid_h}", "pipe:1"],
-                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                         "-vf", f"scale={vid_w}:{vid_h}",
+                         raw_file],
+                        capture_output=True)
 
+                    jobs[result_id]["log"].append(f"Raw frames decoded, compositing captions…")
+
+                    # Now composite captions frame by frame and pipe to encoder
                     enc2 = subprocess.Popen(
                         [_FFMPEG_EXE, "-y",
                          "-f","rawvideo","-pix_fmt","rgba",
@@ -1790,25 +1799,24 @@ def api_transcribe():
 
                     frame_size2 = vid_w * vid_h * 4
                     n_frames = 0
-                    while True:
-                        raw2 = b""
-                        while len(raw2) < frame_size2:
-                            chunk2 = dec2.stdout.read(frame_size2 - len(raw2))
-                            if not chunk2: break
-                            raw2 += chunk2
-                        if len(raw2) < frame_size2: break
-                        t_now = n_frames / fps2
-                        cap_idx = min(int(t_now / line_dur), len(cap_patches)-1)
-                        frame2 = Image.frombytes("RGBA", (vid_w, vid_h), raw2)
-                        patch, px, py = cap_patches[cap_idx]
-                        frame2.alpha_composite(patch, dest=(px, py))
-                        enc2.stdin.write(frame2.tobytes())
-                        n_frames += 1
-                        if n_frames % 30 == 0:
-                            jobs[result_id]["progress"] = min(98, 90 + n_frames//60)
+                    with open(raw_file, "rb") as rf:
+                        while True:
+                            raw2 = rf.read(frame_size2)
+                            if len(raw2) < frame_size2: break
+                            t_now = n_frames / fps2
+                            cap_idx = min(int(t_now / line_dur), len(cap_patches)-1)
+                            frame2 = Image.frombytes("RGBA", (vid_w, vid_h), raw2)
+                            patch, px, py = cap_patches[cap_idx]
+                            frame2.alpha_composite(patch, dest=(px, py))
+                            enc2.stdin.write(frame2.tobytes())
+                            n_frames += 1
+                            if n_frames % 60 == 0:
+                                jobs[result_id]["progress"] = min(98, 90 + n_frames//20)
 
-                    dec2.stdout.close(); dec2.wait()
-                    enc2.stdin.close();  enc2.wait()
+                    enc2.stdin.close()
+                    enc2.wait()
+                    try: os.unlink(raw_file)
+                    except: pass
                     try: os.unlink(tmp_cap_in)
                     except: pass
 
