@@ -2563,7 +2563,7 @@ footer{padding:32px 40px;border-top:1px solid var(--border);display:flex;align-i
 <section class="hero">
   <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
   <h1>Cut.<span> Forge.</span><br>Deliver.</h1>
-  <p class="hero-sub">Trim, transcribe, translate, watermark and compress your videos — right in your browser. No software. No limits.</p>
+  <p class="hero-sub">Trim, transcribe, translate, watermark and compress your videos. Right in your browser. No software needed.</p>
   <div class="hero-actions">
     <a href="/register" class="btn-primary">Start for Free</a>
     <a href="/pricing" class="btn-secondary">View Pricing</a>
