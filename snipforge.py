@@ -1654,6 +1654,8 @@ def api_transcribe():
                 body = (
                     f"--{boundary}{nl}"
                     f'Content-Disposition: form-data; name="model"{nl}{nl}whisper-1{nl}'
+                    f"--{boundary}{nl}"
+                    f'Content-Disposition: form-data; name="response_format"{nl}{nl}verbose_json{nl}'
                     + lang_part +
                     f"--{boundary}{nl}"
                     f'Content-Disposition: form-data; name="file"; filename="audio.mp3"{nl}'
@@ -4629,16 +4631,7 @@ async function runTranscribe(){
       const el=document.getElementById('tc-rstats');
       el.innerHTML=`
         <div class="rstat"><div class="rstat-val">${stats.words||0}</div><div class="rstat-lbl">Words</div></div>
-        <div class="rstat"><div class="rstat-val" style="font-size:.85rem">${(()=>{
-          const det = stats.detected_language || '';
-          const trans = stats.translated ? (stats.language||'') : '';
-          const langNames = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',
-            pt:'Portuguese',nl:'Dutch',ru:'Russian',ja:'Japanese',ko:'Korean',zh:'Chinese',
-            ar:'Arabic',hi:'Hindi',tr:'Turkish',vi:'Vietnamese',th:'Thai',id:'Indonesian',
-            sv:'Swedish',uk:'Ukrainian'};
-          const detName = langNames[det] || det.toUpperCase() || '—';
-          return trans ? detName + ' → ' + trans : detName;
-        })()}</div><div class="rstat-lbl">Language</div></div>
+        <div class="rstat"><div class="rstat-val">${stats.translated ? (stats.language||'—') : '—'}</div><div class="rstat-lbl">Translated To</div></div>
         <div class="rstat"><div class="rstat-val">${fmtTime(stats.duration||0)}</div><div class="rstat-lbl">Duration</div></div>
       `;
       // Auto-populate language dropdown with detected language
