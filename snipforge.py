@@ -1286,6 +1286,65 @@ def login():
     session['auth_token'] = token
     return jsonify({"success":True, "redirect":"/"})
 
+@app.route("/forgot-password", methods=["GET","POST"])
+def forgot_password():
+    if request.method == "GET":
+        return render_template_string(AUTH_HTML, page="forgot", error=None)
+    data = request.get_json()
+    email = (data.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "Please enter your email"}), 400
+    with get_db() as db:
+        user = db.execute('SELECT id,email FROM users WHERE email=?', (email,)).fetchone()
+    # Always return success (don't reveal if email exists)
+    if user:
+        token = secrets.token_urlsafe(32)
+        expires = int(time.time()) + 3600  # 1 hour
+        with get_db() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS password_resets (token TEXT PRIMARY KEY, user_id INTEGER, expires INTEGER)')
+            db.execute('DELETE FROM password_resets WHERE user_id=?', (user['id'],))
+            db.execute('INSERT INTO password_resets VALUES (?,?,?)', (token, user['id'], expires))
+        reset_url = f"{os.environ.get('APP_URL','https://snipforge.video')}/reset-password?token={token}"
+        # Send email via simple SMTP if configured, otherwise log it
+        smtp_host = os.environ.get('SMTP_HOST','')
+        if smtp_host:
+            try:
+                import smtplib
+                from email.mime.text import MIMEText
+                msg = MIMEText(f"Click to reset your Snipforge password:\n\n{reset_url}\n\nThis link expires in 1 hour.")
+                msg['Subject'] = 'Reset your Snipforge password'
+                msg['From'] = os.environ.get('SMTP_FROM','noreply@snipforge.video')
+                msg['To'] = email
+                with smtplib.SMTP(smtp_host, int(os.environ.get('SMTP_PORT',587))) as s:
+                    s.starttls()
+                    s.login(os.environ.get('SMTP_USER',''), os.environ.get('SMTP_PASS',''))
+                    s.send_message(msg)
+            except Exception as e:
+                print(f"Email error: {e}")
+        else:
+            print(f"[PASSWORD RESET] {email}: {reset_url}")
+    return jsonify({"success": True, "message": "If that email exists, a reset link has been sent. Check your inbox."})
+
+@app.route("/reset-password", methods=["GET","POST"])
+def reset_password():
+    if request.method == "GET":
+        return render_template_string(AUTH_HTML, page="reset", error=None)
+    data = request.get_json()
+    token = (data.get("token") or "").strip()
+    password = (data.get("password") or "")
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    with get_db() as db:
+        db.execute('CREATE TABLE IF NOT EXISTS password_resets (token TEXT PRIMARY KEY, user_id INTEGER, expires INTEGER)')
+        row = db.execute('SELECT user_id, expires FROM password_resets WHERE token=?', (token,)).fetchone()
+    if not row or int(time.time()) > row['expires']:
+        return jsonify({"error": "Reset link is invalid or expired"}), 400
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    with get_db() as db:
+        db.execute('UPDATE users SET password_hash=? WHERE id=?', (hashed, row['user_id']))
+        db.execute('DELETE FROM password_resets WHERE token=?', (token,))
+    return jsonify({"success": True})
+
 @app.route("/logout")
 def logout():
     token = session.pop('auth_token', None)
@@ -2293,7 +2352,67 @@ AUTH_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Snipforge — {% if page == 'login' %}Login{% elif page == 'register' %}Register{% elif page == 'pricing' %}Pricing{% elif page == 'account' %}Account{% else %}Welcome{% endif %}</title>
+<title>Snipforge — {% if page == 'login' %}Login{% elif page == 'forgot' %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-title">Reset password</div>
+    <div class="auth-sub">Enter your email and we'll send a reset link</div>
+    <div class="err-box" id="err"></div>
+    <div class="success-box" id="succ" style="display:none;padding:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;color:#2e7d32;font-size:.88rem;margin-bottom:12px;text-align:center"></div>
+    <div class="field"><label>Email</label><input type="email" id="email" placeholder="you@example.com" autocomplete="email"></div>
+    <button class="submit-btn" onclick="doForgot()">Send Reset Link</button>
+    <div class="auth-footer"><a href="/login">← Back to sign in</a></div>
+  </div>
+</div>
+<script>
+async function doForgot(){
+  const btn=document.querySelector('.submit-btn');
+  btn.disabled=true; btn.textContent='Sending…';
+  const r=await fetch('/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:document.getElementById('email').value})});
+  const d=await r.json();
+  if(d.success){
+    document.getElementById('succ').textContent=d.message;
+    document.getElementById('succ').style.display='block';
+    document.getElementById('err').classList.remove('show');
+    btn.textContent='Sent!';
+  } else {
+    const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');
+    btn.disabled=false;btn.textContent='Send Reset Link';
+  }
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter')doForgot();});
+</script>
+
+{% elif page == 'reset' %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-title">Set new password</div>
+    <div class="auth-sub">Choose a strong password for your account</div>
+    <div class="err-box" id="err"></div>
+    <div class="field"><label>New Password</label><input type="password" id="password" placeholder="Min 8 characters" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm Password</label><input type="password" id="password2" placeholder="Repeat password" autocomplete="new-password"></div>
+    <button class="submit-btn" onclick="doReset()">Set New Password</button>
+  </div>
+</div>
+<script>
+async function doReset(){
+  const p=document.getElementById('password').value;
+  const p2=document.getElementById('password2').value;
+  if(p!==p2){const e=document.getElementById('err');e.textContent='Passwords do not match';e.classList.add('show');return;}
+  if(p.length<8){const e=document.getElementById('err');e.textContent='Password must be at least 8 characters';e.classList.add('show');return;}
+  const btn=document.querySelector('.submit-btn');
+  btn.disabled=true;btn.textContent='Saving…';
+  const token=new URLSearchParams(window.location.search).get('token');
+  const r=await fetch('/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token,password:p})});
+  const d=await r.json();
+  if(d.success){window.location='/login?msg=Password+updated+successfully';}
+  else{const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');btn.disabled=false;btn.textContent='Set New Password';}
+}
+</script>
+
+{% elif page == 'register' %}Register{% elif page == 'pricing' %}Pricing{% elif page == 'account' %}Account{% else %}Welcome{% endif %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -2438,6 +2557,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <div class="field"><label>Email</label><input type="email" id="email" placeholder="you@example.com" autocomplete="email"></div>
     <div class="field"><label>Password</label><input type="password" id="password" placeholder="••••••••" autocomplete="current-password"></div>
     <button class="submit-btn" onclick="doLogin()">Sign In</button>
+    <div style="text-align:center;margin-top:8px"><a href="/forgot-password" style="font-size:.82rem;color:var(--muted);text-decoration:none" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--muted)'">Forgot your password?</a></div>
     <div class="auth-footer">Don't have an account? <a href="/register">Register free</a></div>
   </div>
 </div>
