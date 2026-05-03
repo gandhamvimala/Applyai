@@ -1440,6 +1440,23 @@ def api_detect_language():
         shutil.rmtree(tmpdir, ignore_errors=True)
         return jsonify({"language": None, "error": str(e)})
 
+@app.route("/api/upload-asset", methods=["POST"])
+@login_required
+def api_upload_asset():
+    """Upload an asset file (audio, image) for use in video tools."""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "No file"}), 400
+    ext = Path(f.filename).suffix.lower()
+    allowed = {'.png','.jpg','.jpeg','.gif','.webp',
+               '.mp3','.wav','.aac','.m4a','.ogg','.flac'}
+    if ext not in allowed:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+    file_id = str(uuid.uuid4())[:8]
+    p = UPLOAD_DIR / f"{file_id}{ext}"
+    f.save(str(p))
+    return jsonify({"file_id": file_id, "filename": secure_filename(f.filename)})
+
 def _save_file(file_id, filename):
     # find upload by file_id prefix
     for f in UPLOAD_DIR.iterdir():
@@ -5414,7 +5431,7 @@ async function handleMusicUpload(file) {
   nameEl.textContent = 'Uploading…';
   const fd = new FormData();
   fd.append('file', file);
-  const r = await fetch('/api/watermark-upload', {method:'POST', body:fd});
+  const r = await fetch('/api/upload-asset', {method:'POST', body:fd});
   const d = await r.json();
   if (d.file_id) {
     musicFileId = d.file_id;
