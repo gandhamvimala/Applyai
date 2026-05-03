@@ -1322,13 +1322,13 @@ def forgot_password():
 <a href="{reset_url}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#e84d1c;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Reset Password</a>
 <p style="color:#999;font-size:.8rem">If you didn't request this, you can safely ignore this email.</p>
 </div>"""
-                payload = json.dumps({{
-                    "sender": {{"name": from_name, "email": from_email}},
-                    "to": [{{"email": email}}],
+                payload = json.dumps({
+                    "sender": {"name": from_name, "email": from_email},
+                    "to": [{"email": email}],
                     "subject": "Reset your Snipforge password",
                     "htmlContent": html_body,
-                    "textContent": f"Reset your Snipforge password: {{reset_url}} (expires in 1 hour)"
-                }}).encode()
+                    "textContent": "Reset your Snipforge password: " + reset_url + " (expires in 1 hour)"
+                }).encode()
                 req = _ureq.Request(
                     "https://api.brevo.com/v3/smtp/email",
                     data=payload,
