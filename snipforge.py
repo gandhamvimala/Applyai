@@ -1497,6 +1497,26 @@ def create_checkout():
 @app.route("/payment/success")
 @login_required
 def payment_success():
+    # Fallback: update plan directly from checkout session
+    session_id = request.args.get("session_id","")
+    if session_id and STRIPE_SECRET_KEY:
+        try:
+            import stripe
+            stripe.api_key = STRIPE_SECRET_KEY
+            sess = stripe.checkout.Session.retrieve(session_id)
+            customer_id = sess.get("customer")
+            sub_id = sess.get("subscription")
+            if customer_id and sub_id:
+                sub = stripe.Subscription.retrieve(sub_id)
+                price_id = sub["items"]["data"][0]["price"]["id"]
+                plan = "pro" if price_id in (STRIPE_PRO_PRICE_ID, STRIPE_PRO_YEARLY_PRICE_ID) else "team"
+                user = get_current_user()
+                with get_db() as db:
+                    db.execute('UPDATE users SET plan=?,stripe_customer_id=?,stripe_subscription_id=? WHERE id=?',
+                               (plan, customer_id, sub_id, user["id"]))
+                print(f"[SUCCESS] Updated user {user['email']} to {plan}")
+        except Exception as e:
+            print(f"[SUCCESS] Error updating plan: {e}")
     return render_template_string(AUTH_HTML, page="success",
         stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS, user=get_current_user())
 
@@ -1513,13 +1533,19 @@ def stripe_webhook():
             sess = event["data"]["object"]
             customer_id = sess.get("customer")
             sub_id      = sess.get("subscription")
+            session_id  = sess.get("id")
+            print(f"[WEBHOOK] checkout.session.completed customer={customer_id} sub={sub_id}")
             # Find plan from subscription
             sub = stripe.Subscription.retrieve(sub_id)
             price_id = sub["items"]["data"][0]["price"]["id"]
             plan = "pro" if price_id in (STRIPE_PRO_PRICE_ID, STRIPE_PRO_YEARLY_PRICE_ID) else "team"
+            print(f"[WEBHOOK] price_id={price_id} plan={plan}")
             with get_db() as db:
-                db.execute('UPDATE users SET plan=?,stripe_subscription_id=? WHERE stripe_customer_id=?',
+                rows = db.execute('SELECT id,email FROM users WHERE stripe_customer_id=?',(customer_id,)).fetchall()
+                print(f"[WEBHOOK] matched users: {[dict(r) for r in rows]}")
+                result = db.execute('UPDATE users SET plan=?,stripe_subscription_id=? WHERE stripe_customer_id=?',
                            (plan, sub_id, customer_id))
+                print(f"[WEBHOOK] rows updated: {result.rowcount}")
         elif event["type"] in ("customer.subscription.deleted","customer.subscription.paused"):
             sub = event["data"]["object"]
             customer_id = sub.get("customer")
