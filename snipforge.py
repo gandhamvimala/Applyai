@@ -1800,6 +1800,12 @@ def reset_password():
         db.execute('DELETE FROM password_resets WHERE token=?', (token,))
     return jsonify({"success": True})
 
+@app.route("/favicon.ico")
+def favicon():
+    from flask import Response
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#e8420a"/><text x="16" y="23" text-anchor="middle" font-size="20" fill="white">S</text></svg>'
+    return Response(svg.encode(), mimetype="image/svg+xml")
+
 @app.route("/logout")
 def logout():
     token = session.pop('auth_token', None)
@@ -5424,7 +5430,6 @@ async function runWatermarkImage() {
     s.filename.replace(/[.][^.]+$/, '') + '_watermarked.mp4');
 }
 
-let musicFileId = null;
 
 async function handleMusicUpload(file) {
   if (!file) return;
@@ -5500,68 +5505,6 @@ async function runBlurRegion() {
 
 let musicFileId = null;
 
-async function handleMusicUpload(file) {
-  if (!file) return;
-  const label = document.getElementById('bgmusic-audio-label');
-  const nameEl = document.getElementById('bgmusic-audio-name');
-  label.textContent = file.name;
-  nameEl.style.display = 'block';
-  nameEl.textContent = 'Uploading…';
-  const fd = new FormData();
-  fd.append('file', file);
-  const r = await fetch('/api/watermark-upload', {method:'POST', body:fd});
-  const d = await r.json();
-  if (d.file_id) {
-    musicFileId = d.file_id;
-    nameEl.textContent = '✓ ' + d.filename + ' ready';
-    nameEl.style.color = 'var(--green)';
-  } else {
-    nameEl.textContent = d.error || 'Upload failed';
-    nameEl.style.color = 'red';
-  }
-}
-
-async function runGif() {
-  const s = state['gif']; if (!s) return;
-  const fps   = parseInt(document.getElementById('gif-fps').value);
-  const width = parseInt(document.getElementById('gif-width').value);
-  const jid = await startJob('gif', {op:'gif', fps, width, out_ext:'gif'});
-  if (!jid) return;
-  pollJob('gif', jid, null, 'gif-dl', s.filename.replace(/[.][^.]+$/, '') + '.gif', (d) => {
-    if (d.status === 'done') {
-      const img = document.getElementById('gif-rimg');
-      img.src = '/api/download/' + jid;
-      document.getElementById('gif-result').classList.add('show');
-    }
-  });
-}
-
-async function runBgMusic() {
-  const s = state['bgmusic']; if (!s) return;
-  if (!musicFileId) { alert('Please upload a music file first.'); return; }
-  const volume = parseInt(document.getElementById('bgmusic-vol').value) / 100;
-  const duck   = document.getElementById('bgmusic-duck').checked;
-  const jid = await startJob('bgmusic', {op:'bgmusic', music_file_id:musicFileId, volume, duck, out_ext:'mp4'});
-  if (jid) pollJob('bgmusic', jid, 'bgmusic-rvideo', 'bgmusic-dl', s.filename.replace(/[.][^.]+$/, '') + '_music.mp4');
-}
-
-async function runTextOverlay() {
-  const s = state['textoverlay']; if (!s) return;
-  const text = document.getElementById('to-text').value.trim();
-  if (!text) { alert('Please enter text first.'); return; }
-  const jid = await startJob('textoverlay', {
-    op:'text_overlay',
-    text,
-    x_pct:     parseInt(document.getElementById('to-x').value),
-    y_pct:     parseInt(document.getElementById('to-y').value),
-    fontsize_pct: parseInt(document.getElementById('to-size').value),
-    color:     document.getElementById('to-color').value,
-    start_t:   parseFloat(document.getElementById('to-start').value)||0,
-    end_t:     parseFloat(document.getElementById('to-end').value)||0,
-    out_ext:   'mp4'
-  });
-  if (jid) pollJob('textoverlay', jid, 'textoverlay-rvideo', 'textoverlay-dl', s.filename.replace(/[.][^.]+$/, '') + '_text.mp4');
-}
 
 async function runBlur() {
   const s = state['blur']; if (!s) return;
