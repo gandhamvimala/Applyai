@@ -1340,11 +1340,11 @@ def forgot_password():
                     method="POST"
                 )
                 resp = _ureq.urlopen(req, timeout=10)
-                print(f"[PASSWORD RESET] Email sent to {{email}} via Brevo")
+                print(f"[PASSWORD RESET] Email sent to {email} via Brevo")
             except Exception as e:
-                print(f"[PASSWORD RESET] Brevo error: {{e}} — URL: {{reset_url}}")
+                print(f"[PASSWORD RESET] Brevo error: {e} — URL: {reset_url}")
         else:
-            print(f"[PASSWORD RESET] {{email}}: {{reset_url}}")
+            print(f"[PASSWORD RESET] {email}: {reset_url}")
     return jsonify({"success": True, "message": "If that email exists, a reset link has been sent. Check your inbox."})
 
 @app.route("/reset-password", methods=["GET","POST"])
