@@ -1670,7 +1670,14 @@ def api_transcribe():
                 )
                 resp = json.loads(ureq.urlopen(req, timeout=120).read())
                 text = resp.get("text", "")
-                lang = resp.get("language", "")
+                lang_raw = resp.get("language", "")
+                # Normalize Whisper full name to ISO code (e.g. "english" → "en")
+                _l2i = {"english":"en","spanish":"es","french":"fr","german":"de",
+                        "italian":"it","portuguese":"pt","dutch":"nl","russian":"ru",
+                        "japanese":"ja","korean":"ko","chinese":"zh","arabic":"ar",
+                        "hindi":"hi","turkish":"tr","vietnamese":"vi","thai":"th",
+                        "indonesian":"id","swedish":"sv","ukrainian":"uk","polish":"pl"}
+                lang = _l2i.get(lang_raw.lower(), lang_raw)
             else:
                 # Fallback: use FFmpeg to get basic info + placeholder
                 text = "[Transcription requires OpenAI API key. Set OPENAI_API_KEY environment variable.]"
@@ -1687,6 +1694,7 @@ def api_transcribe():
                 )
 
             # Translate transcript if requested
+            orig_word_count = len(text.split())  # count before translation
             translate_to = jobs[result_id].get("tc_translate", "none")
             if translate_to and translate_to != "none" and text and OPENAI_API_KEY:
                 jobs[result_id]["log"].append(f"Translating to {translate_to}...")
@@ -1714,7 +1722,7 @@ def api_transcribe():
                     translated_text = translate_resp["choices"][0]["message"]["content"].strip()
                     text = translated_text
                     jobs[result_id]["log"].append(f"Translation to {translate_to} complete!")
-                    jobs[result_id]["stats"] = {"text": text, "language": translate_to, "detected_language": lang, "duration": round(dur,2), "words": len(text.split()), "translated": True}
+                    jobs[result_id]["stats"] = {"text": text, "language": translate_to, "detected_language": lang, "duration": round(dur,2), "words": orig_word_count, "translated": True}
                 except Exception as te:
                     jobs[result_id]["log"].append(f"Translation failed: {te}, using original transcript.")
 
@@ -1728,8 +1736,8 @@ def api_transcribe():
             jobs[result_id]["status"]   = "done"
             jobs[result_id]["progress"] = 100
             jobs[result_id]["result"]   = str(txt_file)
-            jobs[result_id]["stats"]    = {"text": text, "language": lang, "detected_language": lang, "duration": round(dur,2), "words": len(text.split()), "burned": False}
-            jobs[result_id]["log"].append(f"Done! {len(text.split())} words transcribed.")
+            jobs[result_id]["stats"]    = {"text": text, "language": lang, "detected_language": lang, "duration": round(dur,2), "words": orig_word_count, "burned": False}
+            jobs[result_id]["log"].append(f"Done! {orig_word_count} words transcribed.")
 
             shutil.rmtree(tmpdir, ignore_errors=True)
             p.unlink(missing_ok=True)
