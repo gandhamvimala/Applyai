@@ -3075,7 +3075,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
     <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize for Social</div><div class="tool-desc">Crop to 16:9, 9:16, 1:1 for any platform</div></div>
     <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with custom text</div></div>
     <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips into one video</div></div>
-    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI — any format</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI and more</div></div>
     <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size without losing quality</div></div>
     <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels precisely</div></div>
     <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull the audio track out as MP3</div></div>
@@ -3106,12 +3106,12 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <div class="feature-card">
         <div class="feature-icon">⚡</div>
         <div class="feature-title">Fast. No installs. No learning curve.</div>
-        <div class="feature-desc">Everything runs in your browser. Upload, process, download. No timeline editor, no templates — just the tool you need, right now.</div>
+        <div class="feature-desc">Everything runs in your browser. Upload, process, download. No timeline editor, no templates. Just the tool you need, right now.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">💰</div>
-        <div class="feature-title">Half the price of VEED or Kapwing</div>
-        <div class="feature-desc">Pro plan starts at $5/month. That's unlimited videos, any duration, all 18 tools. No credit card required to start.</div>
+        <div class="feature-title">More tools for less</div>
+        <div class="feature-desc">Pro plan starts at $5/month. Unlimited videos, any duration, all 18 tools.</div>
       </div>
     </div>
   </div>
