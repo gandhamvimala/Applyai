@@ -110,40 +110,46 @@ def op_denoise(jid, src, dst, strength="medium"):
     """Remove background noise using FFmpeg arnndn (neural network) filter."""
     try:
         prog(jid, "Analysing audio…", 10)
-        # arnndn = AI-based noise reduction, afftdn = FFT denoising
-        # Use different strengths
+        # Check for audio stream first
+        info = get_info(src)
+        has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+        if not has_audio:
+            raise RuntimeError("This file has no audio stream. Please upload a video with audio.")
+
+        # Pre-transcode to ensure compatible format (fixes GIF/unusual codec issues)
+        tmp_pre = os.path.join(tempfile.gettempdir(), f"snip_dn_pre_{jid}.mp4")
+        _, _, pre_rc = run([_FFMPEG_EXE, "-y", "-i", src,
+                            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                            "-c:a", "aac", "-b:a", "192k", tmp_pre])
+        src_in = tmp_pre if pre_rc == 0 else src
+
         strength_map = {
-            "light":  "afftdn=nf=-20",          # gentle, within valid range
-            "medium": "afftdn=nf=-30",           # balanced
-            "heavy":  "afftdn=nf=-50:nt=w",     # aggressive
+            "light":  "afftdn=nf=-20",
+            "medium": "afftdn=nf=-30",
+            "heavy":  "afftdn=nf=-50:nt=w",
         }
         af = strength_map.get(strength, strength_map["medium"])
-        prog(jid, f"Removing noise ({strength} strength)…", 30)
+        prog(jid, f"Removing noise ({strength} strength)…", 40)
         _, err, rc = run([
-            _FFMPEG_EXE, "-y", "-i", src,
+            _FFMPEG_EXE, "-y", "-i", src_in,
             "-af", af,
             "-c:v", "copy",
             "-c:a", "aac", "-b:a", "192k",
             str(dst)
         ])
         if rc != 0:
-            # Fallback: use just afftdn if arnndn model not available
-            prog(jid, "Trying fallback denoiser…", 40)
-            strength_map2 = {
-                "light":  "afftdn=nf=-20",
-                "medium": "afftdn=nf=-30",
-                "heavy":  "afftdn=nf=-50:nt=w",
-            }
-            af2 = strength_map2.get(strength, "afftdn=nf=-25")
+            prog(jid, "Trying fallback denoiser…", 60)
             _, err, rc = run([
-                _FFMPEG_EXE, "-y", "-i", src,
-                "-af", af2,
-                "-c:v", "copy",
+                _FFMPEG_EXE, "-y", "-i", src_in,
+                "-af", "afftdn=nf=-25",
+                "-c:v", "libx264", "-preset", "ultrafast",
                 "-c:a", "aac", "-b:a", "192k",
                 str(dst)
             ])
             if rc != 0:
                 raise RuntimeError(f"Denoise failed: {err[-300:]}")
+        try: os.unlink(tmp_pre)
+        except: pass
         new_dur = get_duration(dst)
         prog(jid, f"Done! Background noise removed.", 100)
         done(jid, dst, {"new": round(new_dur, 2)})
@@ -664,8 +670,20 @@ def op_speed(jid, src, dst, speed):
 def op_extract_audio(jid, src, dst):
     try:
         prog(jid,"Extracting audio…",10)
+        # Check for audio stream first
+        info = get_info(src)
+        has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+        if not has_audio:
+            raise RuntimeError("This file has no audio stream. Please upload a video with audio.")
+        # Try mp3 first, fall back to aac if libmp3lame not available
         _, err, rc = run([_FFMPEG_EXE,"-y","-i",src,"-vn","-acodec","libmp3lame","-b:a","192k", str(dst)])
-        if rc!=0: raise RuntimeError(f"Extract failed: {err[-300:]}")
+        if rc != 0:
+            dst_aac = Path(str(dst)).with_suffix('.m4a')
+            _, err, rc = run([_FFMPEG_EXE,"-y","-i",src,"-vn","-acodec","aac","-b:a","192k", str(dst_aac)])
+            if rc == 0:
+                dst = dst_aac
+            else:
+                raise RuntimeError(f"Extract failed: {err[-300:]}")
         prog(jid,"Done! Audio extracted.",100)
         done(jid,dst,{})
     except Exception as e:
