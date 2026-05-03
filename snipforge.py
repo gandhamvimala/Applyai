@@ -285,7 +285,7 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
              "-map","0:v","-map","1:a?",
              "-c:v","libx264","-preset","fast","-crf","20",
              "-pix_fmt","yuv420p","-c:a","copy",
-             "-movflags","+faststart","-shortest",
+             "-movflags","+faststart",
              tmp_out],
             stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
@@ -1784,7 +1784,7 @@ def api_transcribe():
                          "-map","0:v","-map","1:a?",
                          "-c:v","libx264","-preset","fast","-crf","20",
                          "-pix_fmt","yuv420p","-c:a","copy",
-                         "-movflags","+faststart","-shortest",
+                         "-movflags","+faststart",
                          tmp_cap_out],
                         stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
@@ -4740,7 +4740,16 @@ async function runTranscribe(){
       const el=document.getElementById('tc-rstats');
       el.innerHTML=`
         <div class="rstat"><div class="rstat-val">${stats.words||0}</div><div class="rstat-lbl">Words</div></div>
-        <div class="rstat"><div class="rstat-val">${(stats.language||'').toUpperCase()||'—'}</div><div class="rstat-lbl">Language</div></div>
+        <div class="rstat"><div class="rstat-val" style="font-size:.85rem">${(()=>{
+          const det = stats.detected_language || '';
+          const trans = stats.translated ? (stats.language||'') : '';
+          const langNames = {en:'English',es:'Spanish',fr:'French',de:'German',it:'Italian',
+            pt:'Portuguese',nl:'Dutch',ru:'Russian',ja:'Japanese',ko:'Korean',zh:'Chinese',
+            ar:'Arabic',hi:'Hindi',tr:'Turkish',vi:'Vietnamese',th:'Thai',id:'Indonesian',
+            sv:'Swedish',uk:'Ukrainian'};
+          const detName = langNames[det] || det.toUpperCase() || '—';
+          return trans ? detName + ' → ' + trans : detName;
+        })()}</div><div class="rstat-lbl">Language</div></div>
         <div class="rstat"><div class="rstat-val">${fmtTime(stats.duration||0)}</div><div class="rstat-lbl">Duration</div></div>
       `;
       // Auto-populate language dropdown with detected language
