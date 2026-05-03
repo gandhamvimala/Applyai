@@ -744,7 +744,7 @@ PLANS = {
 }
 
 # ─── Database ─────────────────────────────────────────────────────────────────
-DB_PATH = os.path.join(_SCRIPT_DIR, 'snipforge.db')
+DB_PATH = os.environ.get('DB_PATH', os.path.join(_SCRIPT_DIR, 'snipforge.db'))
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
