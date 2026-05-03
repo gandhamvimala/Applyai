@@ -2851,235 +2851,362 @@ LANDING_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Snipforge — Cut · Forge · Deliver</title>
-<meta name="description" content="AI-powered video toolkit. Trim, transcribe, translate, watermark and more. Free to start.">
+<title>Snipforge — AI Video Toolkit</title>
+<meta name="description" content="14 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur and more. Free to start.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#f8f7f5;--bg2:#ffffff;--bg3:#f0eeeb;
-  --border:#e2ddd8;--text:#1a1916;--muted:#8a8780;
-  --accent:#e8420a;--accent2:#f07030;
-  --green:#1a7a3c;--mono:'DM Mono',monospace;
-  --shadow:0 2px 8px rgba(0,0,0,.08);
+  --bg:#ffffff;--bg2:#f7f8fa;--bg3:#f0f1f5;
+  --border:#e8e9ef;--text:#0d0d12;--muted:#6b7280;
+  --accent:#e8420a;--accent2:#f05a28;--accent-light:#fff1ed;
+  --green:#16a34a;--sans:'Inter',sans-serif;--tight:'Inter Tight',sans-serif;
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.12);
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
-/* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 40px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);backdrop-filter:blur(20px);background:rgba(248,247,245,.92)}
-.nav-logo{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:.1em;color:var(--accent);text-decoration:none}
-.nav-links{display:flex;align-items:center;gap:8px}
-.nav-link{padding:8px 16px;border-radius:8px;font-size:.88rem;font-weight:500;text-decoration:none;color:var(--muted);transition:color .15s}
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.nav-logo{font-family:var(--tight);font-size:1.2rem;font-weight:900;color:var(--accent);text-decoration:none;letter-spacing:-.02em}
+.nav-logo span{color:var(--text)}
+.nav-right{display:flex;align-items:center;gap:8px}
+.nav-link{padding:7px 14px;font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;transition:color .15s}
 .nav-link:hover{color:var(--text)}
-.nav-cta{padding:9px 20px;background:var(--accent);color:#fff;border-radius:8px;font-size:.88rem;font-weight:600;text-decoration:none;transition:all .15s}
-.nav-cta:hover{background:var(--accent2);transform:translateY(-1px)}
+.nav-btn{padding:8px 18px;background:var(--accent);color:#fff;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .15s}
+.nav-btn:hover{background:var(--accent2);transform:translateY(-1px)}
 
-/* HERO */
-.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 20px 60px;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(232,66,10,.08),transparent);pointer-events:none}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:rgba(232,66,10,.08);border:1px solid rgba(232,66,10,.2);border-radius:100px;font-family:var(--mono);font-size:.72rem;color:var(--accent);margin-bottom:28px;letter-spacing:.05em}
-.hero-badge::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.hero h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(4rem,12vw,9rem);line-height:.95;letter-spacing:.02em;margin-bottom:24px;color:var(--text)}
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 24px 80px;position:relative;overflow:hidden}
+.hero-glow{position:absolute;width:800px;height:800px;border-radius:50%;background:radial-gradient(circle,rgba(232,66,10,.07) 0%,transparent 70%);top:-200px;left:50%;transform:translateX(-50%);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:var(--accent-light);border:1px solid rgba(232,66,10,.25);border-radius:100px;font-size:.72rem;font-weight:600;color:var(--accent);margin-bottom:28px;letter-spacing:.04em}
+.hero-badge::before{content:'';width:5px;height:5px;background:var(--accent);border-radius:50%;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-family:var(--tight);font-size:clamp(3rem,8vw,6.5rem);font-weight:900;line-height:1;letter-spacing:-.04em;margin-bottom:24px;color:var(--text)}
 .hero h1 span{color:var(--accent)}
-.hero-sub{font-size:clamp(1rem,2vw,1.2rem);color:var(--muted);max-width:560px;line-height:1.6;margin-bottom:40px;font-weight:400}
-.hero-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:60px}
-.btn-primary{padding:14px 32px;background:var(--accent);color:#fff;border-radius:10px;font-size:1rem;font-weight:600;text-decoration:none;transition:all .2s}
-.btn-primary:hover{background:var(--accent2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(232,66,10,.25)}
-.btn-secondary{padding:14px 32px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:1rem;font-weight:500;text-decoration:none;transition:all .2s}
-.btn-secondary:hover{border-color:var(--muted)}
+.hero-sub{font-size:clamp(1rem,2vw,1.2rem);color:var(--muted);max-width:540px;line-height:1.7;margin-bottom:40px;font-weight:400}
+.hero-btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:64px}
+.btn-primary{padding:14px 28px;background:var(--accent);color:#fff;border-radius:10px;font-size:.95rem;font-weight:600;text-decoration:none;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(232,66,10,.3)}
+.btn-secondary{padding:14px 28px;background:var(--bg);color:var(--text);border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;font-weight:500;text-decoration:none;transition:all .2s}
+.btn-secondary:hover{border-color:var(--muted);background:var(--bg2)}
 .hero-stats{display:flex;gap:48px;flex-wrap:wrap;justify-content:center}
-.stat{text-align:center}
-.stat-num{font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--accent);line-height:1}
-.stat-lbl{font-size:.75rem;color:var(--muted);font-family:var(--mono);letter-spacing:.05em;margin-top:4px}
+.stat-num{font-family:var(--tight);font-size:2rem;font-weight:900;color:var(--text);line-height:1}
+.stat-lbl{font-size:.75rem;color:var(--muted);margin-top:4px;font-weight:500}
 
-/* TOOLS */
-.section{padding:100px 40px;max-width:1200px;margin:0 auto}
-.section-label{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;color:var(--accent);text-transform:uppercase;margin-bottom:16px}
-.section-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.5rem,5vw,4rem);line-height:1;margin-bottom:48px;color:var(--text)}
-.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-.tool-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px 18px;transition:all .2s;box-shadow:var(--shadow)}
-.tool-card:hover{border-color:rgba(232,66,10,.3);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.1)}
-.tool-icon{font-size:1.6rem;margin-bottom:10px}
-.tool-name{font-weight:600;font-size:.9rem;margin-bottom:3px;color:var(--text)}
+/* ── APP PREVIEW ── */
+.app-preview{max-width:1100px;margin:0 auto 80px;padding:0 24px}
+.app-preview-inner{background:var(--bg2);border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-lg)}
+.app-bar{padding:14px 20px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.app-dot{width:12px;height:12px;border-radius:50%}
+.app-bar-url{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:.75rem;color:var(--muted);font-family:monospace;max-width:280px;margin:0 auto}
+.app-content{display:grid;grid-template-columns:200px 1fr;min-height:320px}
+.app-sidebar{background:var(--bg);border-right:1px solid var(--border);padding:16px 0}
+.app-nav-item{padding:8px 16px;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:8px;cursor:default}
+.app-nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:600;border-left:2px solid var(--accent)}
+.app-nav-section{padding:12px 16px 4px;font-size:.62rem;color:var(--muted);letter-spacing:.1em;font-weight:600;text-transform:uppercase}
+.app-main{padding:24px;background:var(--bg2)}
+.app-tool-title{font-size:1.2rem;font-weight:700;margin-bottom:4px}
+.app-tool-sub{font-size:.8rem;color:var(--muted);margin-bottom:20px}
+.app-upload{border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center;background:var(--bg)}
+.app-upload-icon{font-size:2rem;margin-bottom:8px}
+.app-upload-text{font-size:.85rem;font-weight:600;margin-bottom:4px}
+.app-upload-sub{font-size:.72rem;color:var(--muted)}
+
+/* ── TOOLS ── */
+.tools-section{padding:80px 24px;max-width:1100px;margin:0 auto}
+.section-tag{display:inline-block;padding:4px 12px;background:var(--accent-light);color:var(--accent);border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.06em;margin-bottom:16px;text-transform:uppercase}
+.section-title{font-family:var(--tight);font-size:clamp(2rem,5vw,3.2rem);font-weight:900;letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
+.section-sub{font-size:1rem;color:var(--muted);max-width:560px;line-height:1.6;margin-bottom:48px}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.tool-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:all .2s;cursor:default;position:relative;overflow:hidden}
+.tool-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(232,66,10,.03),transparent);opacity:0;transition:opacity .2s}
+.tool-card:hover{border-color:rgba(232,66,10,.3);transform:translateY(-2px);box-shadow:var(--shadow)}
+.tool-card:hover::before{opacity:1}
+.tool-icon{width:40px;height:40px;background:var(--accent-light);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;margin-bottom:12px}
+.tool-name{font-size:.9rem;font-weight:700;margin-bottom:4px;color:var(--text)}
 .tool-desc{font-size:.75rem;color:var(--muted);line-height:1.5}
-.tool-badge{display:inline-block;padding:2px 7px;background:rgba(232,66,10,.1);border-radius:4px;font-family:var(--mono);font-size:.6rem;color:var(--accent);margin-top:7px}
+.tool-tag{position:absolute;top:12px;right:12px;padding:2px 8px;background:var(--accent);color:#fff;border-radius:4px;font-size:.6rem;font-weight:700;letter-spacing:.04em}
 
-/* HOW IT WORKS */
-.how-section{padding:100px 40px;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.how-inner{max-width:1000px;margin:0 auto;text-align:center}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:48px}
-.step{padding:32px 24px;background:var(--bg);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
-.step-num{font-family:'Bebas Neue',sans-serif;font-size:3rem;color:var(--accent);opacity:.25;line-height:1;margin-bottom:12px}
-.step h3{font-size:1rem;font-weight:600;margin-bottom:8px;color:var(--text)}
-.step p{font-size:.82rem;color:var(--muted);line-height:1.6}
+/* ── FEATURES ── */
+.features-section{padding:80px 24px;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.features-inner{max-width:1100px;margin:0 auto}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}
+.feature-card{background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:var(--shadow)}
+.feature-icon{width:48px;height:48px;background:var(--accent-light);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:16px}
+.feature-title{font-size:1rem;font-weight:700;margin-bottom:8px}
+.feature-desc{font-size:.83rem;color:var(--muted);line-height:1.6}
 
-/* PRICING */
-.pricing-section{padding:100px 40px;max-width:900px;margin:0 auto;text-align:center}
-.pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px}
-.pricing-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px 22px;box-shadow:var(--shadow)}
-.pricing-card.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
-.plan-name{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.08em;margin-bottom:8px;color:var(--text)}
-.plan-price{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;color:var(--accent);line-height:1}
-.plan-price span{font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--muted);font-weight:400}
-.plan-features{list-style:none;margin:18px 0;text-align:left}
-.plan-features li{font-size:.82rem;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0}
-.plan-btn{display:block;width:100%;padding:11px;border-radius:8px;text-align:center;text-decoration:none;font-weight:600;font-size:.88rem;margin-top:18px;transition:all .2s}
-.plan-btn.free-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
-.plan-btn.free-btn:hover{border-color:var(--muted)}
-.plan-btn.paid-btn{background:var(--accent);color:#fff}
-.plan-btn.paid-btn:hover{background:var(--accent2)}
+/* ── HOW IT WORKS ── */
+.how-section{padding:80px 24px;max-width:900px;margin:0 auto;text-align:center}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
+.step{padding:28px 20px;background:var(--bg);border:1px solid var(--border);border-radius:16px;position:relative;box-shadow:var(--shadow)}
+.step-num{width:36px;height:36px;background:var(--accent);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--tight);font-weight:900;font-size:1rem;margin:0 auto 16px}
+.step h3{font-size:.95rem;font-weight:700;margin-bottom:8px}
+.step p{font-size:.78rem;color:var(--muted);line-height:1.6}
+.step-arrow{position:absolute;right:-14px;top:50%;transform:translateY(-50%);font-size:1.2rem;color:var(--accent);z-index:1}
 
-/* FOOTER */
-footer{padding:32px 40px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--bg2)}
-.footer-logo{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--accent);letter-spacing:.1em}
+/* ── PRICING ── */
+.pricing-section{padding:80px 24px;max-width:1000px;margin:0 auto;text-align:center}
+.pricing-toggle{display:inline-flex;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--border);border-radius:100px;padding:6px 18px;margin-bottom:40px;font-size:.85rem}
+.pricing-toggle input{display:none}
+.toggle-track{width:40px;height:22px;background:var(--accent);border-radius:100px;position:relative;cursor:pointer;transition:background .2s}
+.toggle-track::after{content:'';position:absolute;width:16px;height:16px;background:#fff;border-radius:50%;top:3px;left:3px;transition:transform .2s}
+.toggle-track.yearly::after{transform:translateX(18px)}
+.save-badge{background:var(--green);color:#fff;padding:2px 8px;border-radius:4px;font-size:.65rem;font-weight:700}
+.pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.pricing-card{background:var(--bg);border:1.5px solid var(--border);border-radius:16px;padding:28px;text-align:left;box-shadow:var(--shadow);position:relative}
+.pricing-card.popular{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
+.popular-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:3px 14px;border-radius:100px;font-size:.65rem;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+.plan-name{font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.plan-price{font-family:var(--tight);font-size:2.8rem;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px}
+.plan-price sup{font-size:1.2rem;vertical-align:top;margin-top:8px}
+.plan-price sub{font-size:.9rem;font-weight:400;color:var(--muted)}
+.plan-period{font-size:.75rem;color:var(--muted);margin-bottom:20px}
+.plan-divider{height:1px;background:var(--border);margin:16px 0}
+.plan-features{list-style:none;margin-bottom:20px}
+.plan-features li{font-size:.82rem;color:var(--muted);padding:5px 0;display:flex;align-items:center;gap:8px}
+.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0;font-size:.85rem}
+.plan-features li.no::before{content:'✕';color:#d1d5db}
+.plan-features li.no{color:#d1d5db}
+.plan-btn{display:block;width:100%;padding:11px;border-radius:9px;text-align:center;text-decoration:none;font-weight:600;font-size:.88rem;transition:all .2s}
+.plan-btn.free{background:var(--bg2);color:var(--text);border:1px solid var(--border)}
+.plan-btn.free:hover{border-color:var(--muted)}
+.plan-btn.paid{background:var(--accent);color:#fff}
+.plan-btn.paid:hover{background:var(--accent2)}
+
+/* ── FOOTER ── */
+footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--bg)}
+.footer-logo{font-family:var(--tight);font-size:1.1rem;font-weight:900;color:var(--accent)}
 .footer-links{display:flex;gap:24px}
-.footer-links a{font-size:.82rem;color:var(--muted);text-decoration:none}
+.footer-links a{font-size:.82rem;color:var(--muted);text-decoration:none;transition:color .15s}
 .footer-links a:hover{color:var(--text)}
-.footer-copy{font-size:.75rem;color:var(--muted);font-family:var(--mono)}
+.footer-copy{font-size:.75rem;color:var(--muted)}
 
 @media(max-width:768px){
   nav{padding:0 20px}
-  .section,.pricing-section{padding:60px 20px}
-  .how-section{padding:60px 20px}
-  .steps,.pricing-cards{grid-template-columns:1fr}
-  .hero-stats{gap:28px}
+  .app-content{grid-template-columns:1fr}
+  .app-sidebar{display:none}
+  .tools-grid{grid-template-columns:repeat(2,1fr)}
+  .features-grid,.steps,.pricing-cards{grid-template-columns:1fr}
+  .step-arrow{display:none}
+  .hero-stats{gap:24px}
 }
 </style>
 </head>
 <body>
 
+<!-- NAV -->
 <nav>
-  <a href="/" class="nav-logo">Snipforge</a>
-  <div class="nav-links">
+  <a href="/" class="nav-logo">SNIP<span>FORGE</span></a>
+  <div class="nav-right">
     <a href="/pricing" class="nav-link">Pricing</a>
-    <a href="/login" class="nav-link">Login</a>
-    <a href="/register" class="nav-cta">Start Free →</a>
+    <a href="/login" class="nav-link">Log in</a>
+    <a href="/register" class="nav-btn">Start free →</a>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
+  <div class="hero-glow"></div>
   <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
-  <h1>Cut.<span> Forge.</span><br>Deliver.</h1>
-  <p class="hero-sub">Trim, transcribe, translate, watermark and compress your videos. Fast, easy, right in your browser.</p>
-  <div class="hero-actions">
-    <a href="/register" class="btn-primary">Start for Free</a>
-    <a href="/pricing" class="btn-secondary">View Pricing</a>
+  <h1>Edit videos.<br><span>Ship faster.</span></h1>
+  <p class="hero-sub">14 professional video tools in your browser. Trim, transcribe, translate, watermark, convert to GIF, blur regions and more.</p>
+  <div class="hero-btns">
+    <a href="/register" class="btn-primary">Start for free <span>→</span></a>
+    <a href="/pricing" class="btn-secondary">See pricing</a>
   </div>
   <div class="hero-stats">
-    <div class="stat"><div class="stat-num">14</div><div class="stat-lbl">Video Tools</div></div>
-    <div class="stat"><div class="stat-num">20</div><div class="stat-lbl">Languages</div></div>
-    <div class="stat"><div class="stat-num">AI</div><div class="stat-lbl">Transcription</div></div>
-    <div class="stat"><div class="stat-num">$5</div><div class="stat-lbl">Pro / Month</div></div>
+    <div><div class="stat-num">18+</div><div class="stat-lbl">Video Tools</div></div>
+    <div><div class="stat-num">20</div><div class="stat-lbl">Languages</div></div>
+    <div><div class="stat-num">$5</div><div class="stat-lbl">Pro / month</div></div>
+    <div><div class="stat-num">AI</div><div class="stat-lbl">Transcription</div></div>
   </div>
 </section>
 
-<!-- TOOLS -->
-<div style="background:var(--bg);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:100px 40px">
-<div class="section" style="padding:0">
-  <div class="section-label">Everything you need</div>
-  <div class="section-title">14 Professional<br>Video Tools</div>
-  <div class="tools-grid">
-    <div class="tool-card"><div class="tool-icon">✂️</div><div class="tool-name">AI Shorten</div><div class="tool-desc">Remove silences automatically</div><div class="tool-badge">AI</div></div>
-    <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact timestamps</div></div>
-    <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Change playback speed</div></div>
-    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation</div></div>
-    <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize</div><div class="tool-desc">Crop for any social platform</div></div>
-    <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with text</div></div>
-    <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips together</div></div>
-    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI</div></div>
-    <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size fast</div></div>
-    <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels</div></div>
-    <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull audio from any video</div></div>
-    <div class="tool-card"><div class="tool-icon">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove audio track</div></div>
-    <div class="tool-card"><div class="tool-icon">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background noise</div><div class="tool-badge">NEW</div></div>
-    <div class="tool-card"><div class="tool-icon">📝</div><div class="tool-name">AI Transcribe</div><div class="tool-desc">20 languages, instant results</div><div class="tool-badge">AI</div></div>
+<!-- APP PREVIEW -->
+<div class="app-preview">
+  <div class="app-preview-inner">
+    <div class="app-bar">
+      <div class="app-dot" style="background:#ff5f57"></div>
+      <div class="app-dot" style="background:#febc2e"></div>
+      <div class="app-dot" style="background:#28c840"></div>
+      <div class="app-bar-url">snipforge.video/app</div>
+    </div>
+    <div class="app-content">
+      <div class="app-sidebar">
+        <div class="app-nav-section">Edit</div>
+        <div class="app-nav-item active">✂️ AI Shorten</div>
+        <div class="app-nav-item">⏱ Trim</div>
+        <div class="app-nav-item">⚡ Speed</div>
+        <div class="app-nav-section">Create</div>
+        <div class="app-nav-item">🎞 Video to GIF</div>
+        <div class="app-nav-item">🎵 Background Music</div>
+        <div class="app-nav-item">✍️ Text Overlay</div>
+        <div class="app-nav-section">AI</div>
+        <div class="app-nav-item">📝 Transcribe</div>
+      </div>
+      <div class="app-main">
+        <div class="app-tool-title">✂️ AI Shorten</div>
+        <div class="app-tool-sub">Remove silences and filler words automatically</div>
+        <div class="app-upload">
+          <div class="app-upload-icon">🎬</div>
+          <div class="app-upload-text">Drop your video here</div>
+          <div class="app-upload-sub">MP4 · MOV · WebM · AVI · Max 500MB</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- TOOLS -->
+<section style="padding:80px 24px;background:var(--bg2);border-top:1px solid var(--border)">
+<div class="tools-section" style="padding:0;margin:0 auto">
+  <div class="section-tag">All Tools</div>
+  <div class="section-title">Everything you need<br>in one place</div>
+  <div class="section-sub">No switching between apps. No subscriptions per tool. Just upload and process.</div>
+  <div class="tools-grid">
+    <div class="tool-card"><div class="tool-icon">✂️</div><div class="tool-name">AI Shorten</div><div class="tool-desc">Remove silences and filler words automatically</div><div class="tool-tag">AI</div></div>
+    <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact start and end points</div></div>
+    <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Speed up or slow down your video</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation in one click</div></div>
+    <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize for Social</div><div class="tool-desc">Crop to 16:9, 9:16, 1:1 for any platform</div></div>
+    <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with custom text</div></div>
+    <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips into one video</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI — any format</div></div>
+    <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size without losing quality</div></div>
+    <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels precisely</div></div>
+    <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull the audio track out as MP3</div></div>
+    <div class="tool-card"><div class="tool-icon">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove the audio track entirely</div></div>
+    <div class="tool-card"><div class="tool-icon">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background hiss and hum</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">🎞</div><div class="tool-name">Video to GIF</div><div class="tool-desc">Convert video clips to animated GIFs</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Background Music</div><div class="tool-desc">Mix music into your video at custom volume</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">✍️</div><div class="tool-name">Text Overlay</div><div class="tool-desc">Add text anywhere on your video</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">🫥</div><div class="tool-name">Blur Region</div><div class="tool-desc">Blur faces or sensitive areas</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">📝</div><div class="tool-name">AI Transcribe</div><div class="tool-desc">Speech to text in 20 languages</div><div class="tool-tag">AI</div></div>
+  </div>
+</div>
+</section>
+
+<!-- FEATURES -->
+<div class="features-section">
+  <div class="features-inner">
+    <div style="text-align:center;margin-bottom:0">
+      <div class="section-tag">Why Snipforge</div>
+      <div class="section-title">Built different</div>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <div class="feature-title">AI Transcription in 20 languages</div>
+        <div class="feature-desc">Powered by OpenAI Whisper. Upload in English, get a transcript in Japanese, Spanish, French or 17 other languages in under a minute.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">Fast. No installs. No learning curve.</div>
+        <div class="feature-desc">Everything runs in your browser. Upload, process, download. No timeline editor, no templates — just the tool you need, right now.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💰</div>
+        <div class="feature-title">Half the price of VEED or Kapwing</div>
+        <div class="feature-desc">Pro plan starts at $5/month. That's unlimited videos, any duration, all 18 tools. No credit card required to start.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- HOW IT WORKS -->
 <div class="how-section">
-  <div class="how-inner">
-    <div class="section-label">Simple workflow</div>
-    <div class="section-title" style="margin-bottom:0">How It Works</div>
-    <div class="steps">
-      <div class="step">
-        <div class="step-num">01</div>
-        <h3>Upload Your Video</h3>
-        <p>Create a free account and upload any MP4, MOV, WebM or AVI file up to 500MB.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">02</div>
-        <h3>Choose Your Tool</h3>
-        <p>Pick from 14 professional tools. Adjust settings and hit process. We handle the rest.</p>
-      </div>
-      <div class="step">
-        <div class="step-num">03</div>
-        <h3>Download & Share</h3>
-        <p>Your processed video is ready in seconds. Download it or share with a link.</p>
-      </div>
+  <div class="section-tag">How it works</div>
+  <div class="section-title">Three steps.<br>That's it.</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <h3>Create an account</h3>
+      <p>Sign up free in 10 seconds. No credit card needed. Free plan includes 3 videos per month.</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h3>Upload & choose your tool</h3>
+      <p>Drop your video, pick from 18 tools and adjust the settings. Preview your changes live.</p>
+      <div class="step-arrow">→</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h3>Download in seconds</h3>
+      <p>Your processed video is ready instantly. Download it or share with a link.</p>
     </div>
   </div>
 </div>
 
 <!-- PRICING -->
 <div class="pricing-section">
-  <div class="section-label">Simple pricing</div>
-  <div class="section-title">Start Free,<br>Scale When Ready</div>
-  <div class="pricing-cards">
+  <div class="section-tag">Pricing</div>
+  <div class="section-title">Simple pricing.<br>No surprises.</div>
+  <div class="pricing-cards" style="margin-top:48px">
     <div class="pricing-card">
       <div class="plan-name">Free</div>
-      <div class="plan-price">$0<span>/mo</span></div>
+      <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
+      <div class="plan-period">forever free</div>
+      <div class="plan-divider"></div>
       <ul class="plan-features">
         <li>3 videos per month</li>
         <li>Max 5 min per video</li>
-        <li>All 14 tools</li>
+        <li>All 18 tools</li>
+        <li class="no">Priority processing</li>
+        <li class="no">Unlimited duration</li>
       </ul>
-      <a href="/register" class="plan-btn free-btn">Get Started</a>
+      <a href="/register" class="plan-btn free">Get started free</a>
     </div>
-    <div class="pricing-card featured">
+    <div class="pricing-card popular">
+      <div class="popular-badge">MOST POPULAR</div>
       <div class="plan-name">Pro</div>
-      <div class="plan-price">$5<span>/mo</span></div>
+      <div class="plan-price"><sup>$</sup>5<sub>/mo</sub></div>
+      <div class="plan-period">billed monthly</div>
+      <div class="plan-divider"></div>
       <ul class="plan-features">
         <li>Unlimited videos</li>
         <li>Any duration</li>
-        <li>AI Transcription</li>
+        <li>All 18 tools</li>
+        <li>AI transcription</li>
         <li>Priority processing</li>
       </ul>
-      <a href="/pricing" class="plan-btn paid-btn">Get Pro</a>
+      <a href="/pricing" class="plan-btn paid">Get Pro</a>
     </div>
     <div class="pricing-card">
       <div class="plan-name">Team</div>
-      <div class="plan-price">$15<span>/mo</span></div>
+      <div class="plan-price"><sup>$</sup>15<sub>/mo</sub></div>
+      <div class="plan-period">up to 5 seats</div>
+      <div class="plan-divider"></div>
       <ul class="plan-features">
         <li>Everything in Pro</li>
         <li>5 team seats</li>
         <li>Shared workspace</li>
         <li>Priority support</li>
+        <li>Priority processing</li>
       </ul>
-      <a href="/pricing" class="plan-btn paid-btn">Get Team</a>
+      <a href="/pricing" class="plan-btn paid">Get Team</a>
     </div>
   </div>
 </div>
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">Snipforge</div>
+  <div class="footer-logo">SNIPFORGE</div>
   <div class="footer-links">
     <a href="/pricing">Pricing</a>
     <a href="/login">Login</a>
-    <a href="/register">Sign Up</a>
+    <a href="/register">Sign up</a>
   </div>
   <div class="footer-copy">© 2026 Snipforge. All rights reserved.</div>
 </footer>
 
 </body>
 </html>"""
+
 
 AUTH_HTML = r"""<!DOCTYPE html>
 <html lang="en">
