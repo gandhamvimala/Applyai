@@ -3098,25 +3098,7 @@ AUTH_HTML = r"""<!DOCTYPE html>
     <div class="auth-footer"><a href="/login">← Back to sign in</a></div>
   </div>
 </div>
-<script>
-async function doForgot(){
-  const btn=document.querySelector('.submit-btn');
-  btn.disabled=true; btn.textContent='Sending…';
-  const r=await fetch('/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({email:document.getElementById('email').value})});
-  const d=await r.json();
-  if(d.success){
-    document.getElementById('succ').textContent=d.message;
-    document.getElementById('succ').style.display='block';
-    document.getElementById('err').classList.remove('show');
-    btn.textContent='Sent!';
-  } else {
-    const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');
-    btn.disabled=false;btn.textContent='Send Reset Link';
-  }
-}
-document.addEventListener('keydown',e=>{if(e.key==='Enter')doForgot();});
-</script>
+
 
 {% elif page == 'reset' %}
 <div class="auth-wrap">
@@ -3353,22 +3335,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Enter')doForgot();});
     <div class="auth-footer"><a href="/login">← Back to sign in</a></div>
   </div>
 </div>
-<script>
-async function doReset(){
-  const p=document.getElementById('password').value;
-  const p2=document.getElementById('password2').value;
-  if(p!==p2){const e=document.getElementById('err');e.textContent='Passwords do not match';e.classList.add('show');return;}
-  if(p.length<8){const e=document.getElementById('err');e.textContent='Min 8 characters';e.classList.add('show');return;}
-  const btn=document.querySelector('.submit-btn');
-  btn.disabled=true;btn.textContent='Saving…';
-  const token=new URLSearchParams(window.location.search).get('token');
-  const r=await fetch('/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({token,password:p})});
-  const d=await r.json();
-  if(d.success){window.location='/login?msg=Password+updated+successfully';}
-  else{const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');btn.disabled=false;btn.textContent='Set New Password';}
-}
-</script>
+
 
 {% elif page == 'register' %}
 <div class="auth-wrap">
@@ -5827,20 +5794,6 @@ function setupBlurPreview(prefix) {
   });
   canvas.addEventListener('mouseup', () => { blurDragging = false; });
   canvas.addEventListener('mouseleave', () => { blurDragging = false; });
-}
-
-  const s = state['blur']; if (!s) return;
-  const jid = await startJob('blur', {
-    op:'blur',
-    x_pct: parseInt(document.getElementById('blur-x').value),
-    y_pct: parseInt(document.getElementById('blur-y').value),
-    w_pct: parseInt(document.getElementById('blur-w').value),
-    h_pct: parseInt(document.getElementById('blur-h').value),
-    shape: blurShape,
-    style: blurStyle,
-    out_ext:'mp4'
-  });
-  if (jid) pollJob('blur', jid, 'blur-rvideo', 'blur-dl', s.filename.replace(/[.][^.]+$/, '') + '_blurred.mp4');
 }
 
 async function runVolume(){
