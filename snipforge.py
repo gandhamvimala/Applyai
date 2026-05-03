@@ -1516,7 +1516,8 @@ def payment_success():
                                (plan, customer_id, sub_id, user["id"]))
                 print(f"[SUCCESS] Updated user {user['email']} to {plan}")
         except Exception as e:
-            print(f"[SUCCESS] Error updating plan: {e}")
+            import traceback
+            print(f"[SUCCESS] Error updating plan: {e} | {traceback.format_exc()[-300:]}")
     return render_template_string(AUTH_HTML, page="success",
         stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS, user=get_current_user())
 
