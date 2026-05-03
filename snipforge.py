@@ -590,24 +590,52 @@ def op_text_overlay(jid, src, dst, text, x_pct, y_pct, fontsize_pct, color, star
     except Exception as e:
         fail(jid, e)
 
-def op_blur(jid, src, dst, x_pct, y_pct, w_pct, h_pct):
-    """Blur a rectangular region of the video."""
+def op_blur(jid, src, dst, x_pct, y_pct, w_pct, h_pct, shape="rectangle", style="blur"):
+    """Blur/cover a region of the video with shape and style options."""
     try:
-        prog(jid, "Applying blur…", 20)
+        prog(jid, "Applying region effect…", 20)
         info = get_info(src)
         vs = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
         vid_w = int(vs.get("width", 1280) or 1280)
         vid_h = int(vs.get("height", 720) or 720)
         x = int(vid_w * float(x_pct) / 100)
         y = int(vid_h * float(y_pct) / 100)
-        w = max(10, int(vid_w * float(w_pct) / 100))
-        h = max(10, int(vid_h * float(h_pct) / 100))
-        # Ensure even dimensions
-        w = w & ~1; h = h & ~1
-        # FFmpeg: crop region, blur it, overlay back
-        vf = (f"[0:v]split[orig][copy];"
-              f"[copy]crop={w}:{h}:{x}:{y},boxblur=20:5[blurred];"
-              f"[orig][blurred]overlay={x}:{y}[vout]")
+        w = max(10, int(vid_w * float(w_pct) / 100)) & ~1
+        h = max(10, int(vid_h * float(h_pct) / 100)) & ~1
+
+        if style == "black":
+            # Draw black rectangle/circle using drawbox or geq
+            if shape == "circle":
+                cx = x + w//2; cy = y + h//2
+                rx = w//2; ry = h//2
+                vf = (f"[0:v]geq=r='if(pow((X-{cx})/{rx},2)+pow((Y-{cy})/{ry},2)<=1,0,r(X,Y))'"
+                      f":g='if(pow((X-{cx})/{rx},2)+pow((Y-{cy})/{ry},2)<=1,0,g(X,Y))'"
+                      f":b='if(pow((X-{cx})/{rx},2)+pow((Y-{cy})/{ry},2)<=1,0,b(X,Y))'[vout]")
+            else:
+                vf = f"[0:v]drawbox={x}:{y}:{w}:{h}:black:fill[vout]"
+        elif style == "transparent":
+            # Pixelate region
+            vf = (f"[0:v]split[orig][copy];"
+                  f"[copy]crop={w}:{h}:{x}:{y},scale=iw/8:ih/8,scale={w}:{h}:flags=neighbor[pix];"
+                  f"[orig][pix]overlay={x}:{y}[vout]")
+        else:
+            # Default: blur
+            if shape == "circle":
+                cx = x + w//2; cy = y + h//2; rx = w//2; ry = h//2
+                vf = (f"[0:v]split[orig][blurbase];"
+                      f"[blurbase]crop={w}:{h}:{x}:{y},boxblur=15:5[blurred];"
+                      f"[orig][blurred]overlay={x}:{y},"
+                      f"geq=r='if(pow((X-{cx})/{rx},2)+pow((Y-{cy})/{ry},2)>1,r(X,Y),r(X,Y))'"
+                      f":g='g(X,Y)':b='b(X,Y)'[vout]")
+                # Simpler approach for circle: just blur the bounding box
+                vf = (f"[0:v]split[orig][copy];"
+                      f"[copy]crop={w}:{h}:{x}:{y},boxblur=20:5[blurred];"
+                      f"[orig][blurred]overlay={x}:{y}[vout]")
+            else:
+                vf = (f"[0:v]split[orig][copy];"
+                      f"[copy]crop={w}:{h}:{x}:{y},boxblur=20:5[blurred];"
+                      f"[orig][blurred]overlay={x}:{y}[vout]")
+
         _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
             "-filter_complex", vf,
             "-map", "[vout]", "-map", "0:a?",
@@ -616,7 +644,7 @@ def op_blur(jid, src, dst, x_pct, y_pct, w_pct, h_pct):
             "-movflags", "+faststart", str(dst)])
         if rc != 0:
             raise RuntimeError(f"Blur failed: {err[-300:]}")
-        prog(jid, "Done! Region blurred.", 100)
+        prog(jid, "Done! Region effect applied.", 100)
         done(jid, dst, {})
     except Exception as e:
         fail(jid, e)
@@ -1583,7 +1611,8 @@ def api_process():
         elif op=="blur":
             threading.Thread(target=op_blur, args=(jid,src,str(dst),
                 data.get("x_pct",25), data.get("y_pct",25),
-                data.get("w_pct",50), data.get("h_pct",50))).start()
+                data.get("w_pct",50), data.get("h_pct",50),
+                data.get("shape","rectangle"), data.get("style","blur"))).start()
         elif op=="stabilize":
             threading.Thread(target=op_stabilize, args=(jid,src,str(dst))).start()
         elif op=="denoise":
@@ -4886,20 +4915,51 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   </div></div>
   <div class="settings-card">
     <h4>Blur Region</h4>
-    <p style="font-size:.8rem;color:var(--muted);margin-bottom:12px">Set the position and size of the blur region as % of video dimensions.</p>
+
+    <!-- Shape selector -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;font-family:var(--mono);letter-spacing:.05em">SHAPE</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <button class="blur-shape-btn active" data-shape="rectangle" onclick="selectBlurShape('rectangle',this)" style="padding:10px 6px;border:1px solid var(--accent);background:rgba(232,66,10,.08);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--accent);font-weight:600">▭ Rectangle</button>
+        <button class="blur-shape-btn" data-shape="rounded" onclick="selectBlurShape('rounded',this)" style="padding:10px 6px;border:1px solid var(--border);background:var(--bg3);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--muted)">▢ Rounded</button>
+        <button class="blur-shape-btn" data-shape="circle" onclick="selectBlurShape('circle',this)" style="padding:10px 6px;border:1px solid var(--border);background:var(--bg3);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--muted)">○ Circle</button>
+      </div>
+    </div>
+
+    <!-- Overlay style -->
+    <div style="margin-bottom:14px">
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;font-family:var(--mono);letter-spacing:.05em">OVERLAY STYLE</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <button class="blur-style-btn active" data-style="blur" onclick="selectBlurStyle('blur',this)" style="padding:10px 6px;border:1px solid var(--accent);background:rgba(232,66,10,.08);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--accent);font-weight:600">⬡ Blur</button>
+        <button class="blur-style-btn" data-style="black" onclick="selectBlurStyle('black',this)" style="padding:10px 6px;border:1px solid var(--border);background:var(--bg3);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--muted)">■ Black</button>
+        <button class="blur-style-btn" data-style="transparent" onclick="selectBlurStyle('transparent',this)" style="padding:10px 6px;border:1px solid var(--border);background:var(--bg3);border-radius:8px;cursor:pointer;font-size:.8rem;color:var(--muted)">□ Transparent</button>
+      </div>
+    </div>
+
+    <p style="font-size:.78rem;color:var(--muted);margin-bottom:10px">Drag the region on the preview, or use sliders:</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">X (left) <span id="blur-x-val" style="color:var(--accent)">25%</span></label>
-        <input type="range" id="blur-x" min="0" max="80" value="25" style="width:100%" oninput="document.getElementById('blur-x-val').textContent=this.value+'%'"></div>
+        <input type="range" id="blur-x" min="0" max="80" value="25" style="width:100%" oninput="document.getElementById('blur-x-val').textContent=this.value+'%';updateBlurPreview()"></div>
       <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Y (top) <span id="blur-y-val" style="color:var(--accent)">25%</span></label>
-        <input type="range" id="blur-y" min="0" max="80" value="25" style="width:100%" oninput="document.getElementById('blur-y-val').textContent=this.value+'%'"></div>
+        <input type="range" id="blur-y" min="0" max="80" value="25" style="width:100%" oninput="document.getElementById('blur-y-val').textContent=this.value+'%';updateBlurPreview()"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Width <span id="blur-w-val" style="color:var(--accent)">50%</span></label>
-        <input type="range" id="blur-w" min="5" max="100" value="50" style="width:100%" oninput="document.getElementById('blur-w-val').textContent=this.value+'%'"></div>
+        <input type="range" id="blur-w" min="5" max="100" value="50" style="width:100%" oninput="document.getElementById('blur-w-val').textContent=this.value+'%';updateBlurPreview()"></div>
       <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Height <span id="blur-h-val" style="color:var(--accent)">50%</span></label>
-        <input type="range" id="blur-h" min="5" max="100" value="50" style="width:100%" oninput="document.getElementById('blur-h-val').textContent=this.value+'%'"></div>
+        <input type="range" id="blur-h" min="5" max="100" value="50" style="width:100%" oninput="document.getElementById('blur-h-val').textContent=this.value+'%';updateBlurPreview()"></div>
     </div>
   </div>
+
+  <!-- Live Preview -->
+  <div id="blur-preview-wrap" style="display:none;margin-bottom:16px">
+    <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Preview — drag to reposition</div>
+    <div style="position:relative;display:inline-block;width:100%;max-width:640px;cursor:crosshair">
+      <video id="blur-preview-video" style="width:100%;border-radius:8px;display:block" muted></video>
+      <canvas id="blur-preview-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:8px"></canvas>
+    </div>
+  </div>
+
   <button class="run-btn" id="blur-run" disabled onclick="runBlur()">Upload a video first</button>
   <div class="progress-box" id="blur-progress"><div class="progress-track"><div class="progress-fill" id="blur-pfill"></div></div><div class="log" id="blur-log"></div></div>
   <div class="result-box" id="blur-result"><video class="result-video" id="blur-rvideo" controls></video><div class="result-stats" id="blur-rstats"></div><a class="dl-btn" id="blur-dl" href="#">⬇ Download Video</a></div>
@@ -5104,6 +5164,7 @@ async function handleFile(prefix, file) {
   // Trigger live previews
   if (prefix === 'textoverlay') setTimeout(() => setupTextPreview(prefix), 100);
   if (prefix === 'wm') setTimeout(() => setupWmPreview(prefix), 100);
+  if (prefix === 'blur') setTimeout(() => setupBlurPreview(prefix), 100);
   // For transcribe panel: detect language immediately after upload
   if (prefix === 'tc' && d.file_id) {
     const badge = document.getElementById('tc-lang-detected');
@@ -5611,7 +5672,143 @@ async function runBlurRegion() {
 let musicFileId = null;
 
 
-async function runBlur() {
+let blurShape = 'rectangle';
+let blurStyle = 'blur';
+let blurDragging = false;
+let blurDragStart = null;
+
+function selectBlurShape(shape, btn) {
+  blurShape = shape;
+  document.querySelectorAll('.blur-shape-btn').forEach(b => {
+    b.style.borderColor = 'var(--border)'; b.style.background = 'var(--bg3)'; b.style.color = 'var(--muted)'; b.style.fontWeight = '400';
+  });
+  btn.style.borderColor = 'var(--accent)'; btn.style.background = 'rgba(232,66,10,.08)'; btn.style.color = 'var(--accent)'; btn.style.fontWeight = '600';
+  updateBlurPreview();
+}
+
+function selectBlurStyle(style, btn) {
+  blurStyle = style;
+  document.querySelectorAll('.blur-style-btn').forEach(b => {
+    b.style.borderColor = 'var(--border)'; b.style.background = 'var(--bg3)'; b.style.color = 'var(--muted)'; b.style.fontWeight = '400';
+  });
+  btn.style.borderColor = 'var(--accent)'; btn.style.background = 'rgba(232,66,10,.08)'; btn.style.color = 'var(--accent)'; btn.style.fontWeight = '600';
+  updateBlurPreview();
+}
+
+function updateBlurPreview() {
+  const canvas = document.getElementById('blur-preview-canvas');
+  const video  = document.getElementById('blur-preview-video');
+  if (!canvas || !video || !video.videoWidth) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const xPct = parseInt(document.getElementById('blur-x')?.value || 25);
+  const yPct = parseInt(document.getElementById('blur-y')?.value || 25);
+  const wPct = parseInt(document.getElementById('blur-w')?.value || 50);
+  const hPct = parseInt(document.getElementById('blur-h')?.value || 50);
+  const x = canvas.width  * xPct / 100;
+  const y = canvas.height * yPct / 100;
+  const w = canvas.width  * wPct / 100;
+  const h = canvas.height * hPct / 100;
+  const r = Math.min(w, h) * 0.5;
+
+  // Draw overlay based on style
+  ctx.save();
+  // Clip path based on shape
+  ctx.beginPath();
+  if (blurShape === 'circle') {
+    ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI*2);
+  } else if (blurShape === 'rounded') {
+    const rad = Math.min(w, h) * 0.15;
+    ctx.roundRect(x, y, w, h, rad);
+  } else {
+    ctx.rect(x, y, w, h);
+  }
+  ctx.clip();
+
+  if (blurStyle === 'blur') {
+    // Simulate blur with a frosted glass effect
+    ctx.fillStyle = 'rgba(180,180,180,0.45)';
+    ctx.fill();
+    // Draw blur stripes for visual effect
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = `rgba(200,200,200,${0.05 + i*0.01})`;
+      ctx.fillRect(x + i*w/8, y, w/8, h);
+    }
+  } else if (blurStyle === 'black') {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fill();
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Draw border
+  ctx.beginPath();
+  if (blurShape === 'circle') {
+    ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI*2);
+  } else if (blurShape === 'rounded') {
+    ctx.roundRect(x, y, w, h, Math.min(w,h)*0.15);
+  } else {
+    ctx.rect(x, y, w, h);
+  }
+  ctx.strokeStyle = 'rgba(232,66,10,0.8)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Corner handles
+  const handles = [[x,y],[x+w,y],[x,y+h],[x+w,y+h]];
+  handles.forEach(([hx,hy]) => {
+    ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI*2);
+    ctx.fillStyle = 'var(--accent)'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  });
+}
+
+function setupBlurPreview(prefix) {
+  const s = state[prefix]; if (!s) return;
+  const wrap  = document.getElementById('blur-preview-wrap');
+  const video = document.getElementById('blur-preview-video');
+  const thumb = document.getElementById('blur-thumb');
+  if (!wrap || !video) return;
+  wrap.style.display = 'block';
+  if (thumb && thumb.src) video.src = thumb.src;
+  video.load();
+  video.addEventListener('loadeddata', updateBlurPreview);
+  video.addEventListener('loadedmetadata', updateBlurPreview);
+  setTimeout(updateBlurPreview, 500);
+
+  // Drag to reposition
+  const canvas = document.getElementById('blur-preview-canvas');
+  canvas.addEventListener('mousedown', e => {
+    blurDragging = true;
+    const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) / rect.width * 100;
+    const sy = (e.clientY - rect.top)  / rect.height * 100;
+    blurDragStart = {sx, sy,
+      ox: parseInt(document.getElementById('blur-x').value),
+      oy: parseInt(document.getElementById('blur-y').value)};
+  });
+  canvas.addEventListener('mousemove', e => {
+    if (!blurDragging || !blurDragStart) return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = (e.clientX - rect.left) / rect.width * 100;
+    const cy = (e.clientY - rect.top)  / rect.height * 100;
+    const nx = Math.max(0, Math.min(80, blurDragStart.ox + (cx - blurDragStart.sx)));
+    const ny = Math.max(0, Math.min(80, blurDragStart.oy + (cy - blurDragStart.sy)));
+    document.getElementById('blur-x').value = Math.round(nx);
+    document.getElementById('blur-y').value = Math.round(ny);
+    document.getElementById('blur-x-val').textContent = Math.round(nx) + '%';
+    document.getElementById('blur-y-val').textContent = Math.round(ny) + '%';
+    updateBlurPreview();
+  });
+  canvas.addEventListener('mouseup', () => { blurDragging = false; });
+  canvas.addEventListener('mouseleave', () => { blurDragging = false; });
+}
+
   const s = state['blur']; if (!s) return;
   const jid = await startJob('blur', {
     op:'blur',
@@ -5619,6 +5816,8 @@ async function runBlur() {
     y_pct: parseInt(document.getElementById('blur-y').value),
     w_pct: parseInt(document.getElementById('blur-w').value),
     h_pct: parseInt(document.getElementById('blur-h').value),
+    shape: blurShape,
+    style: blurStyle,
     out_ext:'mp4'
   });
   if (jid) pollJob('blur', jid, 'blur-rvideo', 'blur-dl', s.filename.replace(/[.][^.]+$/, '') + '_blurred.mp4');
