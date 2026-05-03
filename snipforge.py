@@ -397,9 +397,16 @@ def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3,
                 while rem>2.0: atempos.append("atempo=2.0"); rem/=2.0
                 atempos.append(f"atempo={rem:.4f}")
                 tmp_speed = os.path.join(tempfile.gettempdir(), f"snip_speed_{jid}.mp4")
+                tmp_pre   = os.path.join(tempfile.gettempdir(), f"snip_pre_{jid}.mp4")
+                # Pre-transcode to h264/aac to ensure compatibility (fixes L-SMASH/Mac issues)
+                _, _, pre_rc = run([_FFMPEG_EXE,"-y","-i",src,
+                                    "-c:v","libx264","-preset","ultrafast","-crf","22",
+                                    "-c:a","aac","-b:a","128k",
+                                    "-movflags","+faststart", tmp_pre])
+                speed_src = tmp_pre if pre_rc == 0 else src
                 # Try 1: with audio
                 _, err2, rc2 = run([_FFMPEG_EXE,"-y",
-                                    "-i",src,
+                                    "-i", speed_src,
                                     "-filter_complex",
                                     f"[0:v]setpts={1/speed:.6f}*PTS[v];[0:a]{','.join(atempos)}[a]",
                                     "-map","[v]","-map","[a]",
@@ -410,21 +417,14 @@ def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3,
                 if rc2 != 0:
                     # Try 2: video only (no audio stream)
                     _, err2, rc2 = run([_FFMPEG_EXE,"-y",
-                                        "-i",src,
+                                        "-i", speed_src,
                                         "-vf",f"setpts={1/speed:.6f}*PTS",
                                         "-an",
                                         "-c:v","libx264","-preset","ultrafast","-crf","22",
                                         "-movflags","+faststart",
                                         tmp_speed])
-                if rc2 != 0:
-                    # Try 3: copy streams, just change pts
-                    _, err2, rc2 = run([_FFMPEG_EXE,"-y",
-                                        "-i",src,
-                                        "-vf",f"setpts={1/speed:.6f}*PTS",
-                                        "-c:v","libx264","-preset","ultrafast",
-                                        "-c:a","copy",
-                                        "-movflags","+faststart",
-                                        tmp_speed])
+                try: os.unlink(tmp_pre)
+                except: pass
                 if rc2 != 0:
                     raise RuntimeError(f"Speed failed: {err2[-200:]}")
                 shutil.move(tmp_speed, out)
@@ -1722,13 +1722,22 @@ def api_transcribe():
             tmpdir = tempfile.mkdtemp()
             audio  = os.path.join(tmpdir, "audio.mp3")
 
-            # Extract audio as MP3 for Whisper
+            # Extract audio for Whisper — try mp3 first, fall back to m4a
             _, err, rc = run([
                 _FFMPEG_EXE, "-y", "-i", str(p),
                 "-vn", "-c:a", "libmp3lame", "-b:a", "64k",
                 "-ar", "16000", "-ac", "1",
                 audio
             ])
+            if rc != 0:
+                # libmp3lame not available (e.g. Mac system FFmpeg) — try aac/m4a
+                audio = os.path.join(tmpdir, "audio.m4a")
+                _, err, rc = run([
+                    _FFMPEG_EXE, "-y", "-i", str(p),
+                    "-vn", "-c:a", "aac", "-b:a", "64k",
+                    "-ar", "16000", "-ac", "1",
+                    audio
+                ])
             if rc != 0:
                 raise RuntimeError(f"Audio extraction failed: {err[-200:]}")
 
