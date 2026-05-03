@@ -2450,7 +2450,7 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Snipforge — Cut · Forge · Deliver</title>
-<meta name="description" content="AI-powered video toolkit. Trim, transcribe, translate, watermark and more. No software needed.">
+<meta name="description" content="AI-powered video toolkit. Trim, transcribe, translate, watermark and more. Free to start.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -2563,7 +2563,7 @@ footer{padding:32px 40px;border-top:1px solid var(--border);display:flex;align-i
 <section class="hero">
   <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
   <h1>Cut.<span> Forge.</span><br>Deliver.</h1>
-  <p class="hero-sub">Trim, transcribe, translate, watermark and compress your videos. Right in your browser. No software needed.</p>
+  <p class="hero-sub">Trim, transcribe, translate, watermark and compress your videos. Fast, easy, right in your browser.</p>
   <div class="hero-actions">
     <a href="/register" class="btn-primary">Start for Free</a>
     <a href="/pricing" class="btn-secondary">View Pricing</a>
@@ -2609,12 +2609,12 @@ footer{padding:32px 40px;border-top:1px solid var(--border);display:flex;align-i
       <div class="step">
         <div class="step-num">01</div>
         <h3>Upload Your Video</h3>
-        <p>Drag & drop any MP4, MOV, WebM or AVI file up to 500MB. No account needed to try.</p>
+        <p>Create a free account and upload any MP4, MOV, WebM or AVI file up to 500MB.</p>
       </div>
       <div class="step">
         <div class="step-num">02</div>
         <h3>Choose Your Tool</h3>
-        <p>Pick from 14 professional tools. Adjust settings and hit process — we handle the rest.</p>
+        <p>Pick from 14 professional tools. Adjust settings and hit process. We handle the rest.</p>
       </div>
       <div class="step">
         <div class="step-num">03</div>
