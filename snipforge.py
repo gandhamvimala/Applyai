@@ -516,51 +516,6 @@ def op_gif(jid, src, dst, fps=10, width=480):
     except Exception as e:
         fail(jid, e)
 
-def op_bgmusic(jid, src, dst, music_file_id, volume=0.5, duck=True):
-    """Mix background music into video."""
-    try:
-        prog(jid, "Loading music…", 10)
-        music_src = None
-        for f in UPLOAD_DIR.iterdir():
-            if f.stem == music_file_id:
-                music_src = str(f); break
-        if not music_src:
-            raise RuntimeError("Music file not found. Please upload an audio file.")
-        prog(jid, "Mixing audio tracks…", 40)
-        vid_dur = get_duration(src)
-        # Duck video audio if duck=True (lower video audio when music plays)
-        vol_music = max(0.1, min(1.0, float(volume)))
-        vol_video = 0.8 if duck else 1.0
-        filter_complex = (
-            f"[0:a]volume={vol_video}[va];"
-            f"[1:a]aloop=loop=-1:size=2e+09,atrim=duration={vid_dur},volume={vol_music}[ma];"
-            f"[va][ma]amix=inputs=2:duration=first[aout]"
-        )
-        _, err, rc = run([_FFMPEG_EXE, "-y",
-            "-i", src, "-i", music_src,
-            "-filter_complex", filter_complex,
-            "-map", "0:v", "-map", "[aout]",
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-            "-movflags", "+faststart", str(dst)])
-        if rc != 0:
-            # Fallback: no duck
-            filter_complex2 = (
-                f"[1:a]aloop=loop=-1:size=2e+09,atrim=duration={vid_dur},volume={vol_music}[ma];"
-                f"[0:a][ma]amix=inputs=2:duration=first[aout]"
-            )
-            _, err, rc = run([_FFMPEG_EXE, "-y",
-                "-i", src, "-i", music_src,
-                "-filter_complex", filter_complex2,
-                "-map", "0:v", "-map", "[aout]",
-                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                "-movflags", "+faststart", str(dst)])
-        if rc != 0:
-            raise RuntimeError(f"Music mix failed: {err[-300:]}")
-        prog(jid, "Done! Background music added.", 100)
-        done(jid, dst, {})
-    except Exception as e:
-        fail(jid, e)
-
 def op_text_overlay(jid, src, dst, text, x_pct, y_pct, fontsize_pct, color, start_t, end_t):
     """Overlay text on video using Pillow frame compositing."""
     try:
@@ -1600,8 +1555,8 @@ def api_process():
             jobs[jid]["music_file_id"] = data.get("music_file_id","")
             threading.Thread(target=op_bgmusic, args=(jid,src,str(dst),
                 data.get("music_file_id",""),
-                float(data.get("volume",0.5)),
-                bool(data.get("duck",True)))).start()
+                float(data.get("music_vol",0.5)),
+                float(data.get("video_vol",1.0)))).start()
         elif op=="text_overlay":
             threading.Thread(target=op_text_overlay, args=(jid,src,str(dst),
                 data.get("text",""),
@@ -4570,6 +4525,14 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
              oninput="document.getElementById('wm-opacity-val').textContent=this.value+'%'">
     </div>
   </div>
+  <!-- Live Preview -->
+  <div id="wm-preview-wrap" style="display:none;margin-bottom:16px">
+    <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Preview</div>
+    <div style="position:relative;display:inline-block;width:100%;max-width:640px">
+      <video id="wm-preview-video" style="width:100%;border-radius:8px;display:block" muted></video>
+      <canvas id="wm-preview-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:8px"></canvas>
+    </div>
+  </div>
   <button class="run-btn" id="wm-run" disabled onclick="runWatermarkImage()">Upload a video first</button>
   <div class="progress-box" id="wm-progress"><div class="progress-track"><div class="progress-fill" id="wm-pfill"></div></div><div class="log" id="wm-log"></div></div>
   <div class="result-box" id="wm-result">
@@ -4766,7 +4729,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── VIDEO TO GIF ── -->
 <div class="panel" id="panel-gif">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF (no audio — GIFs are silent)</div></div>
   <div class="upload-zone" id="gif-dropzone"><input type="file" id="gif-file" accept="video/*">
     <div class="upload-zone-icon">🎞️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
   </div>
@@ -4872,6 +4835,14 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <div class="field field-row">
       <label>Opacity <span id="to-op-val" style="color:var(--accent)">100%</span></label>
       <input type="range" id="to-opacity" min="10" max="100" value="100" style="flex:1" oninput="document.getElementById('to-op-val').textContent=this.value+'%'">
+    </div>
+  </div>
+  <!-- Live Preview -->
+  <div id="to-preview-wrap" style="display:none;margin-bottom:16px">
+    <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Preview</div>
+    <div style="position:relative;display:inline-block;width:100%;max-width:640px">
+      <video id="to-preview-video" style="width:100%;border-radius:8px;display:block" muted></video>
+      <canvas id="to-preview-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:8px"></canvas>
     </div>
   </div>
   <button class="run-btn" id="textoverlay-run" disabled onclick="runTextOverlay()">Upload a video first</button>
@@ -5113,6 +5084,9 @@ async function handleFile(prefix, file) {
   if (prefix==='mt' && document.getElementById('mt-segments').children.length===0) addSegment();
   run.disabled = false;
   run.textContent = getRunLabel(prefix);
+  // Trigger live previews
+  if (prefix === 'textoverlay') setTimeout(() => setupTextPreview(prefix), 100);
+  if (prefix === 'wm') setTimeout(() => setupWmPreview(prefix), 100);
   // For transcribe panel: detect language immediately after upload
   if (prefix === 'tc' && d.file_id) {
     const badge = document.getElementById('tc-lang-detected');
@@ -5440,7 +5414,7 @@ async function handleMusicUpload(file) {
   nameEl.textContent = 'Uploading…';
   const fd = new FormData();
   fd.append('file', file);
-  const r = await fetch('/api/music-upload', {method:'POST', body:fd});
+  const r = await fetch('/api/watermark-upload', {method:'POST', body:fd});
   const d = await r.json();
   if (d.file_id) {
     musicFileId = d.file_id;
@@ -5450,6 +5424,108 @@ async function handleMusicUpload(file) {
     nameEl.textContent = d.error || 'Upload failed';
     nameEl.style.color = 'red';
   }
+}
+
+// ── Live Preview for Text Overlay ──
+function updateTextPreview() {
+  const wrap = document.getElementById('to-preview-wrap');
+  const canvas = document.getElementById('to-preview-canvas');
+  const video = document.getElementById('to-preview-video');
+  if (!wrap || !canvas || !video || !video.videoWidth) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const text = document.getElementById('to-text')?.value || '';
+  if (!text) return;
+  const sizePct = parseInt(document.getElementById('to-size')?.value || 5);
+  const xPct    = parseInt(document.getElementById('to-x')?.value || 50);
+  const yPct    = parseInt(document.getElementById('to-y')?.value || 50);
+  const color   = document.getElementById('to-color')?.value || 'white';
+  const colorMap = {white:'#ffffff',black:'#000000',yellow:'#ffdc00',red:'#dc2828',blue:'#2878ff',green:'#28c850'};
+  const fsize   = Math.max(12, Math.round(canvas.width * sizePct / 100));
+  ctx.font = `bold ${fsize}px sans-serif`;
+  const metrics = ctx.measureText(text);
+  const tw = metrics.width;
+  const th = fsize;
+  const pad = Math.max(6, fsize / 4);
+  const x = Math.max(0, Math.round(canvas.width  * xPct / 100));
+  const y = Math.max(0, Math.round(canvas.height * yPct / 100));
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.roundRect(x - pad, y - pad, tw + pad*2, th + pad*2, 6);
+  ctx.fill();
+  ctx.fillStyle = colorMap[color] || '#ffffff';
+  ctx.fillText(text, x, y + th - 2);
+}
+
+function setupTextPreview(prefix) {
+  const s = state[prefix];
+  if (!s) return;
+  const wrap  = document.getElementById('to-preview-wrap');
+  const video = document.getElementById('to-preview-video');
+  if (!wrap || !video) return;
+  wrap.style.display = 'block';
+  video.src = URL.createObjectURL(s.file);
+  video.load();
+  video.addEventListener('loadeddata', updateTextPreview);
+  ['to-text','to-size','to-x','to-y','to-color'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateTextPreview);
+  });
+}
+
+// ── Live Preview for Watermark ──
+function updateWmPreview() {
+  const canvas = document.getElementById('wm-preview-canvas');
+  const video  = document.getElementById('wm-preview-video');
+  if (!canvas || !video || !video.videoWidth) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const text    = document.getElementById('wm-text')?.value || '';
+  if (!text) return;
+  const sizePct = parseInt(document.getElementById('wm-fontsize')?.value || 8);
+  const pos     = document.getElementById('wm-position')?.value || 'bottom-right';
+  const opacity = parseInt(document.getElementById('wm-opacity')?.value || 80) / 100;
+  const fsize   = Math.max(12, Math.round(canvas.width * sizePct / 100));
+  ctx.font = `bold ${fsize}px sans-serif`;
+  const tw = ctx.measureText(text).width;
+  const th = fsize;
+  const pad    = Math.max(8, fsize / 3);
+  const margin = Math.max(15, Math.round(canvas.width * 0.02));
+  const ww = tw + pad*2, wh = th + pad*2;
+  const positions = {
+    'bottom-right': [canvas.width-ww-margin,  canvas.height-wh-margin],
+    'bottom-left':  [margin,                   canvas.height-wh-margin],
+    'top-right':    [canvas.width-ww-margin,   margin],
+    'top-left':     [margin,                   margin],
+    'center':       [(canvas.width-ww)/2,      (canvas.height-wh)/2],
+  };
+  const [x, y] = positions[pos] || positions['bottom-right'];
+  ctx.globalAlpha = opacity;
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.roundRect(x, y, ww, wh, 6);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, x + pad, y + th + pad - 4);
+  ctx.globalAlpha = 1;
+}
+
+function setupWmPreview(prefix) {
+  const s = state[prefix];
+  if (!s) return;
+  const wrap  = document.getElementById('wm-preview-wrap');
+  const video = document.getElementById('wm-preview-video');
+  if (!wrap || !video) return;
+  wrap.style.display = 'block';
+  video.src = URL.createObjectURL(s.file);
+  video.load();
+  video.addEventListener('loadeddata', updateWmPreview);
+  ['wm-text','wm-fontsize','wm-position','wm-opacity'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateWmPreview);
+  });
 }
 
 async function runGif() {
@@ -5928,7 +6004,7 @@ window.pollJob = function(prefix, jobId, videoId, dlId, dlName){
   },1200);
 };
 
-['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay'].forEach(p=>setupUpload(p));
+['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blur'].forEach(p=>setupUpload(p));
 
 // Auto-open panel from URL param e.g. /?tool=compress
 const _urlTool = new URLSearchParams(window.location.search).get('tool');
