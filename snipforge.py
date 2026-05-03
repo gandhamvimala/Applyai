@@ -2437,7 +2437,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 </head>
 <body>
 <header class="topbar">
-  <a href="/" class="logo">Snipforge</a>
+  <a href="/" class="logo">Snip<span style="color:var(--accent)">forge</span></a>
 </header>
 <div class="wrap">
   {% if file_exists %}
@@ -2606,7 +2606,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 </head>
 <body>
 <header class="topbar">
-  <a href="/" class="logo">Snipforge</a>
+  <a href="/" class="logo">Snip<span style="color:var(--accent)">forge</span></a>
   <div class="topbar-spacer"></div>
   <a href="/"          class="nav-link">Editor</a>
   <a href="/dashboard" class="nav-link active">Dashboard</a>
@@ -3281,12 +3281,12 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .topbar-spacer{flex:1}
 .topbar-link{font-family:var(--body);font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;padding:7px 14px;border-radius:8px;transition:all .15s;margin-left:4px}
 .topbar-link:hover{color:var(--text);background:var(--bg3)}
-.topbar-link.primary{background:var(--text);color:#fff;font-weight:600}
-.topbar-link.primary:hover{background:#222}
+.topbar-link.primary{background:var(--accent);color:#fff;font-weight:600}
+.topbar-link.primary:hover{background:var(--accent2)}
 
 /* ── auth forms ── */
 .auth-wrap{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 60px);padding:40px 20px;background:var(--bg)}
-.auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:44px 40px;width:100%;max-width:420px;box-shadow:0 4px 32px rgba(0,0,0,.07)}
+.auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:48px 44px;width:100%;max-width:460px;box-shadow:0 4px 32px rgba(0,0,0,.07)}
 .auth-title{font-family:var(--cond);font-size:1.75rem;font-weight:700;letter-spacing:-.02em;margin-bottom:6px;color:var(--text)}
 .auth-sub{color:var(--muted);font-size:.875rem;margin-bottom:28px;line-height:1.5}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
@@ -3370,7 +3370,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 </head>
 <body>
 <header class="topbar">
-  <a href="/" class="logo">Snipforge</a>
+  <a href="/" class="logo">Snip<span style="color:var(--accent)">forge</span></a>
   <div class="topbar-spacer"></div>
   {% if page in ['login','register','pricing','forgot','reset'] %}
     {% if page == 'login' %}
