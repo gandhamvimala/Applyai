@@ -2529,7 +2529,7 @@ async function doRegister(){
     <div class="plan-card featured">
       <div class="plan-badge">Most Popular</div>
       <div class="plan-name">Pro</div>
-      <div class="plan-price" id="pro-price">$8<span>/mo</span></div>
+      <div class="plan-price" id="pro-price">$5<span>/mo</span></div>
       <div class="plan-period" id="pro-period">billed monthly</div>
       <ul class="plan-features">
         <li>Unlimited videos</li>
@@ -2542,7 +2542,7 @@ async function doRegister(){
     </div>
     <div class="plan-card">
       <div class="plan-name">Team</div>
-      <div class="plan-price" id="team-price">$20<span>/mo</span></div>
+      <div class="plan-price" id="team-price">$15<span>/mo</span></div>
       <div class="plan-period" id="team-period">up to 5 seats · billed monthly</div>
       <ul class="plan-features">
         <li>Everything in Pro</li>
@@ -2563,10 +2563,10 @@ function toggleBilling(){
   document.getElementById('billing-knob').style.transform=yearly?'translateX(24px)':'translateX(0)';
   document.getElementById('lbl-monthly').style.color=yearly?'var(--muted)':'var(--text)';
   document.getElementById('lbl-yearly').style.color=yearly?'var(--text)':'var(--muted)';
-  document.getElementById('pro-price').innerHTML=yearly?'$64<span>/yr</span>':'$8<span>/mo</span>';
+  document.getElementById('pro-price').innerHTML=yearly?'$40<span>/yr</span>':'$5<span>/mo</span>';
   document.getElementById('pro-period').textContent=yearly?'saves $32/year':'billed monthly';
-  document.getElementById('team-price').innerHTML=yearly?'$160<span>/yr</span>':'$20<span>/mo</span>';
-  document.getElementById('team-period').textContent=yearly?'saves $80/year · 5 seats':'up to 5 seats · billed monthly';
+  document.getElementById('team-price').innerHTML=yearly?'$120<span>/yr</span>':'$15<span>/mo</span>';
+  document.getElementById('team-period').textContent=yearly?'saves $60/year · 5 seats':'up to 5 seats · billed monthly';
 }
 async function checkout(plan){
   const r=await fetch('/api/create-checkout',{method:'POST',
