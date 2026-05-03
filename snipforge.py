@@ -297,6 +297,375 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
     except Exception as e:
         fail(jid, e)
 
+def op_gif(jid, src, dst, fps=10, width=480):
+    """Convert video segment to GIF using palette for quality."""
+    try:
+        prog(jid, "Generating GIF palette…", 20)
+        palette = os.path.join(tempfile.gettempdir(), f"snip_pal_{jid}.png")
+        tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_gif_in_{jid}.mp4")
+        shutil.copy2(str(src), tmp_in)
+
+        # Step 1: generate palette for better quality
+        _, _, rc1 = run([_FFMPEG_EXE, "-y", "-i", tmp_in,
+            "-vf", f"fps={fps},scale={width}:-1:flags=lanczos,palettegen",
+            palette])
+
+        prog(jid, "Creating GIF…", 60)
+        if rc1 == 0:
+            # Step 2: use palette
+            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_in, "-i", palette,
+                "-lavfi", f"fps={fps},scale={width}:-1:flags=lanczos[x];[x][1:v]paletteuse",
+                str(dst)])
+        else:
+            # fallback: simple gif
+            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_in,
+                "-vf", f"fps={fps},scale={width}:-1:flags=lanczos",
+                str(dst)])
+
+        for f_ in [tmp_in, palette]:
+            try: os.unlink(f_)
+            except: pass
+
+        if rc != 0:
+            raise RuntimeError(f"GIF failed: {err[-200:]}")
+        size_mb = os.path.getsize(str(dst)) / 1024 / 1024
+        prog(jid, f"Done! GIF created ({size_mb:.1f} MB)", 100)
+        done(jid, dst, {"size_mb": round(size_mb, 2)})
+    except Exception as e:
+        fail(jid, e)
+
+def op_bgmusic(jid, src, dst, music_file_id, music_vol=0.5, video_vol=1.0):
+    """Mix background music into video."""
+    try:
+        prog(jid, "Loading files…", 10)
+        # Find music file
+        music_src = None
+        for f in UPLOAD_DIR.iterdir():
+            if f.stem == music_file_id:
+                music_src = str(f); break
+        if not music_src:
+            raise RuntimeError("Music file not found. Please upload an audio file.")
+
+        tmp_in = os.path.join(tempfile.gettempdir(), f"snip_bgm_in_{jid}.mp4")
+        shutil.copy2(str(src), tmp_in)
+
+        prog(jid, "Mixing audio…", 40)
+        dur = get_duration(tmp_in)
+
+        # Check if video has audio
+        info = get_info(tmp_in)
+        has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+
+        if has_audio:
+            # Mix original audio + background music
+            _, err, rc = run([_FFMPEG_EXE, "-y",
+                "-i", tmp_in, "-i", music_src,
+                "-filter_complex",
+                f"[0:a]volume={video_vol}[va];[1:a]volume={music_vol},aloop=loop=-1:size=2e+09[ma];[va][ma]amix=inputs=2:duration=first[aout]",
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-t", str(dur), "-movflags", "+faststart",
+                str(dst)])
+        else:
+            # No original audio — just add music
+            _, err, rc = run([_FFMPEG_EXE, "-y",
+                "-i", tmp_in, "-i", music_src,
+                "-filter_complex",
+                f"[1:a]volume={music_vol},aloop=loop=-1:size=2e+09[ma]",
+                "-map", "0:v", "-map", "[ma]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-t", str(dur), "-movflags", "+faststart",
+                str(dst)])
+
+        try: os.unlink(tmp_in)
+        except: pass
+
+        if rc != 0:
+            raise RuntimeError(f"Music mix failed: {err[-200:]}")
+        prog(jid, "Done! Background music added.", 100)
+        done(jid, dst, {})
+    except Exception as e:
+        fail(jid, e)
+
+def op_textoverlay(jid, src, dst, text, x_pct, y_pct, fontsize, color, opacity):
+    """Add text overlay to video using embedded font."""
+    try:
+        prog(jid, "Rendering text overlay…", 20)
+        import io as _io, base64 as _b64
+        from PIL import Image, ImageDraw, ImageFont
+
+        tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_txt_in_{jid}.mp4")
+        tmp_out = os.path.join(tempfile.gettempdir(), f"snip_txt_out_{jid}.mp4")
+        wm_png  = os.path.join(tempfile.gettempdir(), f"snip_txt_{jid}.png")
+        shutil.copy2(str(src), tmp_in)
+
+        info = get_info(tmp_in)
+        vs   = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
+        vid_w = int(vs.get("width",  1280) or 1280)
+        vid_h = int(vs.get("height",  720) or 720)
+
+        fsize = max(16, int(vid_w * max(3, min(30, int(fontsize))) / 100))
+        font_bytes = _b64.b64decode(_EMBEDDED_FONT_B64)
+        font = ImageFont.truetype(_io.BytesIO(font_bytes), fsize)
+
+        # Parse color
+        color_map = {"white":(255,255,255),"black":(0,0,0),"yellow":(255,230,0),
+                     "red":(255,50,50),"blue":(80,150,255),"green":(80,220,80)}
+        rgb = color_map.get(color, (255,255,255))
+        op_val = max(10, min(100, int(opacity)))
+        alpha  = int(255 * op_val / 100)
+
+        # Measure and render
+        dummy = Image.new("RGBA",(1,1))
+        bb = ImageDraw.Draw(dummy).textbbox((0,0), text, font=font)
+        tw, th = bb[2]-bb[0], bb[3]-bb[1]
+        pad = max(8, fsize // 4)
+        img = Image.new("RGBA", (tw+pad*2, th+pad*2), (0,0,0,0))
+        draw = ImageDraw.Draw(img)
+        draw.text((pad, pad), text, font=font, fill=(*rgb, alpha))
+        img.save(wm_png, "PNG")
+
+        # Position based on percentage
+        x_pos = int(vid_w * max(0, min(100, int(x_pct))) / 100) - (tw+pad*2)//2
+        y_pos = int(vid_h * max(0, min(100, int(y_pct))) / 100) - (th+pad*2)//2
+        x_pos = max(0, min(vid_w - tw - pad*2, x_pos))
+        y_pos = max(0, min(vid_h - th - pad*2, y_pos))
+
+        prog(jid, "Applying text to video…", 60)
+        _, err, rc = run([_FFMPEG_EXE, "-y",
+            "-i", tmp_in, "-i", wm_png,
+            "-filter_complex",
+            f"[1:v]format=rgba[txt];[0:v][txt]overlay={x_pos}:{y_pos}[vout]",
+            "-map", "[vout]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-pix_fmt", "yuv420p", "-c:a", "copy",
+            "-movflags", "+faststart", tmp_out])
+
+        for f_ in [tmp_in, wm_png]:
+            try: os.unlink(f_)
+            except: pass
+
+        if rc != 0:
+            raise RuntimeError(f"Text overlay failed: {err[-200:]}")
+        shutil.move(tmp_out, str(dst))
+        prog(jid, "Done! Text overlay applied.", 100)
+        done(jid, dst, {})
+    except Exception as e:
+        fail(jid, e)
+
+def op_blurregion(jid, src, dst, x_pct, y_pct, w_pct, h_pct):
+    """Blur a rectangular region in video (faces, screens, etc)."""
+    try:
+        prog(jid, "Analysing video…", 10)
+        tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_blur_in_{jid}.mp4")
+        tmp_out = os.path.join(tempfile.gettempdir(), f"snip_blur_out_{jid}.mp4")
+        shutil.copy2(str(src), tmp_in)
+
+        info = get_info(tmp_in)
+        vs   = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
+        vid_w = int(vs.get("width",  1280) or 1280)
+        vid_h = int(vs.get("height",  720) or 720)
+
+        x = int(vid_w * x_pct / 100)
+        y = int(vid_h * y_pct / 100)
+        w = int(vid_w * w_pct / 100)
+        h = int(vid_h * h_pct / 100)
+        # Make even
+        w = w + (w % 2); h = h + (h % 2)
+
+        prog(jid, "Applying blur…", 50)
+        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", tmp_in,
+            "-vf", f"crop={w}:{h}:{x}:{y},boxblur=20:5,pad={vid_w}:{vid_h}:{x}:{y}[blurred];[0:v][blurred]overlay={x}:{y}",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-pix_fmt", "yuv420p", "-c:a", "copy",
+            "-movflags", "+faststart", tmp_out])
+
+        try: os.unlink(tmp_in)
+        except: pass
+
+        if rc != 0:
+            raise RuntimeError(f"Blur failed: {err[-200:]}")
+        shutil.move(tmp_out, str(dst))
+        prog(jid, "Done! Region blurred.", 100)
+        done(jid, dst, {})
+    except Exception as e:
+        fail(jid, e)
+
+
+def op_gif(jid, src, dst, fps=10, width=480):
+    """Convert video to GIF using palette for quality."""
+    try:
+        prog(jid, "Generating GIF palette…", 20)
+        palette = os.path.join(tempfile.gettempdir(), f"snip_palette_{jid}.png")
+        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
+            "-vf", f"fps={fps},scale={width}:-1:flags=lanczos,palettegen",
+            palette])
+        if rc != 0:
+            raise RuntimeError(f"Palette failed: {err[-200:]}")
+        prog(jid, "Converting to GIF…", 60)
+        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src, "-i", palette,
+            "-lavfi", f"fps={fps},scale={width}:-1:flags=lanczos[x];[x][1:v]paletteuse",
+            str(dst)])
+        try: os.unlink(palette)
+        except: pass
+        if rc != 0:
+            raise RuntimeError(f"GIF failed: {err[-200:]}")
+        size_mb = os.path.getsize(str(dst)) / 1e6
+        prog(jid, f"Done! GIF created ({size_mb:.1f} MB)", 100)
+        done(jid, dst, {"size_mb": round(size_mb, 2)})
+    except Exception as e:
+        fail(jid, e)
+
+def op_bgmusic(jid, src, dst, music_file_id, volume=0.5, duck=True):
+    """Mix background music into video."""
+    try:
+        prog(jid, "Loading music…", 10)
+        music_src = None
+        for f in UPLOAD_DIR.iterdir():
+            if f.stem == music_file_id:
+                music_src = str(f); break
+        if not music_src:
+            raise RuntimeError("Music file not found. Please upload an audio file.")
+        prog(jid, "Mixing audio tracks…", 40)
+        vid_dur = get_duration(src)
+        # Duck video audio if duck=True (lower video audio when music plays)
+        vol_music = max(0.1, min(1.0, float(volume)))
+        vol_video = 0.8 if duck else 1.0
+        filter_complex = (
+            f"[0:a]volume={vol_video}[va];"
+            f"[1:a]aloop=loop=-1:size=2e+09,atrim=duration={vid_dur},volume={vol_music}[ma];"
+            f"[va][ma]amix=inputs=2:duration=first[aout]"
+        )
+        _, err, rc = run([_FFMPEG_EXE, "-y",
+            "-i", src, "-i", music_src,
+            "-filter_complex", filter_complex,
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", str(dst)])
+        if rc != 0:
+            # Fallback: no duck
+            filter_complex2 = (
+                f"[1:a]aloop=loop=-1:size=2e+09,atrim=duration={vid_dur},volume={vol_music}[ma];"
+                f"[0:a][ma]amix=inputs=2:duration=first[aout]"
+            )
+            _, err, rc = run([_FFMPEG_EXE, "-y",
+                "-i", src, "-i", music_src,
+                "-filter_complex", filter_complex2,
+                "-map", "0:v", "-map", "[aout]",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart", str(dst)])
+        if rc != 0:
+            raise RuntimeError(f"Music mix failed: {err[-300:]}")
+        prog(jid, "Done! Background music added.", 100)
+        done(jid, dst, {})
+    except Exception as e:
+        fail(jid, e)
+
+def op_text_overlay(jid, src, dst, text, x_pct, y_pct, fontsize_pct, color, start_t, end_t):
+    """Overlay text on video using Pillow frame compositing."""
+    try:
+        import io as _io, base64 as _b64
+        from PIL import Image, ImageDraw, ImageFont
+        prog(jid, "Preparing text overlay…", 10)
+        info = get_info(src)
+        vs = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
+        vid_w = int(vs.get("width", 1280) or 1280)
+        vid_h = int(vs.get("height", 720) or 720)
+        fps_raw = vs.get("r_frame_rate","25/1")
+        try:
+            num,den = fps_raw.split("/"); fps = round(float(num)/float(den),3)
+        except: fps = 25.0
+        fps = max(1.0, min(fps, 60.0))
+        total_dur = get_duration(src)
+        t_start = max(0, float(start_t))
+        t_end   = min(total_dur, float(end_t)) if float(end_t) > 0 else total_dur
+
+        fsize = max(16, int(vid_w * float(fontsize_pct) / 100))
+        font = None
+        for fp in ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                   "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"]:
+            if os.path.exists(fp):
+                try: font = ImageFont.truetype(fp, fsize); break
+                except: pass
+        if font is None:
+            font_bytes = _b64.b64decode(_EMBEDDED_FONT_B64)
+            font = ImageFont.truetype(_io.BytesIO(font_bytes), fsize)
+
+        # Parse color
+        color_map = {"white":(255,255,255,255),"black":(0,0,0,255),
+                     "yellow":(255,220,0,255),"red":(220,40,40,255),
+                     "blue":(40,120,255,255),"green":(40,200,80,255)}
+        rgba = color_map.get(color, (255,255,255,255))
+
+        # Measure text
+        dummy = Image.new("RGBA",(1,1))
+        bb = ImageDraw.Draw(dummy).textbbox((0,0), text, font=font)
+        tw,th = bb[2]-bb[0], bb[3]-bb[1]
+        pad = max(6, fsize//4)
+        wm_w, wm_h = tw+pad*2, th+pad*2
+        wm_img = Image.new("RGBA", (wm_w, wm_h), (0,0,0,0))
+        draw = ImageDraw.Draw(wm_img)
+        draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,140))
+        draw.text((pad,pad), text, font=font, fill=rgba)
+
+        x_pos = max(0, min(vid_w-wm_w, int(vid_w * float(x_pct) / 100)))
+        y_pos = max(0, min(vid_h-wm_h, int(vid_h * float(y_pct) / 100)))
+
+        # Save as PNG and use FFmpeg overlay with enable time
+        wm_png = os.path.join(tempfile.gettempdir(), f"snip_txt_{jid}.png")
+        wm_img.save(wm_png, "PNG")
+        tmp_in = os.path.join(tempfile.gettempdir(), f"snip_txt_in_{jid}.mp4")
+        shutil.copy2(src, tmp_in)
+        prog(jid, "Applying text overlay…", 50)
+        _, err, rc = run([_FFMPEG_EXE, "-y",
+            "-i", tmp_in, "-i", wm_png,
+            "-filter_complex",
+            f"[1:v]format=rgba[wm];[0:v][wm]overlay={x_pos}:{y_pos}:enable='between(t,{t_start},{t_end})'[vout]",
+            "-map", "[vout]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-pix_fmt", "yuv420p", "-c:a", "copy",
+            "-movflags", "+faststart", str(dst)])
+        for f_ in [tmp_in, wm_png]:
+            try: os.unlink(f_)
+            except: pass
+        if rc != 0:
+            raise RuntimeError(f"Text overlay failed: {err[-300:]}")
+        prog(jid, "Done! Text overlay applied.", 100)
+        done(jid, dst, {})
+    except Exception as e:
+        fail(jid, e)
+
+def op_blur(jid, src, dst, x_pct, y_pct, w_pct, h_pct):
+    """Blur a rectangular region of the video."""
+    try:
+        prog(jid, "Applying blur…", 20)
+        info = get_info(src)
+        vs = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
+        vid_w = int(vs.get("width", 1280) or 1280)
+        vid_h = int(vs.get("height", 720) or 720)
+        x = int(vid_w * float(x_pct) / 100)
+        y = int(vid_h * float(y_pct) / 100)
+        w = max(10, int(vid_w * float(w_pct) / 100))
+        h = max(10, int(vid_h * float(h_pct) / 100))
+        # Ensure even dimensions
+        w = w & ~1; h = h & ~1
+        # FFmpeg: crop region, blur it, overlay back
+        vf = (f"[0:v]split[orig][copy];"
+              f"[copy]crop={w}:{h}:{x}:{y},boxblur=20:5[blurred];"
+              f"[orig][blurred]overlay={x}:{y}[vout]")
+        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
+            "-filter_complex", vf,
+            "-map", "[vout]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-pix_fmt", "yuv420p", "-c:a", "copy",
+            "-movflags", "+faststart", str(dst)])
+        if rc != 0:
+            raise RuntimeError(f"Blur failed: {err[-300:]}")
+        prog(jid, "Done! Region blurred.", 100)
+        done(jid, dst, {})
+    except Exception as e:
+        fail(jid, e)
+
 def op_stabilize(jid, src, dst):
     try:
         prog(jid,"Analysing shake…",10)
@@ -1159,6 +1528,7 @@ def api_process():
     jobs[jid]['operation']      = data.get('op','process')
     jobs[jid]['orig_size_mb']   = float(data.get('size_mb', 0))
     jobs[jid]['wm_file_id']     = data.get('wm_file_id', '')
+    jobs[jid]['music_file_id']  = data.get('music_file_id', '')
 
     def run_op():
         if op=="shorten":
@@ -1204,6 +1574,44 @@ def api_process():
                 data.get("position","bottom-right"),
                 data.get("opacity",80),
                 data.get("fontsize",8))).start()
+        elif op=="gif":
+            threading.Thread(target=op_gif, args=(jid,src,str(dst),
+                int(data.get("fps",10)), int(data.get("width",480)))).start()
+        elif op=="bgmusic":
+            threading.Thread(target=op_bgmusic, args=(jid,src,str(dst),
+                data.get("music_file_id",""),
+                float(data.get("music_vol",0.5)),
+                float(data.get("video_vol",1.0)))).start()
+        elif op=="textoverlay":
+            threading.Thread(target=op_textoverlay, args=(jid,src,str(dst),
+                data.get("text","Snipforge"),
+                int(data.get("x_pct",50)), int(data.get("y_pct",90)),
+                int(data.get("fontsize",8)),
+                data.get("color","white"),
+                int(data.get("opacity",100)))).start()
+        elif op=="blurregion":
+            threading.Thread(target=op_blurregion, args=(jid,src,str(dst),
+                float(data.get("x_pct",25)), float(data.get("y_pct",25)),
+                float(data.get("w_pct",50)), float(data.get("h_pct",50)))).start()
+        elif op=="gif":
+            threading.Thread(target=op_gif, args=(jid,src,str(dst),
+                int(data.get("fps",10)), int(data.get("width",480)))).start()
+        elif op=="bgmusic":
+            jobs[jid]["music_file_id"] = data.get("music_file_id","")
+            threading.Thread(target=op_bgmusic, args=(jid,src,str(dst),
+                data.get("music_file_id",""),
+                float(data.get("volume",0.5)),
+                bool(data.get("duck",True)))).start()
+        elif op=="text_overlay":
+            threading.Thread(target=op_text_overlay, args=(jid,src,str(dst),
+                data.get("text",""),
+                data.get("x_pct",50), data.get("y_pct",50),
+                data.get("fontsize_pct",5), data.get("color","white"),
+                data.get("start_t",0), data.get("end_t",0))).start()
+        elif op=="blur":
+            threading.Thread(target=op_blur, args=(jid,src,str(dst),
+                data.get("x_pct",25), data.get("y_pct",25),
+                data.get("w_pct",50), data.get("h_pct",50))).start()
         elif op=="stabilize":
             threading.Thread(target=op_stabilize, args=(jid,src,str(dst))).start()
         elif op=="denoise":
@@ -3787,6 +4195,42 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <span class="nav-full">Mute</span><span class="nav-short">Mute</span>
   </div>
 
+  <div class="nav-section">Create</div>
+  <div class="nav-item" data-panel="gif" onclick="switchPanel(this)">
+    <span class="nav-icon">🎞️</span>
+    <span class="nav-full">Video to GIF</span><span class="nav-short">GIF</span>
+  </div>
+  <div class="nav-item" data-panel="bgmusic" onclick="switchPanel(this)">
+    <span class="nav-icon">🎵</span>
+    <span class="nav-full">Add Music</span><span class="nav-short">Music</span>
+  </div>
+  <div class="nav-item" data-panel="textoverlay" onclick="switchPanel(this)">
+    <span class="nav-icon">✏️</span>
+    <span class="nav-full">Text Overlay</span><span class="nav-short">Text</span>
+  </div>
+  <div class="nav-item" data-panel="blurregion" onclick="switchPanel(this)">
+    <span class="nav-icon">🔲</span>
+    <span class="nav-full">Blur Region</span><span class="nav-short">Blur</span>
+  </div>
+
+  <div class="nav-section">Create</div>
+  <div class="nav-item" data-panel="gif" onclick="switchPanel(this)">
+    <span class="nav-icon">🎞</span>
+    <span class="nav-full">Video to GIF</span><span class="nav-short">GIF</span>
+  </div>
+  <div class="nav-item" data-panel="bgmusic" onclick="switchPanel(this)">
+    <span class="nav-icon">🎵</span>
+    <span class="nav-full">Background Music</span><span class="nav-short">Music</span>
+  </div>
+  <div class="nav-item" data-panel="textoverlay" onclick="switchPanel(this)">
+    <span class="nav-icon">✍️</span>
+    <span class="nav-full">Text Overlay</span><span class="nav-short">Text</span>
+  </div>
+  <div class="nav-item" data-panel="blur" onclick="switchPanel(this)">
+    <span class="nav-icon">🫥</span>
+    <span class="nav-full">Blur Region</span><span class="nav-short">Blur</span>
+  </div>
+
   <div class="nav-section">AI</div>
   <div class="nav-item" data-panel="transcribe" onclick="switchPanel(this)">
     <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 9h4M5 12h2"/></svg></span>
@@ -4332,6 +4776,312 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   <div class="result-box" id="dn-result"><video class="result-video" id="dn-rvideo" controls></video><div class="result-stats" id="dn-rstats"></div><a class="dl-btn" id="dn-dl" href="#">⬇ Download Clean Audio</a></div>
 </div>
 
+<!-- ── VIDEO TO GIF ── -->
+<div class="panel" id="panel-gif">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF</div></div>
+  <div class="upload-zone" id="gif-dropzone"><input type="file" id="gif-file" accept="video/*">
+    <div class="upload-zone-icon">🎞️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="gif-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="gif-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="gif-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="gif-dur">—</span></div><div class="file-stat">Size <span id="gif-size">—</span></div></div>
+    </div>
+    <button class="file-change" onclick="resetUpload('gif')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>GIF Settings</h4>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Frame Rate <span id="gif-fps-val" style="color:var(--accent)">10 fps</span></label>
+      <input type="range" id="gif-fps" min="5" max="25" value="10" style="flex:1" oninput="document.getElementById('gif-fps-val').textContent=this.value+' fps'">
+    </div>
+    <div class="field field-row">
+      <label>Width <span id="gif-width-val" style="color:var(--accent)">480px</span></label>
+      <input type="range" id="gif-width" min="200" max="800" value="480" step="40" style="flex:1" oninput="document.getElementById('gif-width-val').textContent=this.value+'px'">
+    </div>
+  </div>
+  <button class="run-btn" id="gif-run" disabled onclick="runGif()">Upload a video first</button>
+  <div class="progress-box" id="gif-progress"><div class="progress-track"><div class="progress-fill" id="gif-pfill"></div></div><div class="log" id="gif-log"></div></div>
+  <div class="result-box" id="gif-result"><img id="gif-preview" style="max-width:100%;border-radius:8px;margin-bottom:12px"><div class="result-stats" id="gif-rstats"></div><a class="dl-btn" id="gif-dl" href="#">⬇ Download GIF</a></div>
+</div>
+
+<!-- ── ADD MUSIC ── -->
+<div class="panel" id="panel-bgmusic">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎵</span>Add Background Music</div><div class="panel-sub">Mix audio track into your video</div></div>
+  <div class="upload-zone" id="bgmusic-dropzone"><input type="file" id="bgmusic-file" accept="video/*">
+    <div class="upload-zone-icon">🎵</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="bgmusic-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="bgmusic-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="bgmusic-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="bgmusic-dur">—</span></div><div class="file-stat">Size <span id="bgmusic-size">—</span></div></div>
+    </div>
+    <button class="file-change" onclick="resetUpload('bgmusic')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>Music File</h4>
+    <div style="border:2px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer" onclick="document.getElementById('music-input').click()">
+      <input type="file" id="music-input" accept=".mp3,.wav,.aac,.m4a,.ogg" style="display:none" onchange="handleMusicUpload(this.files[0])">
+      <div id="music-label" style="font-size:.85rem;color:var(--muted)">📁 Click to upload MP3 / WAV / M4A</div>
+    </div>
+    <div id="music-name" style="font-family:var(--mono);font-size:.65rem;color:var(--green);margin-top:6px;display:none"></div>
+    <div class="field field-row" style="margin-top:14px;margin-bottom:10px">
+      <label>Music Volume <span id="bgm-mvol-val" style="color:var(--accent)">50%</span></label>
+      <input type="range" id="bgm-mvol" min="0" max="100" value="50" style="flex:1" oninput="document.getElementById('bgm-mvol-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row">
+      <label>Video Volume <span id="bgm-vvol-val" style="color:var(--accent)">100%</span></label>
+      <input type="range" id="bgm-vvol" min="0" max="100" value="100" style="flex:1" oninput="document.getElementById('bgm-vvol-val').textContent=this.value+'%'">
+    </div>
+  </div>
+  <button class="run-btn" id="bgmusic-run" disabled onclick="runBgMusic()">Upload a video first</button>
+  <div class="progress-box" id="bgmusic-progress"><div class="progress-track"><div class="progress-fill" id="bgmusic-pfill"></div></div><div class="log" id="bgmusic-log"></div></div>
+  <div class="result-box" id="bgmusic-result"><video class="result-video" id="bgmusic-rvideo" controls></video><div class="result-stats" id="bgmusic-rstats"></div><a class="dl-btn" id="bgmusic-dl" href="#">⬇ Download Video</a></div>
+</div>
+
+<!-- ── TEXT OVERLAY ── -->
+<div class="panel" id="panel-textoverlay">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">✏️</span>Text Overlay</div><div class="panel-sub">Add text to your video at any position</div></div>
+  <div class="upload-zone" id="textoverlay-dropzone"><input type="file" id="textoverlay-file" accept="video/*">
+    <div class="upload-zone-icon">✏️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="textoverlay-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="textoverlay-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="textoverlay-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="textoverlay-dur">—</span></div><div class="file-stat">Size <span id="textoverlay-size">—</span></div></div>
+    </div>
+    <button class="file-change" onclick="resetUpload('textoverlay')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>Text Settings</h4>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Text</label>
+      <input type="text" id="to-text" placeholder="Enter your text here" maxlength="80" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.88rem">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Color</label>
+      <select id="to-color" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);color:var(--text);font-size:.85rem">
+        <option value="white">White</option><option value="black">Black</option>
+        <option value="yellow">Yellow</option><option value="red">Red</option>
+        <option value="blue">Blue</option><option value="green">Green</option>
+      </select>
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Size <span id="to-size-val" style="color:var(--accent)">8%</span></label>
+      <input type="range" id="to-size" min="3" max="25" value="8" style="flex:1" oninput="document.getElementById('to-size-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Horizontal <span id="to-x-val" style="color:var(--accent)">50%</span></label>
+      <input type="range" id="to-x" min="0" max="100" value="50" style="flex:1" oninput="document.getElementById('to-x-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Vertical <span id="to-y-val" style="color:var(--accent)">90%</span></label>
+      <input type="range" id="to-y" min="0" max="100" value="90" style="flex:1" oninput="document.getElementById('to-y-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row">
+      <label>Opacity <span id="to-op-val" style="color:var(--accent)">100%</span></label>
+      <input type="range" id="to-opacity" min="10" max="100" value="100" style="flex:1" oninput="document.getElementById('to-op-val').textContent=this.value+'%'">
+    </div>
+  </div>
+  <button class="run-btn" id="textoverlay-run" disabled onclick="runTextOverlay()">Upload a video first</button>
+  <div class="progress-box" id="textoverlay-progress"><div class="progress-track"><div class="progress-fill" id="textoverlay-pfill"></div></div><div class="log" id="textoverlay-log"></div></div>
+  <div class="result-box" id="textoverlay-result"><video class="result-video" id="textoverlay-rvideo" controls></video><div class="result-stats" id="textoverlay-rstats"></div><a class="dl-btn" id="textoverlay-dl" href="#">⬇ Download Video</a></div>
+</div>
+
+<!-- ── BLUR REGION ── -->
+<div class="panel" id="panel-blurregion">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🔲</span>Blur Region</div><div class="panel-sub">Blur faces, screens or any area in your video</div></div>
+  <div class="upload-zone" id="blurregion-dropzone"><input type="file" id="blurregion-file" accept="video/*">
+    <div class="upload-zone-icon">🔲</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="blurregion-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="blurregion-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="blurregion-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="blurregion-dur">—</span></div><div class="file-stat">Size <span id="blurregion-size">—</span></div></div>
+    </div>
+    <button class="file-change" onclick="resetUpload('blurregion')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>Blur Area (% of video)</h4>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Left <span id="br-x-val" style="color:var(--accent)">25%</span></label>
+      <input type="range" id="br-x" min="0" max="90" value="25" style="flex:1" oninput="document.getElementById('br-x-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Top <span id="br-y-val" style="color:var(--accent)">25%</span></label>
+      <input type="range" id="br-y" min="0" max="90" value="25" style="flex:1" oninput="document.getElementById('br-y-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Width <span id="br-w-val" style="color:var(--accent)">50%</span></label>
+      <input type="range" id="br-w" min="5" max="100" value="50" style="flex:1" oninput="document.getElementById('br-w-val').textContent=this.value+'%'">
+    </div>
+    <div class="field field-row">
+      <label>Height <span id="br-h-val" style="color:var(--accent)">50%</span></label>
+      <input type="range" id="br-h" min="5" max="100" value="50" style="flex:1" oninput="document.getElementById('br-h-val').textContent=this.value+'%'">
+    </div>
+  </div>
+  <button class="run-btn" id="blurregion-run" disabled onclick="runBlurRegion()">Upload a video first</button>
+  <div class="progress-box" id="blurregion-progress"><div class="progress-track"><div class="progress-fill" id="blurregion-pfill"></div></div><div class="log" id="blurregion-log"></div></div>
+  <div class="result-box" id="blurregion-result"><video class="result-video" id="blurregion-rvideo" controls></video><div class="result-stats" id="blurregion-rstats"></div><a class="dl-btn" id="blurregion-dl" href="#">⬇ Download Video</a></div>
+</div>
+
+<!-- ── VIDEO TO GIF ── -->
+<div class="panel" id="panel-gif">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF</div></div>
+  <div class="upload-zone" id="gif-dropzone"><input type="file" id="gif-file" accept="video/*">
+    <div class="upload-zone-icon">🎞</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="gif-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="gif-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="gif-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="gif-dur">—</span></div><div class="file-stat">Size <span id="gif-size">—</span></div></div>
+    </div><button class="file-change" onclick="resetUpload('gif')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>GIF Settings</h4>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Frame Rate <span id="gif-fps-val" style="color:var(--accent)">10 fps</span></label>
+      <input type="range" id="gif-fps" min="5" max="30" value="10" style="flex:1" oninput="document.getElementById('gif-fps-val').textContent=this.value+' fps'">
+    </div>
+    <div class="field field-row">
+      <label>Width <span id="gif-width-val" style="color:var(--accent)">480px</span></label>
+      <input type="range" id="gif-width" min="240" max="960" value="480" step="40" style="flex:1" oninput="document.getElementById('gif-width-val').textContent=this.value+'px'">
+    </div>
+  </div>
+  <button class="run-btn" id="gif-run" disabled onclick="runGif()">Upload a video first</button>
+  <div class="progress-box" id="gif-progress"><div class="progress-track"><div class="progress-fill" id="gif-pfill"></div></div><div class="log" id="gif-log"></div></div>
+  <div class="result-box" id="gif-result">
+    <img id="gif-rimg" style="max-width:100%;border-radius:8px;margin-bottom:12px" src="" alt="">
+    <div class="result-stats" id="gif-rstats"></div>
+    <a class="dl-btn" id="gif-dl" href="#">⬇ Download GIF</a>
+  </div>
+</div>
+
+<!-- ── BACKGROUND MUSIC ── -->
+<div class="panel" id="panel-bgmusic">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎵</span>Background Music</div><div class="panel-sub">Mix background music into your video</div></div>
+  <div class="upload-zone" id="bgmusic-dropzone"><input type="file" id="bgmusic-file" accept="video/*">
+    <div class="upload-zone-icon">🎬</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="bgmusic-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="bgmusic-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="bgmusic-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="bgmusic-dur">—</span></div><div class="file-stat">Size <span id="bgmusic-size">—</span></div></div>
+    </div><button class="file-change" onclick="resetUpload('bgmusic')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>Music File</h4>
+    <div style="border:2px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer" onclick="document.getElementById('bgmusic-audio-input').click()">
+      <input type="file" id="bgmusic-audio-input" accept="audio/*,.mp3,.wav,.aac,.m4a,.ogg" style="display:none" onchange="handleMusicUpload(this.files[0])">
+      <div id="bgmusic-audio-label" style="font-size:.85rem;color:var(--muted)">🎵 Click to upload MP3 / WAV / M4A</div>
+    </div>
+    <div id="bgmusic-audio-name" style="font-family:var(--mono);font-size:.65rem;color:var(--green);margin-top:6px;display:none"></div>
+    <div class="field field-row" style="margin-top:12px;margin-bottom:10px">
+      <label>Music Volume <span id="bgmusic-vol-val" style="color:var(--accent)">50%</span></label>
+      <input type="range" id="bgmusic-vol" min="10" max="100" value="50" style="flex:1" oninput="document.getElementById('bgmusic-vol-val').textContent=this.value+'%'">
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg3);border-radius:8px">
+      <div><div style="font-size:.88rem;font-weight:600">Duck original audio</div><div style="font-size:.75rem;color:var(--muted)">Lower video volume when music plays</div></div>
+      <label class="toggle"><input type="checkbox" id="bgmusic-duck" checked><span class="toggle-slider"></span></label>
+    </div>
+  </div>
+  <button class="run-btn" id="bgmusic-run" disabled onclick="runBgMusic()">Upload a video first</button>
+  <div class="progress-box" id="bgmusic-progress"><div class="progress-track"><div class="progress-fill" id="bgmusic-pfill"></div></div><div class="log" id="bgmusic-log"></div></div>
+  <div class="result-box" id="bgmusic-result"><video class="result-video" id="bgmusic-rvideo" controls></video><div class="result-stats" id="bgmusic-rstats"></div><a class="dl-btn" id="bgmusic-dl" href="#">⬇ Download Video</a></div>
+</div>
+
+<!-- ── TEXT OVERLAY ── -->
+<div class="panel" id="panel-textoverlay">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">✍️</span>Text Overlay</div><div class="panel-sub">Add text to your video at any position</div></div>
+  <div class="upload-zone" id="textoverlay-dropzone"><input type="file" id="textoverlay-file" accept="video/*">
+    <div class="upload-zone-icon">✍️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="textoverlay-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="textoverlay-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="textoverlay-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="textoverlay-dur">—</span></div><div class="file-stat">Size <span id="textoverlay-size">—</span></div></div>
+    </div><button class="file-change" onclick="resetUpload('textoverlay')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>Text Settings</h4>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Text</label>
+      <input type="text" id="to-text" placeholder="Your text here..." maxlength="100" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.88rem">
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Color</label>
+      <select id="to-color" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);color:var(--text);font-size:.85rem">
+        <option value="white">White</option>
+        <option value="yellow">Yellow</option>
+        <option value="black">Black</option>
+        <option value="red">Red</option>
+        <option value="blue">Blue</option>
+        <option value="green">Green</option>
+      </select>
+    </div>
+    <div class="field field-row" style="margin-bottom:10px">
+      <label>Size <span id="to-size-val" style="color:var(--accent)">5%</span></label>
+      <input type="range" id="to-size" min="2" max="20" value="5" style="flex:1" oninput="document.getElementById('to-size-val').textContent=this.value+'%'">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">X Position <span id="to-x-val" style="color:var(--accent)">50%</span></label>
+        <input type="range" id="to-x" min="0" max="90" value="50" style="width:100%" oninput="document.getElementById('to-x-val').textContent=this.value+'%'"></div>
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Y Position <span id="to-y-val" style="color:var(--accent)">50%</span></label>
+        <input type="range" id="to-y" min="0" max="90" value="50" style="width:100%" oninput="document.getElementById('to-y-val').textContent=this.value+'%'"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Start (sec)</label>
+        <input type="number" id="to-start" value="0" min="0" step="0.5" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.85rem"></div>
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">End (sec, 0=full)</label>
+        <input type="number" id="to-end" value="0" min="0" step="0.5" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.85rem"></div>
+    </div>
+  </div>
+  <button class="run-btn" id="textoverlay-run" disabled onclick="runTextOverlay()">Upload a video first</button>
+  <div class="progress-box" id="textoverlay-progress"><div class="progress-track"><div class="progress-fill" id="textoverlay-pfill"></div></div><div class="log" id="textoverlay-log"></div></div>
+  <div class="result-box" id="textoverlay-result"><video class="result-video" id="textoverlay-rvideo" controls></video><div class="result-stats" id="textoverlay-rstats"></div><a class="dl-btn" id="textoverlay-dl" href="#">⬇ Download Video</a></div>
+</div>
+
+<!-- ── BLUR REGION ── -->
+<div class="panel" id="panel-blur">
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🫥</span>Blur Region</div><div class="panel-sub">Blur faces or sensitive areas in your video</div></div>
+  <div class="upload-zone" id="blur-dropzone"><input type="file" id="blur-file" accept="video/*">
+    <div class="upload-zone-icon">🫥</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
+  </div>
+  <div class="recent-files-list"></div>
+  <div class="file-card" id="blur-filecard"><div class="file-card-top">
+    <div class="file-thumb"><video id="blur-thumb" muted></video></div>
+    <div class="file-meta"><div class="file-name" id="blur-fname">—</div>
+      <div class="file-stats"><div class="file-stat">Duration <span id="blur-dur">—</span></div><div class="file-stat">Size <span id="blur-size">—</span></div></div>
+    </div><button class="file-change" onclick="resetUpload('blur')">Change</button>
+  </div></div>
+  <div class="settings-card">
+    <h4>Blur Region</h4>
+    <p style="font-size:.8rem;color:var(--muted);margin-bottom:12px">Set the position and size of the blur region as % of video dimensions.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">X (left) <span id="blur-x-val" style="color:var(--accent)">25%</span></label>
+        <input type="range" id="blur-x" min="0" max="80" value="25" style="width:100%" oninput="document.getElementById('blur-x-val').textContent=this.value+'%'"></div>
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Y (top) <span id="blur-y-val" style="color:var(--accent)">25%</span></label>
+        <input type="range" id="blur-y" min="0" max="80" value="25" style="width:100%" oninput="document.getElementById('blur-y-val').textContent=this.value+'%'"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Width <span id="blur-w-val" style="color:var(--accent)">50%</span></label>
+        <input type="range" id="blur-w" min="5" max="100" value="50" style="width:100%" oninput="document.getElementById('blur-w-val').textContent=this.value+'%'"></div>
+      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Height <span id="blur-h-val" style="color:var(--accent)">50%</span></label>
+        <input type="range" id="blur-h" min="5" max="100" value="50" style="width:100%" oninput="document.getElementById('blur-h-val').textContent=this.value+'%'"></div>
+    </div>
+  </div>
+  <button class="run-btn" id="blur-run" disabled onclick="runBlur()">Upload a video first</button>
+  <div class="progress-box" id="blur-progress"><div class="progress-track"><div class="progress-fill" id="blur-pfill"></div></div><div class="log" id="blur-log"></div></div>
+  <div class="result-box" id="blur-result"><video class="result-video" id="blur-rvideo" controls></video><div class="result-stats" id="blur-rstats"></div><a class="dl-btn" id="blur-dl" href="#">⬇ Download Video</a></div>
+</div>
+
 <!-- ── TRANSCRIBE ── -->
 <div class="panel" id="panel-transcribe">
   <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text — any language</div></div>
@@ -4579,7 +5329,7 @@ function getRunLabel(p) {
   const m = {sz:'✂ AI Shorten Video',tr:'Trim Video',mt:'Stitch Segments',sp:'Change Speed',
              ro:'Rotate / Flip',cr:'Resize Video',wm:'Add Watermark',
              vl:'Adjust Volume',cm:'Compress Video',cv:'Convert Format',au:'Extract Audio',
-             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',wm:'Apply Watermark'};
+             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',wm:'Apply Watermark',gif:'Convert to GIF',bgmusic:'Add Music',textoverlay:'Apply Text',blurregion:'Blur Region'};
   return m[p] || 'Process';
 }
 
@@ -4843,6 +5593,158 @@ async function runWatermarkImage() {
   });
   if (jid) pollJob('wm', jid, 'wm-rvideo', 'wm-dl',
     s.filename.replace(/[.][^.]+$/, '') + '_watermarked.mp4');
+}
+
+let musicFileId = null;
+
+async function handleMusicUpload(file) {
+  if (!file) return;
+  const label = document.getElementById('music-label');
+  const nameEl = document.getElementById('music-name');
+  label.textContent = file.name;
+  nameEl.style.display = 'block';
+  nameEl.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch('/api/music-upload', {method:'POST', body:fd});
+  const d = await r.json();
+  if (d.file_id) {
+    musicFileId = d.file_id;
+    nameEl.textContent = '✓ ' + d.filename + ' ready';
+    nameEl.style.color = 'var(--green)';
+  } else {
+    nameEl.textContent = d.error || 'Upload failed';
+    nameEl.style.color = 'red';
+  }
+}
+
+async function runGif() {
+  const s = state['gif']; if (!s) return;
+  const fps   = parseInt(document.getElementById('gif-fps').value);
+  const width = parseInt(document.getElementById('gif-width').value);
+  const jid = await startJob('gif', {op:'gif', fps, width, out_ext:'gif'});
+  if (jid) pollJob('gif', jid, null, 'gif-dl', s.filename.replace(/[.][^.]+$/, '') + '.gif', (d) => {
+    const img = document.getElementById('gif-preview');
+    if (img && d.url) { img.src = d.url; img.style.display = 'block'; }
+    const rs = document.getElementById('gif-rstats');
+    if (rs && d.stats) rs.innerHTML = `<div class="rstat"><div class="rstat-val">${d.stats.size_mb || '—'}MB</div><div class="rstat-lbl">File Size</div></div>`;
+  });
+}
+
+async function runBgMusic() {
+  const s = state['bgmusic']; if (!s) return;
+  if (!musicFileId) { alert('Please upload a music file first.'); return; }
+  const music_vol = parseInt(document.getElementById('bgm-mvol').value) / 100;
+  const video_vol = parseInt(document.getElementById('bgm-vvol').value) / 100;
+  const jid = await startJob('bgmusic', {op:'bgmusic', music_file_id:musicFileId, music_vol, video_vol, out_ext:'mp4'});
+  if (jid) pollJob('bgmusic', jid, 'bgmusic-rvideo', 'bgmusic-dl', s.filename.replace(/[.][^.]+$/, '') + '_music.mp4');
+}
+
+async function runTextOverlay() {
+  const s = state['textoverlay']; if (!s) return;
+  const text = document.getElementById('to-text').value.trim();
+  if (!text) { alert('Please enter text first.'); return; }
+  const jid = await startJob('textoverlay', {
+    op:'textoverlay', text,
+    x_pct: parseInt(document.getElementById('to-x').value),
+    y_pct: parseInt(document.getElementById('to-y').value),
+    fontsize: parseInt(document.getElementById('to-size').value),
+    color: document.getElementById('to-color').value,
+    opacity: parseInt(document.getElementById('to-opacity').value),
+    out_ext:'mp4'
+  });
+  if (jid) pollJob('textoverlay', jid, 'textoverlay-rvideo', 'textoverlay-dl', s.filename.replace(/[.][^.]+$/, '') + '_text.mp4');
+}
+
+async function runBlurRegion() {
+  const s = state['blurregion']; if (!s) return;
+  const jid = await startJob('blurregion', {
+    op:'blurregion',
+    x_pct: parseFloat(document.getElementById('br-x').value),
+    y_pct: parseFloat(document.getElementById('br-y').value),
+    w_pct: parseFloat(document.getElementById('br-w').value),
+    h_pct: parseFloat(document.getElementById('br-h').value),
+    out_ext:'mp4'
+  });
+  if (jid) pollJob('blurregion', jid, 'blurregion-rvideo', 'blurregion-dl', s.filename.replace(/[.][^.]+$/, '') + '_blurred.mp4');
+}
+
+let musicFileId = null;
+
+async function handleMusicUpload(file) {
+  if (!file) return;
+  const label = document.getElementById('bgmusic-audio-label');
+  const nameEl = document.getElementById('bgmusic-audio-name');
+  label.textContent = file.name;
+  nameEl.style.display = 'block';
+  nameEl.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch('/api/watermark-upload', {method:'POST', body:fd});
+  const d = await r.json();
+  if (d.file_id) {
+    musicFileId = d.file_id;
+    nameEl.textContent = '✓ ' + d.filename + ' ready';
+    nameEl.style.color = 'var(--green)';
+  } else {
+    nameEl.textContent = d.error || 'Upload failed';
+    nameEl.style.color = 'red';
+  }
+}
+
+async function runGif() {
+  const s = state['gif']; if (!s) return;
+  const fps   = parseInt(document.getElementById('gif-fps').value);
+  const width = parseInt(document.getElementById('gif-width').value);
+  const jid = await startJob('gif', {op:'gif', fps, width, out_ext:'gif'});
+  if (!jid) return;
+  pollJob('gif', jid, null, 'gif-dl', s.filename.replace(/[.][^.]+$/, '') + '.gif', (d) => {
+    if (d.status === 'done') {
+      const img = document.getElementById('gif-rimg');
+      img.src = '/api/download/' + jid;
+      document.getElementById('gif-result').classList.add('show');
+    }
+  });
+}
+
+async function runBgMusic() {
+  const s = state['bgmusic']; if (!s) return;
+  if (!musicFileId) { alert('Please upload a music file first.'); return; }
+  const volume = parseInt(document.getElementById('bgmusic-vol').value) / 100;
+  const duck   = document.getElementById('bgmusic-duck').checked;
+  const jid = await startJob('bgmusic', {op:'bgmusic', music_file_id:musicFileId, volume, duck, out_ext:'mp4'});
+  if (jid) pollJob('bgmusic', jid, 'bgmusic-rvideo', 'bgmusic-dl', s.filename.replace(/[.][^.]+$/, '') + '_music.mp4');
+}
+
+async function runTextOverlay() {
+  const s = state['textoverlay']; if (!s) return;
+  const text = document.getElementById('to-text').value.trim();
+  if (!text) { alert('Please enter text first.'); return; }
+  const jid = await startJob('textoverlay', {
+    op:'text_overlay',
+    text,
+    x_pct:     parseInt(document.getElementById('to-x').value),
+    y_pct:     parseInt(document.getElementById('to-y').value),
+    fontsize_pct: parseInt(document.getElementById('to-size').value),
+    color:     document.getElementById('to-color').value,
+    start_t:   parseFloat(document.getElementById('to-start').value)||0,
+    end_t:     parseFloat(document.getElementById('to-end').value)||0,
+    out_ext:   'mp4'
+  });
+  if (jid) pollJob('textoverlay', jid, 'textoverlay-rvideo', 'textoverlay-dl', s.filename.replace(/[.][^.]+$/, '') + '_text.mp4');
+}
+
+async function runBlur() {
+  const s = state['blur']; if (!s) return;
+  const jid = await startJob('blur', {
+    op:'blur',
+    x_pct: parseInt(document.getElementById('blur-x').value),
+    y_pct: parseInt(document.getElementById('blur-y').value),
+    w_pct: parseInt(document.getElementById('blur-w').value),
+    h_pct: parseInt(document.getElementById('blur-h').value),
+    out_ext:'mp4'
+  });
+  if (jid) pollJob('blur', jid, 'blur-rvideo', 'blur-dl', s.filename.replace(/[.][^.]+$/, '') + '_blurred.mp4');
 }
 
 async function runVolume(){
@@ -5254,7 +6156,7 @@ window.pollJob = function(prefix, jobId, videoId, dlId, dlName){
   },1200);
 };
 
-['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc'].forEach(p=>setupUpload(p));
+['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blurregion'].forEach(p=>setupUpload(p));
 
 // Auto-open panel from URL param e.g. /?tool=compress
 const _urlTool = new URLSearchParams(window.location.search).get('tool');
