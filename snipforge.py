@@ -5480,14 +5480,21 @@ function setupTextPreview(prefix) {
   if (!s) return;
   const wrap  = document.getElementById('to-preview-wrap');
   const video = document.getElementById('to-preview-video');
+  const thumb = document.getElementById('textoverlay-thumb');
   if (!wrap || !video) return;
   wrap.style.display = 'block';
-  video.src = URL.createObjectURL(s.file);
+  // Use the same src as the thumb video (already loaded)
+  if (thumb && thumb.src) {
+    video.src = thumb.src;
+  }
   video.load();
   video.addEventListener('loadeddata', updateTextPreview);
-  ['to-text','to-size','to-x','to-y','to-color'].forEach(id => {
+  video.addEventListener('loadedmetadata', updateTextPreview);
+  // Also draw immediately after a short delay
+  setTimeout(updateTextPreview, 500);
+  ['to-text','to-size','to-x','to-y','to-color','to-opacity'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('input', updateTextPreview);
+    if (el) { el.removeEventListener('input', updateTextPreview); el.addEventListener('input', updateTextPreview); }
   });
 }
 
@@ -5534,14 +5541,19 @@ function setupWmPreview(prefix) {
   if (!s) return;
   const wrap  = document.getElementById('wm-preview-wrap');
   const video = document.getElementById('wm-preview-video');
+  const thumb = document.getElementById('wm-thumb');
   if (!wrap || !video) return;
   wrap.style.display = 'block';
-  video.src = URL.createObjectURL(s.file);
+  if (thumb && thumb.src) {
+    video.src = thumb.src;
+  }
   video.load();
   video.addEventListener('loadeddata', updateWmPreview);
+  video.addEventListener('loadedmetadata', updateWmPreview);
+  setTimeout(updateWmPreview, 500);
   ['wm-text','wm-fontsize','wm-position','wm-opacity'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener('input', updateWmPreview);
+    if (el) { el.removeEventListener('input', updateWmPreview); el.addEventListener('input', updateWmPreview); }
   });
 }
 
