@@ -5640,6 +5640,21 @@ async function runBgMusic() {
   if (jid) pollJob('bgmusic', jid, 'bgmusic-rvideo', 'bgmusic-dl', s.filename.replace(/[.][^.]+$/, '') + '_music.mp4');
 }
 
+async function runBlur() {
+  const s = state['blur']; if (!s) return;
+  const jid = await startJob('blur', {
+    op:'blur',
+    x_pct: parseInt(document.getElementById('blur-x').value),
+    y_pct: parseInt(document.getElementById('blur-y').value),
+    w_pct: parseInt(document.getElementById('blur-w').value),
+    h_pct: parseInt(document.getElementById('blur-h').value),
+    shape: blurShape,
+    style: blurStyle,
+    out_ext:'mp4'
+  });
+  if (jid) pollJob('blur', jid, 'blur-rvideo', 'blur-dl', s.filename.replace(/[.][^.]+$/, '') + '_blurred.mp4');
+}
+
 async function runTextOverlay() {
   const s = state['textoverlay']; if (!s) return;
   const text = document.getElementById('to-text').value.trim();
@@ -5656,18 +5671,7 @@ async function runTextOverlay() {
   if (jid) pollJob('textoverlay', jid, 'textoverlay-rvideo', 'textoverlay-dl', s.filename.replace(/[.][^.]+$/, '') + '_text.mp4');
 }
 
-async function runBlurRegion() {
-  const s = state['blurregion']; if (!s) return;
-  const jid = await startJob('blurregion', {
-    op:'blurregion',
-    x_pct: parseFloat(document.getElementById('br-x').value),
-    y_pct: parseFloat(document.getElementById('br-y').value),
-    w_pct: parseFloat(document.getElementById('br-w').value),
-    h_pct: parseFloat(document.getElementById('br-h').value),
-    out_ext:'mp4'
-  });
-  if (jid) pollJob('blurregion', jid, 'blurregion-rvideo', 'blurregion-dl', s.filename.replace(/[.][^.]+$/, '') + '_blurred.mp4');
-}
+
 
 let musicFileId = null;
 
