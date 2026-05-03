@@ -9,7 +9,7 @@ Usage:
   Open http://localhost:5000
 """
 
-import os, re, sys, json, uuid, shutil, threading, tempfile, subprocess, time, hashlib, sqlite3, datetime
+import os, re, sys, json, uuid, shutil, threading, tempfile, subprocess, time, hashlib, sqlite3, datetime, secrets
 from pathlib import Path
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -808,6 +808,11 @@ def init_db():
                 duration     REAL,
                 created_at   TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS password_resets (
+                token        TEXT PRIMARY KEY,
+                user_id      TEXT NOT NULL,
+                expires      INTEGER NOT NULL
+            );
         ''')
 
 init_db()
@@ -1301,7 +1306,6 @@ def forgot_password():
         token = secrets.token_urlsafe(32)
         expires = int(time.time()) + 3600  # 1 hour
         with get_db() as db:
-            db.execute('CREATE TABLE IF NOT EXISTS password_resets (token TEXT PRIMARY KEY, user_id INTEGER, expires INTEGER)')
             db.execute('DELETE FROM password_resets WHERE user_id=?', (user['id'],))
             db.execute('INSERT INTO password_resets VALUES (?,?,?)', (token, user['id'], expires))
         reset_url = f"{os.environ.get('APP_URL','https://snipforge.video')}/reset-password?token={token}"
@@ -1310,17 +1314,28 @@ def forgot_password():
         if smtp_host:
             try:
                 import smtplib
-                from email.mime.text import MIMEText
-                msg = MIMEText(f"Click to reset your Snipforge password:\n\n{reset_url}\n\nThis link expires in 1 hour.")
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText as _MIMEText
+                html_body = f"""<div style="font-family:sans-serif;max-width:480px;margin:40px auto;padding:32px;border:1px solid #eee;border-radius:12px">
+                <h2 style="color:#e84d1c;margin-bottom:8px">Reset your Snipforge password</h2>
+                <p style="color:#555">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+                <a href="{reset_url}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#e84d1c;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Reset Password</a>
+                <p style="color:#999;font-size:.8rem">If you didn't request this, you can safely ignore this email.</p>
+                </div>"""
+                msg = MIMEMultipart('alternative')
                 msg['Subject'] = 'Reset your Snipforge password'
-                msg['From'] = os.environ.get('SMTP_FROM','noreply@snipforge.video')
+                msg['From'] = os.environ.get('SMTP_FROM', os.environ.get('SMTP_USER','noreply@snipforge.video'))
                 msg['To'] = email
-                with smtplib.SMTP(smtp_host, int(os.environ.get('SMTP_PORT',587))) as s:
+                msg.attach(_MIMEText(f"Reset your password: {reset_url} (expires in 1 hour)", 'plain'))
+                msg.attach(_MIMEText(html_body, 'html'))
+                with smtplib.SMTP(smtp_host, int(os.environ.get('SMTP_PORT', 587)), timeout=10) as s:
+                    s.ehlo()
                     s.starttls()
                     s.login(os.environ.get('SMTP_USER',''), os.environ.get('SMTP_PASS',''))
                     s.send_message(msg)
+                print(f"[PASSWORD RESET] Email sent to {email}")
             except Exception as e:
-                print(f"Email error: {e}")
+                print(f"[PASSWORD RESET] Email error: {e} — URL: {reset_url}")
         else:
             print(f"[PASSWORD RESET] {email}: {reset_url}")
     return jsonify({"success": True, "message": "If that email exists, a reset link has been sent. Check your inbox."})
@@ -1335,13 +1350,12 @@ def reset_password():
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
     with get_db() as db:
-        db.execute('CREATE TABLE IF NOT EXISTS password_resets (token TEXT PRIMARY KEY, user_id INTEGER, expires INTEGER)')
         row = db.execute('SELECT user_id, expires FROM password_resets WHERE token=?', (token,)).fetchone()
     if not row or int(time.time()) > row['expires']:
         return jsonify({"error": "Reset link is invalid or expired"}), 400
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    hashed = generate_password_hash(password)
     with get_db() as db:
-        db.execute('UPDATE users SET password_hash=? WHERE id=?', (hashed, row['user_id']))
+        db.execute('UPDATE users SET password=? WHERE id=?', (hashed, row['user_id']))
         db.execute('DELETE FROM password_resets WHERE token=?', (token,))
     return jsonify({"success": True})
 
