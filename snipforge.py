@@ -3728,9 +3728,9 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   gap:10px;
 }
 .logo{
-  font-family:var(--cond);font-weight:900;font-size:1.25rem;
-  letter-spacing:.04em;color:var(--accent);text-transform:uppercase;
-  white-space:nowrap;
+  font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.2rem;
+  letter-spacing:-.02em;color:var(--text);text-transform:none;
+  white-space:nowrap;text-decoration:none;
 }
 .logo-dot{
   width:6px;height:6px;background:var(--accent);border-radius:50%;
