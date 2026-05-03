@@ -1310,34 +1310,41 @@ def forgot_password():
             db.execute('INSERT INTO password_resets VALUES (?,?,?)', (token, user['id'], expires))
         reset_url = f"{os.environ.get('APP_URL','https://snipforge.video')}/reset-password?token={token}"
         # Send email via simple SMTP if configured, otherwise log it
-        smtp_host = os.environ.get('SMTP_HOST','')
-        if smtp_host:
+        brevo_key = os.environ.get('BREVO_API_KEY','')
+        if brevo_key:
             try:
-                import smtplib
-                from email.mime.multipart import MIMEMultipart
-                from email.mime.text import MIMEText as _MIMEText
-                html_body = f"""<div style="font-family:sans-serif;max-width:480px;margin:40px auto;padding:32px;border:1px solid #eee;border-radius:12px">
-                <h2 style="color:#e84d1c;margin-bottom:8px">Reset your Snipforge password</h2>
-                <p style="color:#555">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
-                <a href="{reset_url}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#e84d1c;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Reset Password</a>
-                <p style="color:#999;font-size:.8rem">If you didn't request this, you can safely ignore this email.</p>
-                </div>"""
-                msg = MIMEMultipart('alternative')
-                msg['Subject'] = 'Reset your Snipforge password'
-                msg['From'] = os.environ.get('SMTP_FROM', os.environ.get('SMTP_USER','noreply@snipforge.video'))
-                msg['To'] = email
-                msg.attach(_MIMEText(f"Reset your password: {reset_url} (expires in 1 hour)", 'plain'))
-                msg.attach(_MIMEText(html_body, 'html'))
-                with smtplib.SMTP(smtp_host, int(os.environ.get('SMTP_PORT', 587)), timeout=10) as s:
-                    s.ehlo()
-                    s.starttls()
-                    s.login(os.environ.get('SMTP_USER',''), os.environ.get('SMTP_PASS',''))
-                    s.send_message(msg)
-                print(f"[PASSWORD RESET] Email sent to {email}")
+                import urllib.request as _ureq
+                from_email = os.environ.get('BREVO_FROM_EMAIL','ganvimala@gmail.com')
+                from_name  = os.environ.get('BREVO_FROM_NAME','Snipforge')
+                html_body  = f"""<div style="font-family:sans-serif;max-width:480px;margin:40px auto;padding:32px;border:1px solid #eee;border-radius:12px">
+<h2 style="color:#e84d1c;margin-bottom:8px">Reset your Snipforge password</h2>
+<p style="color:#555">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+<a href="{reset_url}" style="display:inline-block;margin:20px 0;padding:12px 28px;background:#e84d1c;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Reset Password</a>
+<p style="color:#999;font-size:.8rem">If you didn't request this, you can safely ignore this email.</p>
+</div>"""
+                payload = json.dumps({{
+                    "sender": {{"name": from_name, "email": from_email}},
+                    "to": [{{"email": email}}],
+                    "subject": "Reset your Snipforge password",
+                    "htmlContent": html_body,
+                    "textContent": f"Reset your Snipforge password: {{reset_url}} (expires in 1 hour)"
+                }}).encode()
+                req = _ureq.Request(
+                    "https://api.brevo.com/v3/smtp/email",
+                    data=payload,
+                    headers={{
+                        "api-key": brevo_key,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    }},
+                    method="POST"
+                )
+                resp = _ureq.urlopen(req, timeout=10)
+                print(f"[PASSWORD RESET] Email sent to {{email}} via Brevo")
             except Exception as e:
-                print(f"[PASSWORD RESET] Email error: {e} — URL: {reset_url}")
+                print(f"[PASSWORD RESET] Brevo error: {{e}} — URL: {{reset_url}}")
         else:
-            print(f"[PASSWORD RESET] {email}: {reset_url}")
+            print(f"[PASSWORD RESET] {{email}}: {{reset_url}}")
     return jsonify({"success": True, "message": "If that email exists, a reset link has been sent. Check your inbox."})
 
 @app.route("/reset-password", methods=["GET","POST"])
