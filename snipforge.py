@@ -2528,7 +2528,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <header class="topbar">
   <a href="/" class="logo">Snipforge</a>
   <div class="topbar-spacer"></div>
-  {% if page in ['login','register','pricing'] %}
+  {% if page in ['login','register','pricing','forgot','reset'] %}
     {% if page == 'login' %}
       <a href="/register" class="topbar-link">Register</a>
       <a href="/pricing"  class="topbar-link primary">Pricing</a>
