@@ -4862,11 +4862,11 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <input type="range" id="to-size" min="3" max="25" value="8" style="flex:1" oninput="document.getElementById('to-size-val').textContent=this.value+'%'">
     </div>
     <div class="field field-row" style="margin-bottom:10px">
-      <label>Horizontal <span id="to-x-val" style="color:var(--accent)">50%</span></label>
+      <label>X Position (left→right) <span id="to-x-val" style="color:var(--accent)">50%</span></label>
       <input type="range" id="to-x" min="0" max="100" value="50" style="flex:1" oninput="document.getElementById('to-x-val').textContent=this.value+'%'">
     </div>
     <div class="field field-row" style="margin-bottom:10px">
-      <label>Vertical <span id="to-y-val" style="color:var(--accent)">90%</span></label>
+      <label>Y Position (top→bottom) <span id="to-y-val" style="color:var(--accent)">90%</span></label>
       <input type="range" id="to-y" min="0" max="100" value="90" style="flex:1" oninput="document.getElementById('to-y-val').textContent=this.value+'%'">
     </div>
     <div class="field field-row">
