@@ -1738,7 +1738,17 @@ def api_transcribe():
             jobs[result_id]["status"]   = "done"
             jobs[result_id]["progress"] = 100
             jobs[result_id]["result"]   = str(txt_file)
-            jobs[result_id]["stats"]    = {"text": text, "language": lang, "detected_language": lang, "duration": round(dur,2), "words": orig_word_count, "burned": False}
+            # Preserve translation stats if already set, otherwise set defaults
+            existing_stats = jobs[result_id].get("stats", {})
+            jobs[result_id]["stats"] = {
+                "text": text,
+                "language": existing_stats.get("language", lang),
+                "detected_language": lang,
+                "duration": round(dur,2),
+                "words": orig_word_count,
+                "translated": existing_stats.get("translated", False),
+                "burned": False
+            }
             jobs[result_id]["log"].append(f"Done! {orig_word_count} words transcribed.")
 
             shutil.rmtree(tmpdir, ignore_errors=True)
