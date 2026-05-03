@@ -1014,7 +1014,7 @@ def too_large(e):
 def index():
     user = get_current_user()
     if not user:
-        return redirect("/login")
+        return render_template_string(LANDING_HTML)
     if 'token' not in session:
         session['token'] = str(uuid.uuid4())
     return render_template_string(HTML)
@@ -2442,6 +2442,242 @@ async function deleteHistory(id){
 </body>
 </html>"""
 
+
+
+LANDING_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snipforge — Cut · Forge · Deliver</title>
+<meta name="description" content="AI-powered video toolkit. Trim, transcribe, translate, watermark and more. No software needed.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f8f7f5;--bg2:#ffffff;--bg3:#f0eeeb;
+  --border:#e2ddd8;--text:#1a1916;--muted:#8a8780;
+  --accent:#e8420a;--accent2:#f07030;
+  --green:#1a7a3c;--mono:'DM Mono',monospace;
+  --shadow:0 2px 8px rgba(0,0,0,.08);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow-x:hidden}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 40px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);backdrop-filter:blur(20px);background:rgba(248,247,245,.92)}
+.nav-logo{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:.1em;color:var(--accent);text-decoration:none}
+.nav-links{display:flex;align-items:center;gap:8px}
+.nav-link{padding:8px 16px;border-radius:8px;font-size:.88rem;font-weight:500;text-decoration:none;color:var(--muted);transition:color .15s}
+.nav-link:hover{color:var(--text)}
+.nav-cta{padding:9px 20px;background:var(--accent);color:#fff;border-radius:8px;font-size:.88rem;font-weight:600;text-decoration:none;transition:all .15s}
+.nav-cta:hover{background:var(--accent2);transform:translateY(-1px)}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 20px 60px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(232,66,10,.08),transparent);pointer-events:none}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:rgba(232,66,10,.08);border:1px solid rgba(232,66,10,.2);border-radius:100px;font-family:var(--mono);font-size:.72rem;color:var(--accent);margin-bottom:28px;letter-spacing:.05em}
+.hero-badge::before{content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hero h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(4rem,12vw,9rem);line-height:.95;letter-spacing:.02em;margin-bottom:24px;color:var(--text)}
+.hero h1 span{color:var(--accent)}
+.hero-sub{font-size:clamp(1rem,2vw,1.2rem);color:var(--muted);max-width:560px;line-height:1.6;margin-bottom:40px;font-weight:400}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:60px}
+.btn-primary{padding:14px 32px;background:var(--accent);color:#fff;border-radius:10px;font-size:1rem;font-weight:600;text-decoration:none;transition:all .2s}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(232,66,10,.25)}
+.btn-secondary{padding:14px 32px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:10px;font-size:1rem;font-weight:500;text-decoration:none;transition:all .2s}
+.btn-secondary:hover{border-color:var(--muted)}
+.hero-stats{display:flex;gap:48px;flex-wrap:wrap;justify-content:center}
+.stat{text-align:center}
+.stat-num{font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--accent);line-height:1}
+.stat-lbl{font-size:.75rem;color:var(--muted);font-family:var(--mono);letter-spacing:.05em;margin-top:4px}
+
+/* TOOLS */
+.section{padding:100px 40px;max-width:1200px;margin:0 auto}
+.section-label{font-family:var(--mono);font-size:.72rem;letter-spacing:.15em;color:var(--accent);text-transform:uppercase;margin-bottom:16px}
+.section-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.5rem,5vw,4rem);line-height:1;margin-bottom:48px;color:var(--text)}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.tool-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px 18px;transition:all .2s;box-shadow:var(--shadow)}
+.tool-card:hover{border-color:rgba(232,66,10,.3);transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.1)}
+.tool-icon{font-size:1.6rem;margin-bottom:10px}
+.tool-name{font-weight:600;font-size:.9rem;margin-bottom:3px;color:var(--text)}
+.tool-desc{font-size:.75rem;color:var(--muted);line-height:1.5}
+.tool-badge{display:inline-block;padding:2px 7px;background:rgba(232,66,10,.1);border-radius:4px;font-family:var(--mono);font-size:.6rem;color:var(--accent);margin-top:7px}
+
+/* HOW IT WORKS */
+.how-section{padding:100px 40px;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.how-inner{max-width:1000px;margin:0 auto;text-align:center}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:48px}
+.step{padding:32px 24px;background:var(--bg);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
+.step-num{font-family:'Bebas Neue',sans-serif;font-size:3rem;color:var(--accent);opacity:.25;line-height:1;margin-bottom:12px}
+.step h3{font-size:1rem;font-weight:600;margin-bottom:8px;color:var(--text)}
+.step p{font-size:.82rem;color:var(--muted);line-height:1.6}
+
+/* PRICING */
+.pricing-section{padding:100px 40px;max-width:900px;margin:0 auto;text-align:center}
+.pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px}
+.pricing-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px 22px;box-shadow:var(--shadow)}
+.pricing-card.featured{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
+.plan-name{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.08em;margin-bottom:8px;color:var(--text)}
+.plan-price{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;color:var(--accent);line-height:1}
+.plan-price span{font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--muted);font-weight:400}
+.plan-features{list-style:none;margin:18px 0;text-align:left}
+.plan-features li{font-size:.82rem;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0}
+.plan-btn{display:block;width:100%;padding:11px;border-radius:8px;text-align:center;text-decoration:none;font-weight:600;font-size:.88rem;margin-top:18px;transition:all .2s}
+.plan-btn.free-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.plan-btn.free-btn:hover{border-color:var(--muted)}
+.plan-btn.paid-btn{background:var(--accent);color:#fff}
+.plan-btn.paid-btn:hover{background:var(--accent2)}
+
+/* FOOTER */
+footer{padding:32px 40px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--bg2)}
+.footer-logo{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:var(--accent);letter-spacing:.1em}
+.footer-links{display:flex;gap:24px}
+.footer-links a{font-size:.82rem;color:var(--muted);text-decoration:none}
+.footer-links a:hover{color:var(--text)}
+.footer-copy{font-size:.75rem;color:var(--muted);font-family:var(--mono)}
+
+@media(max-width:768px){
+  nav{padding:0 20px}
+  .section,.pricing-section{padding:60px 20px}
+  .how-section{padding:60px 20px}
+  .steps,.pricing-cards{grid-template-columns:1fr}
+  .hero-stats{gap:28px}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">Snipforge</a>
+  <div class="nav-links">
+    <a href="/pricing" class="nav-link">Pricing</a>
+    <a href="/login" class="nav-link">Login</a>
+    <a href="/register" class="nav-cta">Start Free →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
+  <h1>Cut.<span> Forge.</span><br>Deliver.</h1>
+  <p class="hero-sub">Trim, transcribe, translate, watermark and compress your videos — right in your browser. No software. No limits.</p>
+  <div class="hero-actions">
+    <a href="/register" class="btn-primary">Start for Free</a>
+    <a href="/pricing" class="btn-secondary">View Pricing</a>
+  </div>
+  <div class="hero-stats">
+    <div class="stat"><div class="stat-num">14</div><div class="stat-lbl">Video Tools</div></div>
+    <div class="stat"><div class="stat-num">20</div><div class="stat-lbl">Languages</div></div>
+    <div class="stat"><div class="stat-num">AI</div><div class="stat-lbl">Transcription</div></div>
+    <div class="stat"><div class="stat-num">$5</div><div class="stat-lbl">Pro / Month</div></div>
+  </div>
+</section>
+
+<!-- TOOLS -->
+<div style="background:var(--bg);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:100px 40px">
+<div class="section" style="padding:0">
+  <div class="section-label">Everything you need</div>
+  <div class="section-title">14 Professional<br>Video Tools</div>
+  <div class="tools-grid">
+    <div class="tool-card"><div class="tool-icon">✂️</div><div class="tool-name">AI Shorten</div><div class="tool-desc">Remove silences automatically</div><div class="tool-badge">AI</div></div>
+    <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact timestamps</div></div>
+    <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Change playback speed</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation</div></div>
+    <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize</div><div class="tool-desc">Crop for any social platform</div></div>
+    <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with text</div></div>
+    <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips together</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI</div></div>
+    <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size fast</div></div>
+    <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels</div></div>
+    <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull audio from any video</div></div>
+    <div class="tool-card"><div class="tool-icon">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove audio track</div></div>
+    <div class="tool-card"><div class="tool-icon">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background noise</div><div class="tool-badge">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">📝</div><div class="tool-name">AI Transcribe</div><div class="tool-desc">20 languages, instant results</div><div class="tool-badge">AI</div></div>
+  </div>
+</div>
+</div>
+
+<!-- HOW IT WORKS -->
+<div class="how-section">
+  <div class="how-inner">
+    <div class="section-label">Simple workflow</div>
+    <div class="section-title" style="margin-bottom:0">How It Works</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h3>Upload Your Video</h3>
+        <p>Drag & drop any MP4, MOV, WebM or AVI file up to 500MB. No account needed to try.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h3>Choose Your Tool</h3>
+        <p>Pick from 14 professional tools. Adjust settings and hit process — we handle the rest.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h3>Download & Share</h3>
+        <p>Your processed video is ready in seconds. Download it or share with a link.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PRICING -->
+<div class="pricing-section">
+  <div class="section-label">Simple pricing</div>
+  <div class="section-title">Start Free,<br>Scale When Ready</div>
+  <div class="pricing-cards">
+    <div class="pricing-card">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">$0<span>/mo</span></div>
+      <ul class="plan-features">
+        <li>3 videos per month</li>
+        <li>Max 5 min per video</li>
+        <li>All 14 tools</li>
+      </ul>
+      <a href="/register" class="plan-btn free-btn">Get Started</a>
+    </div>
+    <div class="pricing-card featured">
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">$5<span>/mo</span></div>
+      <ul class="plan-features">
+        <li>Unlimited videos</li>
+        <li>Any duration</li>
+        <li>AI Transcription</li>
+        <li>Priority processing</li>
+      </ul>
+      <a href="/pricing" class="plan-btn paid-btn">Get Pro</a>
+    </div>
+    <div class="pricing-card">
+      <div class="plan-name">Team</div>
+      <div class="plan-price">$15<span>/mo</span></div>
+      <ul class="plan-features">
+        <li>Everything in Pro</li>
+        <li>5 team seats</li>
+        <li>Shared workspace</li>
+        <li>Priority support</li>
+      </ul>
+      <a href="/pricing" class="plan-btn paid-btn">Get Team</a>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Snipforge</div>
+  <div class="footer-links">
+    <a href="/pricing">Pricing</a>
+    <a href="/login">Login</a>
+    <a href="/register">Sign Up</a>
+  </div>
+  <div class="footer-copy">© 2026 Snipforge. All rights reserved.</div>
+</footer>
+
+</body>
+</html>"""
 
 AUTH_HTML = r"""<!DOCTYPE html>
 <html lang="en">
