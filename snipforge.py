@@ -4197,24 +4197,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
   <div class="nav-section">Create</div>
   <div class="nav-item" data-panel="gif" onclick="switchPanel(this)">
-    <span class="nav-icon">🎞️</span>
-    <span class="nav-full">Video to GIF</span><span class="nav-short">GIF</span>
-  </div>
-  <div class="nav-item" data-panel="bgmusic" onclick="switchPanel(this)">
-    <span class="nav-icon">🎵</span>
-    <span class="nav-full">Add Music</span><span class="nav-short">Music</span>
-  </div>
-  <div class="nav-item" data-panel="textoverlay" onclick="switchPanel(this)">
-    <span class="nav-icon">✏️</span>
-    <span class="nav-full">Text Overlay</span><span class="nav-short">Text</span>
-  </div>
-  <div class="nav-item" data-panel="blurregion" onclick="switchPanel(this)">
-    <span class="nav-icon">🔲</span>
-    <span class="nav-full">Blur Region</span><span class="nav-short">Blur</span>
-  </div>
-
-  <div class="nav-section">Create</div>
-  <div class="nav-item" data-panel="gif" onclick="switchPanel(this)">
     <span class="nav-icon">🎞</span>
     <span class="nav-full">Video to GIF</span><span class="nav-short">GIF</span>
   </div>
@@ -4892,163 +4874,10 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 </div>
 
 <!-- ── BLUR REGION ── -->
-<div class="panel" id="panel-blurregion">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🔲</span>Blur Region</div><div class="panel-sub">Blur faces, screens or any area in your video</div></div>
-  <div class="upload-zone" id="blurregion-dropzone"><input type="file" id="blurregion-file" accept="video/*">
-    <div class="upload-zone-icon">🔲</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
-  </div>
-  <div class="recent-files-list"></div>
-  <div class="file-card" id="blurregion-filecard"><div class="file-card-top">
-    <div class="file-thumb"><video id="blurregion-thumb" muted></video></div>
-    <div class="file-meta"><div class="file-name" id="blurregion-fname">—</div>
-      <div class="file-stats"><div class="file-stat">Duration <span id="blurregion-dur">—</span></div><div class="file-stat">Size <span id="blurregion-size">—</span></div></div>
-    </div>
-    <button class="file-change" onclick="resetUpload('blurregion')">Change</button>
-  </div></div>
-  <div class="settings-card">
-    <h4>Blur Area (% of video)</h4>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Left <span id="br-x-val" style="color:var(--accent)">25%</span></label>
-      <input type="range" id="br-x" min="0" max="90" value="25" style="flex:1" oninput="document.getElementById('br-x-val').textContent=this.value+'%'">
-    </div>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Top <span id="br-y-val" style="color:var(--accent)">25%</span></label>
-      <input type="range" id="br-y" min="0" max="90" value="25" style="flex:1" oninput="document.getElementById('br-y-val').textContent=this.value+'%'">
-    </div>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Width <span id="br-w-val" style="color:var(--accent)">50%</span></label>
-      <input type="range" id="br-w" min="5" max="100" value="50" style="flex:1" oninput="document.getElementById('br-w-val').textContent=this.value+'%'">
-    </div>
-    <div class="field field-row">
-      <label>Height <span id="br-h-val" style="color:var(--accent)">50%</span></label>
-      <input type="range" id="br-h" min="5" max="100" value="50" style="flex:1" oninput="document.getElementById('br-h-val').textContent=this.value+'%'">
-    </div>
-  </div>
-  <button class="run-btn" id="blurregion-run" disabled onclick="runBlurRegion()">Upload a video first</button>
-  <div class="progress-box" id="blurregion-progress"><div class="progress-track"><div class="progress-fill" id="blurregion-pfill"></div></div><div class="log" id="blurregion-log"></div></div>
-  <div class="result-box" id="blurregion-result"><video class="result-video" id="blurregion-rvideo" controls></video><div class="result-stats" id="blurregion-rstats"></div><a class="dl-btn" id="blurregion-dl" href="#">⬇ Download Video</a></div>
-</div>
 
-<!-- ── VIDEO TO GIF ── -->
-<div class="panel" id="panel-gif">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF</div></div>
-  <div class="upload-zone" id="gif-dropzone"><input type="file" id="gif-file" accept="video/*">
-    <div class="upload-zone-icon">🎞</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
-  </div>
-  <div class="recent-files-list"></div>
-  <div class="file-card" id="gif-filecard"><div class="file-card-top">
-    <div class="file-thumb"><video id="gif-thumb" muted></video></div>
-    <div class="file-meta"><div class="file-name" id="gif-fname">—</div>
-      <div class="file-stats"><div class="file-stat">Duration <span id="gif-dur">—</span></div><div class="file-stat">Size <span id="gif-size">—</span></div></div>
-    </div><button class="file-change" onclick="resetUpload('gif')">Change</button>
-  </div></div>
-  <div class="settings-card">
-    <h4>GIF Settings</h4>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Frame Rate <span id="gif-fps-val" style="color:var(--accent)">10 fps</span></label>
-      <input type="range" id="gif-fps" min="5" max="30" value="10" style="flex:1" oninput="document.getElementById('gif-fps-val').textContent=this.value+' fps'">
-    </div>
-    <div class="field field-row">
-      <label>Width <span id="gif-width-val" style="color:var(--accent)">480px</span></label>
-      <input type="range" id="gif-width" min="240" max="960" value="480" step="40" style="flex:1" oninput="document.getElementById('gif-width-val').textContent=this.value+'px'">
-    </div>
-  </div>
-  <button class="run-btn" id="gif-run" disabled onclick="runGif()">Upload a video first</button>
-  <div class="progress-box" id="gif-progress"><div class="progress-track"><div class="progress-fill" id="gif-pfill"></div></div><div class="log" id="gif-log"></div></div>
-  <div class="result-box" id="gif-result">
-    <img id="gif-rimg" style="max-width:100%;border-radius:8px;margin-bottom:12px" src="" alt="">
-    <div class="result-stats" id="gif-rstats"></div>
-    <a class="dl-btn" id="gif-dl" href="#">⬇ Download GIF</a>
-  </div>
-</div>
 
-<!-- ── BACKGROUND MUSIC ── -->
-<div class="panel" id="panel-bgmusic">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎵</span>Background Music</div><div class="panel-sub">Mix background music into your video</div></div>
-  <div class="upload-zone" id="bgmusic-dropzone"><input type="file" id="bgmusic-file" accept="video/*">
-    <div class="upload-zone-icon">🎬</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
-  </div>
-  <div class="recent-files-list"></div>
-  <div class="file-card" id="bgmusic-filecard"><div class="file-card-top">
-    <div class="file-thumb"><video id="bgmusic-thumb" muted></video></div>
-    <div class="file-meta"><div class="file-name" id="bgmusic-fname">—</div>
-      <div class="file-stats"><div class="file-stat">Duration <span id="bgmusic-dur">—</span></div><div class="file-stat">Size <span id="bgmusic-size">—</span></div></div>
-    </div><button class="file-change" onclick="resetUpload('bgmusic')">Change</button>
-  </div></div>
-  <div class="settings-card">
-    <h4>Music File</h4>
-    <div style="border:2px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer" onclick="document.getElementById('bgmusic-audio-input').click()">
-      <input type="file" id="bgmusic-audio-input" accept="audio/*,.mp3,.wav,.aac,.m4a,.ogg" style="display:none" onchange="handleMusicUpload(this.files[0])">
-      <div id="bgmusic-audio-label" style="font-size:.85rem;color:var(--muted)">🎵 Click to upload MP3 / WAV / M4A</div>
-    </div>
-    <div id="bgmusic-audio-name" style="font-family:var(--mono);font-size:.65rem;color:var(--green);margin-top:6px;display:none"></div>
-    <div class="field field-row" style="margin-top:12px;margin-bottom:10px">
-      <label>Music Volume <span id="bgmusic-vol-val" style="color:var(--accent)">50%</span></label>
-      <input type="range" id="bgmusic-vol" min="10" max="100" value="50" style="flex:1" oninput="document.getElementById('bgmusic-vol-val').textContent=this.value+'%'">
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg3);border-radius:8px">
-      <div><div style="font-size:.88rem;font-weight:600">Duck original audio</div><div style="font-size:.75rem;color:var(--muted)">Lower video volume when music plays</div></div>
-      <label class="toggle"><input type="checkbox" id="bgmusic-duck" checked><span class="toggle-slider"></span></label>
-    </div>
-  </div>
-  <button class="run-btn" id="bgmusic-run" disabled onclick="runBgMusic()">Upload a video first</button>
-  <div class="progress-box" id="bgmusic-progress"><div class="progress-track"><div class="progress-fill" id="bgmusic-pfill"></div></div><div class="log" id="bgmusic-log"></div></div>
-  <div class="result-box" id="bgmusic-result"><video class="result-video" id="bgmusic-rvideo" controls></video><div class="result-stats" id="bgmusic-rstats"></div><a class="dl-btn" id="bgmusic-dl" href="#">⬇ Download Video</a></div>
-</div>
 
-<!-- ── TEXT OVERLAY ── -->
-<div class="panel" id="panel-textoverlay">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">✍️</span>Text Overlay</div><div class="panel-sub">Add text to your video at any position</div></div>
-  <div class="upload-zone" id="textoverlay-dropzone"><input type="file" id="textoverlay-file" accept="video/*">
-    <div class="upload-zone-icon">✍️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
-  </div>
-  <div class="recent-files-list"></div>
-  <div class="file-card" id="textoverlay-filecard"><div class="file-card-top">
-    <div class="file-thumb"><video id="textoverlay-thumb" muted></video></div>
-    <div class="file-meta"><div class="file-name" id="textoverlay-fname">—</div>
-      <div class="file-stats"><div class="file-stat">Duration <span id="textoverlay-dur">—</span></div><div class="file-stat">Size <span id="textoverlay-size">—</span></div></div>
-    </div><button class="file-change" onclick="resetUpload('textoverlay')">Change</button>
-  </div></div>
-  <div class="settings-card">
-    <h4>Text Settings</h4>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Text</label>
-      <input type="text" id="to-text" placeholder="Your text here..." maxlength="100" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.88rem">
-    </div>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Color</label>
-      <select id="to-color" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg3);color:var(--text);font-size:.85rem">
-        <option value="white">White</option>
-        <option value="yellow">Yellow</option>
-        <option value="black">Black</option>
-        <option value="red">Red</option>
-        <option value="blue">Blue</option>
-        <option value="green">Green</option>
-      </select>
-    </div>
-    <div class="field field-row" style="margin-bottom:10px">
-      <label>Size <span id="to-size-val" style="color:var(--accent)">5%</span></label>
-      <input type="range" id="to-size" min="2" max="20" value="5" style="flex:1" oninput="document.getElementById('to-size-val').textContent=this.value+'%'">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">X Position <span id="to-x-val" style="color:var(--accent)">50%</span></label>
-        <input type="range" id="to-x" min="0" max="90" value="50" style="width:100%" oninput="document.getElementById('to-x-val').textContent=this.value+'%'"></div>
-      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Y Position <span id="to-y-val" style="color:var(--accent)">50%</span></label>
-        <input type="range" id="to-y" min="0" max="90" value="50" style="width:100%" oninput="document.getElementById('to-y-val').textContent=this.value+'%'"></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">Start (sec)</label>
-        <input type="number" id="to-start" value="0" min="0" step="0.5" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.85rem"></div>
-      <div><label style="font-size:.78rem;color:var(--muted);display:block;margin-bottom:4px">End (sec, 0=full)</label>
-        <input type="number" id="to-end" value="0" min="0" step="0.5" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);color:var(--text);font-size:.85rem"></div>
-    </div>
-  </div>
-  <button class="run-btn" id="textoverlay-run" disabled onclick="runTextOverlay()">Upload a video first</button>
-  <div class="progress-box" id="textoverlay-progress"><div class="progress-track"><div class="progress-fill" id="textoverlay-pfill"></div></div><div class="log" id="textoverlay-log"></div></div>
-  <div class="result-box" id="textoverlay-result"><video class="result-video" id="textoverlay-rvideo" controls></video><div class="result-stats" id="textoverlay-rstats"></div><a class="dl-btn" id="textoverlay-dl" href="#">⬇ Download Video</a></div>
-</div>
 
-<!-- ── BLUR REGION ── -->
 <div class="panel" id="panel-blur">
   <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🫥</span>Blur Region</div><div class="panel-sub">Blur faces or sensitive areas in your video</div></div>
   <div class="upload-zone" id="blur-dropzone"><input type="file" id="blur-file" accept="video/*">
@@ -5329,7 +5158,7 @@ function getRunLabel(p) {
   const m = {sz:'✂ AI Shorten Video',tr:'Trim Video',mt:'Stitch Segments',sp:'Change Speed',
              ro:'Rotate / Flip',cr:'Resize Video',wm:'Add Watermark',
              vl:'Adjust Volume',cm:'Compress Video',cv:'Convert Format',au:'Extract Audio',
-             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',wm:'Apply Watermark',gif:'Convert to GIF',bgmusic:'Add Music',textoverlay:'Apply Text',blurregion:'Blur Region'};
+             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',wm:'Apply Watermark',gif:'Convert to GIF',bgmusic:'Add Music',textoverlay:'Apply Text',blur:'Blur Region'};
   return m[p] || 'Process';
 }
 
@@ -6156,7 +5985,7 @@ window.pollJob = function(prefix, jobId, videoId, dlId, dlName){
   },1200);
 };
 
-['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blurregion'].forEach(p=>setupUpload(p));
+['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay'].forEach(p=>setupUpload(p));
 
 // Auto-open panel from URL param e.g. /?tool=compress
 const _urlTool = new URLSearchParams(window.location.search).get('tool');
