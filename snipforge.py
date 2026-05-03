@@ -2575,6 +2575,67 @@ async function doLogin(){
 document.addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 </script>
 
+{% elif page == 'forgot' %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-title">Reset password</div>
+    <div class="auth-sub">Enter your email and we'll send a reset link</div>
+    <div class="err-box" id="err"></div>
+    <div class="success-box" id="succ" style="display:none;padding:12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;color:#2e7d32;font-size:.88rem;margin-bottom:12px;text-align:center"></div>
+    <div class="field"><label>Email</label><input type="email" id="email" placeholder="you@example.com" autocomplete="email"></div>
+    <button class="submit-btn" onclick="doForgot()">Send Reset Link</button>
+    <div class="auth-footer"><a href="/login">← Back to sign in</a></div>
+  </div>
+</div>
+<script>
+async function doForgot(){
+  const btn=document.querySelector('.submit-btn');
+  btn.disabled=true; btn.textContent='Sending…';
+  const r=await fetch('/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:document.getElementById('email').value})});
+  const d=await r.json();
+  if(d.success){
+    document.getElementById('succ').textContent=d.message;
+    document.getElementById('succ').style.display='block';
+    document.getElementById('err').classList.remove('show');
+    btn.textContent='Sent!';
+  } else {
+    const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');
+    btn.disabled=false;btn.textContent='Send Reset Link';
+  }
+}
+document.addEventListener('keydown',e=>{if(e.key==='Enter')doForgot();});
+</script>
+
+{% elif page == 'reset' %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-title">Set new password</div>
+    <div class="auth-sub">Choose a strong password for your account</div>
+    <div class="err-box" id="err"></div>
+    <div class="field"><label>New Password</label><input type="password" id="password" placeholder="Min 8 characters" autocomplete="new-password"></div>
+    <div class="field"><label>Confirm Password</label><input type="password" id="password2" placeholder="Repeat password" autocomplete="new-password"></div>
+    <button class="submit-btn" onclick="doReset()">Set New Password</button>
+    <div class="auth-footer"><a href="/login">← Back to sign in</a></div>
+  </div>
+</div>
+<script>
+async function doReset(){
+  const p=document.getElementById('password').value;
+  const p2=document.getElementById('password2').value;
+  if(p!==p2){const e=document.getElementById('err');e.textContent='Passwords do not match';e.classList.add('show');return;}
+  if(p.length<8){const e=document.getElementById('err');e.textContent='Min 8 characters';e.classList.add('show');return;}
+  const btn=document.querySelector('.submit-btn');
+  btn.disabled=true;btn.textContent='Saving…';
+  const token=new URLSearchParams(window.location.search).get('token');
+  const r=await fetch('/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token,password:p})});
+  const d=await r.json();
+  if(d.success){window.location='/login?msg=Password+updated+successfully';}
+  else{const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');btn.disabled=false;btn.textContent='Set New Password';}
+}
+</script>
+
 {% elif page == 'register' %}
 <div class="auth-wrap">
   <div class="auth-card">
