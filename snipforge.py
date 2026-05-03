@@ -198,28 +198,20 @@ def op_crop(jid, src, dst, preset):
     except Exception as e: fail(jid,e)
 
 def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
-    """Render watermark text with Pillow, composite onto every frame via pipe."""
+    """Render watermark text with Pillow, composite onto video using PNG overlay."""
     try:
         prog(jid, "Rendering watermark...", 10)
         safe_text = (text or "Watermark").strip()[:60]
 
         tmp_in  = os.path.join(tempfile.gettempdir(), f"snip_wm_in_{jid}.mp4")
         tmp_out = os.path.join(tempfile.gettempdir(), f"snip_wm_out_{jid}.mp4")
+        wm_png  = os.path.join(tempfile.gettempdir(), f"snip_wm_{jid}.png")
         shutil.copy2(str(src), tmp_in)
 
         info = get_info(tmp_in)
         vs   = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"), {})
-        orig_w = int(vs.get("width",  1280) or 1280)
-        orig_h = int(vs.get("height",  720) or 720)
-        # Cap at 854x480 to keep raw file manageable on Railway
-        scale_r = min(1.0, 854 / orig_w, 480 / orig_h)
-        vid_w = int(orig_w * scale_r) & ~1
-        vid_h = int(orig_h * scale_r) & ~1
-        fps_raw = vs.get("r_frame_rate","25/1")
-        try:
-            num,den = fps_raw.split("/"); fps = round(float(num)/float(den),3)
-        except: fps = 25.0
-        fps = max(1.0, min(fps, 60.0))
+        vid_w = int(vs.get("width",  1280) or 1280)
+        vid_h = int(vs.get("height",  720) or 720)
 
         try:
             from PIL import Image, ImageDraw, ImageFont
@@ -227,34 +219,25 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
             subprocess.run(["pip","install","Pillow","--break-system-packages","-q"], capture_output=True)
             from PIL import Image, ImageDraw, ImageFont
 
-        # Font size: user value is a % of video width (more intuitive than px)
-        # fontsize slider 1-30 means 1%-30% of video width
         size_pct = max(3, min(30, int(fontsize)))
         fsize = max(20, int(vid_w * size_pct / 100))
-        prog(jid, f"Video: {vid_w}x{vid_h}, font size: {fsize}px ({size_pct}% of width)", 15)
+        prog(jid, f"Font size: {fsize}px ({size_pct}% of {vid_w}px)", 15)
 
-        # Load font — try system paths first, fall back to embedded font
-        import io as _io
+        import io as _io, base64 as _b64
         font = None
         for fp in [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-            "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
         ]:
             if os.path.exists(fp):
                 try: font = ImageFont.truetype(fp, fsize); break
                 except: pass
         if font is None:
-            # Use embedded LiberationSans-Bold (always available, no install needed)
-            import base64 as _b64
             font_bytes = _b64.b64decode(_EMBEDDED_FONT_B64)
             font = ImageFont.truetype(_io.BytesIO(font_bytes), fsize)
-        prog(jid, f"Font ready @ {fsize}px", 18)
 
-        # Measure and render watermark as RGBA patch
-        dummy = Image.new("RGBA",(1,1))
+        # Render watermark as PNG with transparency
+        dummy = Image.new("RGBA", (1,1))
         bb = ImageDraw.Draw(dummy).textbbox((0,0), safe_text, font=font)
         tw, th = bb[2]-bb[0], bb[3]-bb[1]
         pad = max(8, fsize // 3)
@@ -266,7 +249,9 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
         tx_alpha = int(255 * op_val / 100)
         draw.rectangle([0,0,wm_w-1,wm_h-1], fill=(0,0,0,bg_alpha))
         draw.text((pad,pad), safe_text, font=font, fill=(255,255,255,tx_alpha))
-        prog(jid, f"Watermark patch: {wm_w}x{wm_h}px", 20)
+        wm_img.save(wm_png, "PNG")
+
+        prog(jid, f"Watermark image: {wm_w}x{wm_h}px", 20)
 
         # Position
         margin = max(20, int(vid_w * 0.02))
@@ -279,58 +264,33 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
         }
         x_pos, y_pos = pos_map.get(position, pos_map["bottom-right"])
 
-        prog(jid, "Decoding video frames...", 30)
+        prog(jid, "Applying watermark to video...", 50)
 
-        # Decode to temp raw file first to avoid pipe deadlock
-        raw_wm = os.path.join(tempfile.gettempdir(), f"snip_wm_raw_{jid}.bin")
-        subprocess.run(
-            [_FFMPEG_EXE, "-y", "-i", tmp_in,
-             "-f","rawvideo","-pix_fmt","rgb24",
-             "-vf", f"scale={vid_w}:{vid_h}",
-             raw_wm],
-            capture_output=True)
+        # Use FFmpeg overlay with PNG — simple, no frame pipe, no disk issues
+        _, err, rc = run([_FFMPEG_EXE, "-y",
+            "-i", tmp_in,
+            "-i", wm_png,
+            "-filter_complex",
+            f"[1:v]format=rgba[wm];[0:v][wm]overlay={x_pos}:{y_pos}[vout]",
+            "-map", "[vout]", "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy", "-movflags", "+faststart",
+            tmp_out])
 
-        prog(jid, "Compositing watermark frames...", 50)
-
-        enc = subprocess.Popen(
-            [_FFMPEG_EXE, "-y",
-             "-f","rawvideo","-pix_fmt","rgba",
-             "-s",f"{vid_w}x{vid_h}","-r",str(fps),"-i","pipe:0",
-             "-i", tmp_in,
-             "-map","0:v","-map","1:a?",
-             "-c:v","libx264","-preset","fast","-crf","20",
-             "-pix_fmt","yuv420p","-c:a","copy",
-             "-movflags","+faststart",
-             tmp_out],
-            stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-        frame_size = vid_w * vid_h * 3  # RGB24
-        n = 0
-        with open(raw_wm, "rb") as rf:
-            while True:
-                raw = rf.read(frame_size)
-                if len(raw) < frame_size: break
-                frame = Image.frombytes("RGB", (vid_w, vid_h), raw)
-                frame.paste(wm_img, (x_pos, y_pos), wm_img)
-                enc.stdin.write(frame.tobytes())
-                n += 1
-                if n % 60 == 0:
-                    jobs[jid]["progress"] = min(90, 50 + n//20)
-
-        enc.stdin.close()
-        enc.wait()
-        for f_ in [tmp_in, raw_wm]:
+        for f_ in [tmp_in, wm_png]:
             try: os.unlink(f_)
             except: pass
 
-        if not os.path.exists(tmp_out) or os.path.getsize(tmp_out) < 1000:
-            raise RuntimeError(f"Output empty after {n} frames processed")
+        if rc != 0:
+            raise RuntimeError("Watermark failed: " + err[-300:])
 
         shutil.move(tmp_out, str(dst))
-        prog(jid, f"Done! Watermark applied.", 100)
-        done(jid, dst, {"frames": n})
+        prog(jid, "Done! Watermark applied.", 100)
+        done(jid, dst, {})
     except Exception as e:
         fail(jid, e)
+
 def op_stabilize(jid, src, dst):
     try:
         prog(jid,"Analysing shake…",10)
