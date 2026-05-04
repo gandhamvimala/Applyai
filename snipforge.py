@@ -3956,7 +3956,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .preset-btn.active{border-color:var(--accent);background:rgba(232,66,10,.06);color:var(--accent)}
 .preset-btn.blue:hover,.preset-btn.blue.active{border-color:var(--blue);background:var(--blue-bg);color:var(--blue)}
 .preset-btn.green:hover,.preset-btn.green.active{border-color:var(--green);background:var(--green-bg);color:var(--green)}
-.preset-val{font-family:var(--cond);font-size:.9rem;font-weight:800;display:block;text-transform:uppercase}
+.preset-val{font-family:'Inter',sans-serif;font-size:.9rem;font-weight:700;display:block;text-transform:none}
 .preset-desc{font-family:var(--mono);font-size:.56rem;color:var(--muted);display:block;margin-top:3px}
 
 /* segments */
@@ -4007,11 +4007,11 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 
 /* run button */
 .run-btn{
-  width:100%;padding:14px;
+  width:100%;padding:13px;
   background:var(--accent);color:#fff;border:none;
-  border-radius:var(--radius-lg);
-  font-family:var(--cond);font-size:1rem;font-weight:800;
-  letter-spacing:.1em;text-transform:uppercase;
+  border-radius:10px;
+  font-family:'Inter',sans-serif;font-size:.95rem;font-weight:700;
+  letter-spacing:-.01em;text-transform:none;
   cursor:pointer;transition:all .15s;
   box-shadow:0 2px 10px rgba(232,66,10,.2);
   position:relative;overflow:hidden;
