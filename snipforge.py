@@ -4187,7 +4187,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 
 @media(max-width:768px){
   /* Layout */
-  .app{grid-template-columns:1fr;grid-template-rows:56px 1fr;max-height:none;overflow:visible}
+  .app{display:block;max-height:none;overflow:visible}
+  .topbar{position:sticky;top:0;z-index:100}
   .main{padding:16px 14px 120px;height:auto;overflow-y:visible}
   .panel-header{scroll-margin-top:68px}
 
@@ -4208,6 +4209,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
     scrollbar-width:none;
     background:var(--bg2);
     box-shadow:0 -2px 8px rgba(0,0,0,.06);
+    /* Remove from grid flow so it doesn't push .main down */
+    grid-row:unset;grid-column:unset;
   }
   .sidebar::-webkit-scrollbar{display:none}
   .nav-section{display:none}
