@@ -1320,6 +1320,24 @@ def init_db():
                 user_id      TEXT NOT NULL,
                 expires      INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS promo_codes (
+                code         TEXT PRIMARY KEY,
+                plan         TEXT DEFAULT 'pro',
+                days         INTEGER DEFAULT 30,
+                max_uses     INTEGER DEFAULT 9999,
+                uses         INTEGER DEFAULT 0,
+                active       INTEGER DEFAULT 1,
+                created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS promo_redemptions (
+                id           TEXT PRIMARY KEY,
+                user_id      TEXT NOT NULL,
+                code         TEXT NOT NULL,
+                expires_at   TEXT NOT NULL,
+                created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT OR IGNORE INTO promo_codes (code, plan, days, max_uses) VALUES ('LAUNCH', 'pro', 30, 9999);
+            INSERT OR IGNORE INTO promo_codes (code, plan, days, max_uses) VALUES ('PRODUCTHUNT', 'pro', 30, 9999);
         ''')
 
 init_db()
@@ -1355,10 +1373,55 @@ def create_session(user_id):
                    (token, user_id, expires))
     return token
 
+def redeem_promo(user_id, code):
+    """Redeem a promo code for a user. Returns (success, message)."""
+    code = code.strip().upper()
+    with get_db() as db:
+        # Check code exists and is active
+        row = db.execute(
+            'SELECT * FROM promo_codes WHERE code=? AND active=1', (code,)
+        ).fetchone()
+        if not row:
+            return False, "Invalid or expired promo code"
+        row = dict(row)
+        if row['uses'] >= row['max_uses']:
+            return False, "This promo code has reached its limit"
+        # Check not already redeemed by this user
+        existing = db.execute(
+            'SELECT * FROM promo_redemptions WHERE user_id=? AND code=?',
+            (user_id, code)
+        ).fetchone()
+        if existing:
+            return False, "You've already used this promo code"
+        # Apply
+        expires_at = (datetime.datetime.utcnow() +
+                      datetime.timedelta(days=row['days'])).isoformat()
+        db.execute(
+            'INSERT INTO promo_redemptions (id, user_id, code, expires_at) VALUES (?,?,?,?)',
+            (str(uuid.uuid4())[:8], user_id, code, expires_at)
+        )
+        db.execute('UPDATE promo_codes SET uses=uses+1 WHERE code=?', (code,))
+        db.execute('UPDATE users SET plan=? WHERE id=?', (row['plan'], user_id))
+    return True, f"🎉 Promo applied! You have {row['days']} days of {row['plan'].title()} access."
+
+
+def get_active_promo(user_id):
+    """Return active promo redemption for user if any."""
+    with get_db() as db:
+        row = db.execute(
+            'SELECT * FROM promo_redemptions WHERE user_id=? AND expires_at > ? ORDER BY expires_at DESC LIMIT 1',
+            (user_id, datetime.datetime.utcnow().isoformat())
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def check_plan_limit(user):
     if TEST_MODE:
         return True, None  # bypass plan limits for automated testing
-    plan = PLANS.get(user['plan'], PLANS['free'])
+    # Check if user has active promo — treat as pro
+    promo = get_active_promo(user['id'])
+    effective_plan = 'pro' if promo else user['plan']
+    plan = PLANS.get(effective_plan, PLANS['free'])
     now_month = datetime.datetime.utcnow().strftime('%Y-%m')
     if user.get('month_reset') != now_month:
         with get_db() as db:
@@ -2478,6 +2541,19 @@ def api_my_transcriptions():
             (user["id"],)
         ).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/redeem-promo", methods=["POST"])
+@login_required
+def api_redeem_promo():
+    user = get_current_user()
+    code = (request.get_json(silent=True) or {}).get("code", "").strip()
+    if not code:
+        return jsonify({"error": "Enter a promo code"}), 400
+    success, msg = redeem_promo(user["id"], code)
+    if success:
+        return jsonify({"success": True, "message": msg})
+    return jsonify({"error": msg}), 400
 
 
 @app.route("/api/download-zip/<jid>")
@@ -4109,6 +4185,10 @@ async function doRegister(){
     </div>
   </div>
 </div>
+<!-- Promo code on pricing page -->
+<div style="max-width:400px;margin:0 auto 40px;padding:0 24px;text-align:center">
+  <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Have a promo code? Apply it on your <a href="/account" style="color:var(--accent);text-decoration:none;font-weight:600">account page</a> after signing up.</div>
+</div>
 <script>
 let _billing='monthly';
 function toggleBilling(){
@@ -4189,7 +4269,37 @@ async function checkout(plan){
         <button class="danger-btn" onclick="cancelSub()">Cancel Plan</button>
       {% endif %}
     </div>
+    <!-- Promo Code -->
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:.82rem;color:var(--muted);margin-bottom:8px;font-weight:600">Have a promo code?</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="promo-input" placeholder="Enter code e.g. LAUNCH"
+          style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-family:var(--mono);font-size:.85rem;text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase()">
+        <button onclick="redeemPromo()"
+          style="padding:9px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;white-space:nowrap">
+          Apply
+        </button>
+      </div>
+      <div id="promo-msg" style="margin-top:8px;font-size:.82rem;display:none"></div>
+    </div>
   </div>
+  <script>
+  async function redeemPromo(){
+    const code=document.getElementById('promo-input').value.trim();
+    const msg=document.getElementById('promo-msg');
+    if(!code){msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Enter a promo code first';return;}
+    msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Checking…';
+    const r=await fetch('/api/redeem-promo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const d=await r.json();
+    if(d.success){
+      msg.style.color='var(--green)';msg.textContent=d.message;
+      setTimeout(()=>location.reload(),1500);
+    } else {
+      msg.style.color='#e74c3c';msg.textContent=d.error;
+    }
+  }
+  </script>
   <div class="account-card">
     <h3>Session</h3>
     <div class="account-row">
