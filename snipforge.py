@@ -3289,14 +3289,14 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Snipforge — AI Video Toolkit</title>
 <meta name="description" content="24 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur, AI smart clip and more. Free to start.">
-<meta property="og:title" content="Snipforge — AI Video Toolkit. 24 Tools, Free to Start.">
-<meta property="og:description" content="24 AI-powered video tools in your browser. Trim, transcribe, AI smart clip, generate chapters, extract thumbnails, blur regions and more. No installs. Free to start.">
+<meta property="og:title" content="Snipforge. AI Video Toolkit. 24 Tools, Free to Start.">
+<meta property="og:description" content="24 AI-powered video tools in your browser. Trim, transcribe, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
 <meta property="og:image" content="https://snipforge.video/og-image.png">
 <meta property="og:url" content="https://snipforge.video">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Snipforge — AI Video Toolkit. 24 Tools, Free to Start.">
-<meta name="twitter:description" content="24 AI-powered video tools in your browser. Trim, transcribe, AI smart clip, generate chapters, extract thumbnails, blur regions and more. No installs. Free to start.">
+<meta name="twitter:title" content="Snipforge. AI Video Toolkit. 24 Tools, Free to Start.">
+<meta name="twitter:description" content="24 AI-powered video tools in your browser. Trim, transcribe, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
 <meta name="twitter:image" content="https://snipforge.video/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
