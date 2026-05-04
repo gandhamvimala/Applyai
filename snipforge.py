@@ -66,11 +66,39 @@ def run(args):
     return r.stdout, r.stderr, r.returncode
 
 def get_duration(path):
+    # Try format duration first
     out, err, rc = run([_FFPROBE_EXE,"-v","error","-show_entries","format=duration",
                         "-of","default=noprint_wrappers=1:nokey=1", str(path)])
     v = out.strip()
-    if not v: raise RuntimeError(f"ffprobe failed: {err.strip()}")
-    return float(v)
+    if v and v != 'N/A':
+        try: return float(v)
+        except ValueError: pass
+    # Fallback: read from stream duration (works for WebM, MKV etc.)
+    out2, _, _ = run([_FFPROBE_EXE,"-v","error","-show_entries","stream=duration",
+                      "-of","default=noprint_wrappers=1:nokey=1", str(path)])
+    for line in out2.strip().splitlines():
+        line = line.strip()
+        if line and line != 'N/A':
+            try: return float(line)
+            except ValueError: continue
+    # Last resort: decode and measure
+    out3, _, _ = run([_FFPROBE_EXE,"-v","error","-select_streams","v:0",
+                      "-show_entries","stream=duration,nb_frames,r_frame_rate",
+                      "-of","json", str(path)])
+    try:
+        info = json.loads(out3)
+        st = info.get("streams", [{}])[0]
+        if st.get("duration") and st["duration"] != "N/A":
+            return float(st["duration"])
+        # estimate from frames/fps
+        frames = int(st.get("nb_frames", 0))
+        fps_raw = st.get("r_frame_rate", "30/1")
+        num, den = fps_raw.split("/")
+        fps = float(num) / float(den)
+        if frames and fps:
+            return frames / fps
+    except: pass
+    raise RuntimeError(f"Could not determine duration for {path}")
 
 def get_info(path):
     out, _, _ = run([_FFPROBE_EXE,"-v","error","-print_format","json",
@@ -796,6 +824,18 @@ def fail(jid, err):
 def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3, do_speed=True):
     try:
         prog(jid,"Analysing video…",0)
+        # Pre-transcode WebM/MKV to MP4 for reliable processing
+        src_ext = Path(src).suffix.lower()
+        if src_ext in ('.webm', '.mkv', '.avi', '.mov'):
+            prog(jid, f"Converting {src_ext} to MP4…", 2)
+            tmp_mp4 = str(Path(src).with_suffix('.tmp_conv.mp4'))
+            _, err_c, rc_c = run([_FFMPEG_EXE, "-y", "-i", src,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", tmp_mp4])
+            if rc_c == 0:
+                src = tmp_mp4
+            else:
+                prog(jid, "Conversion warning — trying anyway…", 2)
         total = get_duration(src)
         prog(jid,f"Duration: {fmt_time(total)}",5)
         prog(jid,f"Detecting silences…",10)
