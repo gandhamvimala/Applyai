@@ -3101,7 +3101,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <div class="feature-card">
         <div class="feature-icon">🤖</div>
         <div class="feature-title">AI Transcription in 20 languages</div>
-        <div class="feature-desc">Powered by OpenAI Whisper. Upload in English, get a transcript in Japanese, Spanish, French or 17 other languages in under a minute.</div>
+        <div class="feature-desc">Upload in English, get a transcript in Japanese, Spanish, French or 17 other languages in under a minute.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⚡</div>
