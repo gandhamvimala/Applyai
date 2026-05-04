@@ -5252,9 +5252,8 @@ function switchPanel(el) {
   // On mobile the sidebar is a fixed bottom tab bar; scroll back to top so
   // the panel-header is never hidden behind the sticky topbar.
   if(window.innerWidth<=768){
-    const main=document.querySelector('.main');
-    if(main) main.scrollTop=0;
-    window.scrollTo({top:0,behavior:'instant'});
+    document.documentElement.scrollTop=0;
+    document.body.scrollTop=0;
   }
 }
 
