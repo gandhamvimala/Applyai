@@ -5578,7 +5578,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── TRANSCRIBE ── -->
 <div class="panel" id="panel-transcribe">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text — any language</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text in any language</div></div>
   <div class="upload-zone" id="tc-dropzone"><input type="file" id="tc-file" accept="video/*,audio/*">
     <div class="upload-zone-icon">📝</div><h3>Drop your video or audio here</h3><p>MP4 · MOV · MP3 · WAV</p>
   </div>
@@ -5677,9 +5677,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <button class="file-change" onclick="resetUpload('sc')">Change</button>
     </div>
   </div>
-  <div style="background:rgba(232,66,10,.06);border:1px solid rgba(232,66,10,.15);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:.85rem;color:var(--text);line-height:1.5">
-    <strong>✨ How it works:</strong> Whisper transcribes your video, GPT-4o-mini picks the most engaging moment, FFmpeg clips it out — all automatically.
-  </div>
   <button class="run-btn" id="sc-run" disabled onclick="runSmartClip()">Upload a video first</button>
   <div class="progress-box" id="sc-progress"><div class="progress-track"><div class="progress-fill" id="sc-pfill"></div></div><div class="log" id="sc-log"></div></div>
   <div class="result-box" id="sc-result">
@@ -5748,7 +5745,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <div class="panel" id="panel-split">
   <div class="panel-header">
     <div class="panel-title"><span class="panel-title-icon">✂️</span>Split Video</div>
-    <div class="panel-sub">Click the timeline to place split markers — drag to adjust, click × to remove</div>
+    <div class="panel-sub">Click the timeline to place split markers. Drag to adjust, click × to remove.</div>
   </div>
   <div class="upload-zone" id="sp2-dropzone"><input type="file" id="sp2-file" accept="video/*">
     <div class="upload-zone-icon">✂️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
@@ -5791,7 +5788,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <div class="panel" id="panel-colorgrade">
   <div class="panel-header">
     <div class="panel-title"><span class="panel-title-icon">🎨</span>Brightness &amp; Contrast</div>
-    <div class="panel-sub">Adjust brightness, contrast and saturation — live preview updates instantly</div>
+    <div class="panel-sub">Adjust brightness, contrast and saturation. Live preview updates instantly.</div>
   </div>
   <div class="upload-zone" id="bg-dropzone"><input type="file" id="bg-file" accept="video/*">
     <div class="upload-zone-icon">🎨</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
@@ -7200,8 +7197,9 @@ function _initSplitTimeline(){
   if(!tl) return;
   tl.style.display='block';
   vid.style.display='block';
-  vid.src='/api/download-preview/'+s.file_id; // served from uploads via existing /api/info
-  // Actually use object URL from the already-uploaded file's info endpoint — use time seek instead
+  // Use the object URL from the thumb element which setupUpload already set
+  const thumb=document.getElementById('sp2-thumb');
+  if(thumb && thumb.src) vid.src=thumb.src;
   _splitMarkers=[];
   _renderSplitTimeline();
 }
