@@ -5386,7 +5386,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── VIDEO TO GIF ── -->
 <div class="panel" id="panel-gif">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF (no audio — GIFs are silent)</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF (no audio, GIFs are silent)</div></div>
   <div class="upload-zone" id="gif-dropzone"><input type="file" id="gif-file" accept="video/*">
     <div class="upload-zone-icon">🎞️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
   </div>
