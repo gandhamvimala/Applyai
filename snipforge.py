@@ -4189,6 +4189,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   /* Layout */
   .app{grid-template-columns:1fr;grid-template-rows:56px 1fr;max-height:none;overflow:visible}
   .main{padding:16px 14px 120px;height:auto;overflow-y:visible}
+  .panel-header{scroll-margin-top:68px}
 
   /* Topbar */
   .logo-wrap{width:auto;border-right:none;padding:0 12px}
@@ -5245,6 +5246,13 @@ function switchPanel(el) {
   el.classList.add('active');
   document.getElementById('panel-'+el.dataset.panel).classList.add('active');
   if(el.dataset.panel==='shares') loadShares();
+  // On mobile the sidebar is a fixed bottom tab bar; scroll back to top so
+  // the panel-header is never hidden behind the sticky topbar.
+  if(window.innerWidth<=768){
+    const main=document.querySelector('.main');
+    if(main) main.scrollTop=0;
+    window.scrollTo({top:0,behavior:'instant'});
+  }
 }
 
 async function loadShares(){
