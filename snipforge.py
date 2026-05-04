@@ -3519,38 +3519,6 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
   </div>
 </section>
 
-<!-- DEMO VIDEO -->
-<section style="padding:60px 24px 0;background:var(--bg)">
-  <div style="max-width:900px;margin:0 auto">
-    <div style="text-align:center;margin-bottom:20px">
-      <div style="font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;color:var(--muted);text-transform:uppercase">See it in action</div>
-    </div>
-    <div id="demo-wrap" style="position:relative;border-radius:16px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.35);border:1px solid var(--border);background:#000;cursor:pointer" onclick="toggleDemoSound()">
-      <video id="demo-vid"
-        src="/demo-video"
-        autoplay muted loop playsinline
-        style="width:100%;display:block;border-radius:16px"
-      ></video>
-      <!-- Sound toggle badge -->
-      <div id="demo-badge" style="position:absolute;bottom:16px;right:16px;background:rgba(0,0,0,.7);color:#fff;font-family:var(--mono);font-size:.7rem;padding:6px 12px;border-radius:20px;backdrop-filter:blur(6px);pointer-events:none;transition:opacity .2s">
-        🔇 Click for sound
-      </div>
-    </div>
-    <div style="text-align:center;margin-top:14px;font-size:.82rem;color:var(--muted)">
-      Built with Snipforge — <a href="/register" style="color:var(--accent);text-decoration:none;font-weight:600">try it free →</a>
-    </div>
-  </div>
-</section>
-
-<script>
-function toggleDemoSound(){
-  const v=document.getElementById('demo-vid');
-  const b=document.getElementById('demo-badge');
-  if(v.muted){v.muted=false;b.textContent='🔊 Sound on';v.loop=false;}
-  else{v.muted=true;b.textContent='🔇 Click for sound';v.loop=true;}
-}
-</script>
-
 <!-- APP PREVIEW -->
 <div class="app-preview">
   <div class="app-preview-inner">
