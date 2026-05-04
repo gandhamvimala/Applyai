@@ -2444,6 +2444,40 @@ def api_download_zip(jid):
                      as_attachment=True, download_name=f"snipforge_{jid}.zip")
 
 
+@app.route("/api/thumb/<jid>/<int:idx>")
+def api_thumb(jid, idx):
+    """Serve a specific thumbnail by index."""
+    if not re.match(r'^[a-f0-9]{8}$', jid):
+        return jsonify({"error": "Invalid"}), 400
+    job = jobs.get(jid)
+    if not job: return jsonify({"error": "Not found"}), 404
+    thumbs = job.get("thumb_files", [])
+    if idx < 0 or idx >= len(thumbs):
+        return jsonify({"error": "Index out of range"}), 404
+    path = thumbs[idx]
+    if not os.path.exists(path):
+        return jsonify({"error": "File expired"}), 404
+    return send_file(path, mimetype="image/jpeg")
+
+
+@app.route("/api/split-segment/<jid>/<int:idx>")
+def api_split_segment(jid, idx):
+    """Serve a specific split segment by index."""
+    if not re.match(r'^[a-f0-9]{8}$', jid):
+        return jsonify({"error": "Invalid"}), 400
+    job = jobs.get(jid)
+    if not job: return jsonify({"error": "Not found"}), 404
+    segs = job.get("split_files", [])
+    if idx < 0 or idx >= len(segs):
+        return jsonify({"error": "Index out of range"}), 404
+    path = segs[idx]
+    if not os.path.exists(path):
+        return jsonify({"error": "File expired"}), 404
+    return send_file(path, as_attachment=True,
+                     download_name=f"segment_{idx+1:02d}.mp4",
+                     mimetype="video/mp4")
+
+
 # ─── AI TOOLKIT ROUTES ────────────────────────────────────────────────────────
 
 def _gpt(messages, max_tokens=1500):
@@ -2520,14 +2554,22 @@ def api_ai_smartclip():
     if not ok: return jsonify({"error": msg, "upgrade": True}), 403
     increment_usage(user["id"])
 
-    f = request.files.get("file")
-    safe_name, err = validate_file(f)
-    if err: return jsonify({"error": err}), 400
-
-    jid = str(uuid.uuid4())[:8]
-    ext = Path(safe_name).suffix.lower()
-    p = UPLOAD_DIR / f"{jid}{ext}"
-    f.save(str(p))
+    # Accept either file_id (JSON) or raw file upload (multipart)
+    data = request.get_json(silent=True) or {}
+    file_id = data.get("file_id", "")
+    safe_name = data.get("filename", "video.mp4")
+    if file_id and re.match(r'^[a-f0-9]{8}$', file_id):
+        src_path = _save_file(file_id, "")
+        if not src_path: return jsonify({"error": "File not found or expired"}), 404
+        p = Path(src_path)
+    else:
+        f = request.files.get("file")
+        safe_name, err = validate_file(f)
+        if err: return jsonify({"error": err}), 400
+        jid_tmp = str(uuid.uuid4())[:8]
+        ext = Path(safe_name).suffix.lower()
+        p = UPLOAD_DIR / f"{jid_tmp}{ext}"
+        f.save(str(p))
 
     result_id = str(uuid.uuid4())[:8]
     jobs[result_id] = {"status": "running", "progress": 0, "log": [],
@@ -2611,15 +2653,24 @@ def api_ai_analyze():
     if not ok: return jsonify({"error": msg, "upgrade": True}), 403
     increment_usage(user["id"])
 
-    f = request.files.get("file")
-    safe_name, err = validate_file(f)
-    if err: return jsonify({"error": err}), 400
-    mode = request.form.get("mode", "both")  # "chapters", "metadata", "both"
-
-    jid = str(uuid.uuid4())[:8]
-    ext = Path(safe_name).suffix.lower()
-    p = UPLOAD_DIR / f"{jid}{ext}"
-    f.save(str(p))
+    # Accept either file_id (JSON) or raw file upload (multipart)
+    data = request.get_json(silent=True) or {}
+    file_id = data.get("file_id", "")
+    safe_name = data.get("filename", "video.mp4")
+    mode = data.get("mode", "both")
+    if file_id and re.match(r'^[a-f0-9]{8}$', file_id):
+        src_path = _save_file(file_id, "")
+        if not src_path: return jsonify({"error": "File not found or expired"}), 404
+        p = Path(src_path)
+    else:
+        f = request.files.get("file")
+        safe_name, err = validate_file(f)
+        if err: return jsonify({"error": err}), 400
+        mode = request.form.get("mode", "both")
+        jid_tmp = str(uuid.uuid4())[:8]
+        ext = Path(safe_name).suffix.lower()
+        p = UPLOAD_DIR / f"{jid_tmp}{ext}"
+        f.save(str(p))
 
     result_id = str(uuid.uuid4())[:8]
     jobs[result_id] = {"status": "running", "progress": 0, "log": [],
@@ -5697,7 +5748,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <div class="panel" id="panel-split">
   <div class="panel-header">
     <div class="panel-title"><span class="panel-title-icon">✂️</span>Split Video</div>
-    <div class="panel-sub">Cut your video into multiple segments at exact timestamps</div>
+    <div class="panel-sub">Click the timeline to place split markers — drag to adjust, click × to remove</div>
   </div>
   <div class="upload-zone" id="sp2-dropzone"><input type="file" id="sp2-file" accept="video/*">
     <div class="upload-zone-icon">✂️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
@@ -5711,12 +5762,22 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <button class="file-change" onclick="resetUpload('sp2')">Change</button>
     </div>
   </div>
-  <div style="margin-bottom:14px">
-    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Split points (seconds) — add one per line</div>
-    <textarea id="sp2-splits" placeholder="e.g.&#10;30&#10;60&#10;90" rows="4"
-      style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-family:var(--mono);font-size:.85rem;resize:vertical"></textarea>
-    <div style="font-size:.78rem;color:var(--muted);margin-top:5px">Video will be split into N+1 segments. E.g. split at 30s and 60s → 3 clips.</div>
+
+  <!-- Video preview + timeline -->
+  <div id="sp2-timeline" style="display:none;margin-bottom:16px">
+    <video id="sp2-preview" controls style="display:none;width:100%;border-radius:10px;margin-bottom:10px;max-height:220px;background:#000"></video>
+    <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between">
+      <span>👆 Click timeline to add split point</span>
+      <span id="sp2-count" style="color:var(--accent)"></span>
+    </div>
+    <div style="position:relative;height:48px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;overflow:visible;cursor:crosshair;margin-bottom:20px"
+         onclick="_addSplitAtClick(event)">
+      <div id="sp2-tl-track" style="position:absolute;inset:0;border-radius:8px;overflow:hidden"></div>
+    </div>
+    <!-- Hidden textarea keeps splits in sync -->
+    <textarea id="sp2-splits" style="display:none"></textarea>
   </div>
+
   <button class="run-btn" id="sp2-run" disabled onclick="runSplit()">Upload a video first</button>
   <div class="progress-box" id="sp2-progress"><div class="progress-track"><div class="progress-fill" id="sp2-pfill"></div></div><div class="log" id="sp2-log"></div></div>
   <div class="result-box" id="sp2-result">
@@ -5730,7 +5791,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <div class="panel" id="panel-colorgrade">
   <div class="panel-header">
     <div class="panel-title"><span class="panel-title-icon">🎨</span>Brightness &amp; Contrast</div>
-    <div class="panel-sub">Adjust brightness, contrast and saturation of your video</div>
+    <div class="panel-sub">Adjust brightness, contrast and saturation — live preview updates instantly</div>
   </div>
   <div class="upload-zone" id="bg-dropzone"><input type="file" id="bg-file" accept="video/*">
     <div class="upload-zone-icon">🎨</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
@@ -5744,19 +5805,36 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <button class="file-change" onclick="resetUpload('bg')">Change</button>
     </div>
   </div>
+
+  <!-- Live CSS-filter preview -->
+  <video id="bg-preview" controls muted loop
+    style="display:none;width:100%;border-radius:10px;margin-bottom:14px;max-height:220px;background:#000;transition:filter .1s"></video>
+
   <div style="margin-bottom:14px">
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Brightness</label><span id="bg-bright-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">0</span></div>
-        <input type="range" id="bg-brightness" min="-0.5" max="0.5" step="0.05" value="0" style="width:100%" oninput="document.getElementById('bg-bright-val').textContent=parseFloat(this.value).toFixed(2)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Brightness</label>
+          <span id="bg-bright-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">0</span>
+        </div>
+        <input type="range" id="bg-brightness" min="-0.5" max="0.5" step="0.05" value="0" style="width:100%"
+          oninput="document.getElementById('bg-bright-val').textContent=parseFloat(this.value).toFixed(2);_updateBrightnessFilter()">
       </div>
       <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Contrast</label><span id="bg-contrast-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">1.0</span></div>
-        <input type="range" id="bg-contrast" min="0.5" max="2.0" step="0.05" value="1.0" style="width:100%" oninput="document.getElementById('bg-contrast-val').textContent=parseFloat(this.value).toFixed(2)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Contrast</label>
+          <span id="bg-contrast-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">1.0</span>
+        </div>
+        <input type="range" id="bg-contrast" min="0.5" max="2.0" step="0.05" value="1.0" style="width:100%"
+          oninput="document.getElementById('bg-contrast-val').textContent=parseFloat(this.value).toFixed(2);_updateBrightnessFilter()">
       </div>
       <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px"><label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Saturation</label><span id="bg-sat-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">1.0</span></div>
-        <input type="range" id="bg-saturation" min="0" max="2.0" step="0.05" value="1.0" style="width:100%" oninput="document.getElementById('bg-sat-val').textContent=parseFloat(this.value).toFixed(2)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Saturation</label>
+          <span id="bg-sat-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">1.0</span>
+        </div>
+        <input type="range" id="bg-saturation" min="0" max="2.0" step="0.05" value="1.0" style="width:100%"
+          oninput="document.getElementById('bg-sat-val').textContent=parseFloat(this.value).toFixed(2);_updateBrightnessFilter()">
       </div>
     </div>
   </div>
@@ -7009,12 +7087,14 @@ async function runSmartClip(){
   document.getElementById('sc-result').classList.remove('show');
   document.getElementById('sc-reason-wrap').style.display='none';
   document.getElementById('sc-rvideo').style.display='none';
+  log('sc','Starting AI analysis…','info');
 
-  const fd=new FormData();
-  fd.append('file', s.file, s.filename);
-  const r=await fetch('/api/ai-smartclip',{method:'POST',body:fd});
+  // Use file_id (already uploaded via /api/info)
+  const r=await fetch('/api/ai-smartclip',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({file_id:s.file_id, filename:s.filename})});
   const d=await r.json();
-  if(d.error){log('sc','Error: '+d.error,'err');run.disabled=false;run.textContent='Find Smart Clip';run.classList.remove('working');return;}
+  if(d.error){log('sc','Error: '+d.error,'err');run.disabled=false;run.textContent=getRunLabel('sc');run.classList.remove('working');return;}
   const jid=d.job_id;
   let idx=0;
   const iv=setInterval(async()=>{
@@ -7038,13 +7118,13 @@ async function runSmartClip(){
         }
       }
       document.getElementById('sc-result').classList.add('show');
-      run.disabled=false; run.textContent='Find Smart Clip'; run.classList.remove('working');
+      run.disabled=false; run.textContent=getRunLabel('sc'); run.classList.remove('working');
       addShareBtn('sc', jid, (s.filename||'video').replace(/\.[^.]+$/,'')+'_smartclip.mp4');
     }
     if(d2.status==='error'){
       clearInterval(iv);
       log('sc','Error: '+d2.error,'err');
-      run.disabled=false; run.textContent='Find Smart Clip'; run.classList.remove('working');
+      run.disabled=false; run.textContent=getRunLabel('sc'); run.classList.remove('working');
     }
   },1500);
 }
@@ -7056,18 +7136,19 @@ async function runAiAnalyze(){
   run.disabled=true; run.textContent='Analysing…'; run.classList.add('working');
   document.getElementById('aa-progress').classList.add('show');
   document.getElementById('aa-result').classList.remove('show');
+  log('aa','Starting AI analysis…','info');
 
   const doChapters=document.getElementById('aa-do-chapters').checked;
   const doMeta=document.getElementById('aa-do-meta').checked;
-  if(!doChapters && !doMeta){alert('Select at least one option');run.disabled=false;run.textContent='Generate';run.classList.remove('working');return;}
+  if(!doChapters && !doMeta){alert('Select at least one option');run.disabled=false;run.textContent=getRunLabel('aa');run.classList.remove('working');return;}
   const mode = doChapters && doMeta ? 'both' : doChapters ? 'chapters' : 'metadata';
 
-  const fd=new FormData();
-  fd.append('file', s.file, s.filename);
-  fd.append('mode', mode);
-  const r=await fetch('/api/ai-analyze',{method:'POST',body:fd});
+  // Use file_id (already uploaded via /api/info)
+  const r=await fetch('/api/ai-analyze',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({file_id:s.file_id, filename:s.filename, mode})});
   const d=await r.json();
-  if(d.error){log('aa','Error: '+d.error,'err');run.disabled=false;run.textContent='Generate';run.classList.remove('working');return;}
+  if(d.error){log('aa','Error: '+d.error,'err');run.disabled=false;run.textContent=getRunLabel('aa');run.classList.remove('working');return;}
   const jid=d.job_id;
   let idx=0;
   const iv=setInterval(async()=>{
@@ -7092,12 +7173,12 @@ async function runAiAnalyze(){
       }
       document.getElementById('aa-dl').href='/api/download/'+jid;
       document.getElementById('aa-result').classList.add('show');
-      run.disabled=false; run.textContent='Generate'; run.classList.remove('working');
+      run.disabled=false; run.textContent=getRunLabel('aa'); run.classList.remove('working');
     }
     if(d2.status==='error'){
       clearInterval(iv);
       log('aa','Error: '+d2.error,'err');
-      run.disabled=false; run.textContent='Generate'; run.classList.remove('working');
+      run.disabled=false; run.textContent=getRunLabel('aa'); run.classList.remove('working');
     }
   },1500);
 }
@@ -7109,12 +7190,128 @@ function copyEl(id){
   setTimeout(()=>event.target.textContent='Copy',2000);
 }
 
-// ── Split Video ──
+// ── Split Video — draggable timeline ──
+let _splitMarkers = [];
+function _initSplitTimeline(){
+  const s=state['sp2']; if(!s||!s.duration) return;
+  const dur=s.duration;
+  const tl=document.getElementById('sp2-timeline');
+  const vid=document.getElementById('sp2-preview');
+  if(!tl) return;
+  tl.style.display='block';
+  vid.style.display='block';
+  vid.src='/api/download-preview/'+s.file_id; // served from uploads via existing /api/info
+  // Actually use object URL from the already-uploaded file's info endpoint — use time seek instead
+  _splitMarkers=[];
+  _renderSplitTimeline();
+}
+function _renderSplitTimeline(){
+  const s=state['sp2']; if(!s) return;
+  const dur=s.duration;
+  const track=document.getElementById('sp2-tl-track');
+  if(!track) return;
+  track.innerHTML='';
+  // Render segment regions
+  const points=[0,..._splitMarkers.map(m=>m.t).sort((a,b)=>a-b),dur];
+  const colors=['rgba(232,66,10,.12)','rgba(37,99,235,.08)','rgba(22,163,74,.08)','rgba(139,92,246,.08)','rgba(234,179,8,.08)'];
+  for(let i=0;i<points.length-1;i++){
+    const seg=document.createElement('div');
+    seg.style.cssText=`position:absolute;top:0;bottom:0;left:${points[i]/dur*100}%;width:${(points[i+1]-points[i])/dur*100}%;background:${colors[i%colors.length]};border-right:1px dashed rgba(0,0,0,.15)`;
+    const lbl=document.createElement('span');
+    lbl.style.cssText='position:absolute;top:4px;left:4px;font-family:var(--mono);font-size:.55rem;color:var(--muted)';
+    lbl.textContent='Seg '+(i+1);
+    seg.appendChild(lbl); track.appendChild(seg);
+  }
+  // Render markers
+  _splitMarkers.forEach((m,i)=>{
+    const pin=document.createElement('div');
+    pin.style.cssText=`position:absolute;top:0;bottom:0;left:${m.t/dur*100}%;width:3px;background:var(--accent);cursor:ew-resize;z-index:10;transform:translateX(-1px)`;
+    pin.title='Drag to move · Click label to remove';
+    const lbl=document.createElement('div');
+    lbl.style.cssText='position:absolute;top:-22px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-family:var(--mono);font-size:.55rem;padding:1px 5px;border-radius:3px;white-space:nowrap;cursor:pointer;user-select:none';
+    lbl.textContent=_fmtSec(m.t)+'  ✕';
+    lbl.onclick=(e)=>{e.stopPropagation();_splitMarkers.splice(i,1);_renderSplitTimeline();_syncSplitInput();};
+    pin.appendChild(lbl);
+    // Drag logic
+    pin.addEventListener('mousedown',e=>{
+      e.preventDefault();
+      const rect=track.parentElement.getBoundingClientRect();
+      const move=ev=>{
+        const x=Math.max(0,Math.min(1,(ev.clientX-rect.left)/rect.width));
+        m.t=Math.round(x*dur*10)/10;
+        _renderSplitTimeline(); _syncSplitInput();
+      };
+      const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};
+      document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
+    });
+    track.appendChild(pin);
+  });
+  // Time ticks
+  const tickCount=Math.min(10,Math.floor(dur/10));
+  for(let i=1;i<tickCount;i++){
+    const t=dur*i/tickCount;
+    const tick=document.createElement('div');
+    tick.style.cssText=`position:absolute;bottom:0;left:${t/dur*100}%;width:1px;height:8px;background:var(--border)`;
+    const tl=document.createElement('div');
+    tl.style.cssText='position:absolute;bottom:-16px;transform:translateX(-50%);font-family:var(--mono);font-size:.5rem;color:var(--muted)';
+    tl.textContent=_fmtSec(t);
+    tick.appendChild(tl); track.appendChild(tick);
+  }
+  _syncSplitInput();
+}
+function _fmtSec(s){ const m=Math.floor(s/60); return m+':'+(''+(Math.round(s%60))).padStart(2,'0'); }
+function _syncSplitInput(){
+  const sorted=_splitMarkers.map(m=>m.t).sort((a,b)=>a-b);
+  document.getElementById('sp2-splits').value=sorted.join('\n');
+  document.getElementById('sp2-count').textContent=sorted.length>0?`${sorted.length} split point${sorted.length>1?'s':''} → ${sorted.length+1} segments`:'Click timeline to add split points';
+}
+function _addSplitAtClick(e){
+  const s=state['sp2']; if(!s) return;
+  const track=document.getElementById('sp2-tl-track');
+  const rect=track.getBoundingClientRect();
+  const x=(e.clientX-rect.left)/rect.width;
+  const t=Math.round(x*s.duration*10)/10;
+  if(t<=0||t>=s.duration) return;
+  // Prevent adding too close to existing
+  if(_splitMarkers.some(m=>Math.abs(m.t-t)<0.5)) return;
+  _splitMarkers.push({t});
+  const vid=document.getElementById('sp2-preview');
+  if(vid){vid.currentTime=t;}
+  _renderSplitTimeline();
+}
+
+// Patch handleFile to init split timeline when sp2 file is loaded
+const _origHandleFile=handleFile;
+window.handleFile=async function(prefix,file){
+  await _origHandleFile(prefix,file);
+  if(prefix==='sp2') setTimeout(_initSplitTimeline,300);
+  if(prefix==='bg') _initBrightnessPreview();
+};
+
+function _initBrightnessPreview(){
+  const s=state['bg']; if(!s) return;
+  const vid=document.getElementById('bg-preview');
+  if(!vid) return;
+  // Use the original video preview already loaded in the thumb element
+  const thumb=document.getElementById('bg-thumb');
+  if(thumb&&thumb.src) vid.src=thumb.src;
+  vid.style.display='block';
+  _updateBrightnessFilter();
+}
+function _updateBrightnessFilter(){
+  const vid=document.getElementById('bg-preview'); if(!vid) return;
+  const b=parseFloat(document.getElementById('bg-brightness').value)||0;
+  const c=parseFloat(document.getElementById('bg-contrast').value)||1;
+  const sat=parseFloat(document.getElementById('bg-saturation').value)||1;
+  // CSS filter: brightness maps -0.5→0.5 to 0.5→1.5, contrast 0.5→2, saturate 0→2
+  vid.style.filter=`brightness(${1+b}) contrast(${c}) saturate(${sat})`;
+}
+
 async function runSplit(){
   const s=state['sp2']; if(!s){alert('Upload a video first');return;}
   const raw=document.getElementById('sp2-splits').value.trim();
-  const splits=raw.split(/[\s,]+/).map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0);
-  if(!splits.length){alert('Enter at least one split point in seconds');return;}
+  const splits=raw.split(/[\s,\n]+/).map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0);
+  if(!splits.length){alert('Add at least one split point by clicking the timeline');return;}
   const jid=await startJob('sp2',{op:'split',out_ext:'mp4',splits,filename:s.filename,size_mb:s.size_mb});
   if(!jid) return;
   let idx=0;
@@ -7132,8 +7329,9 @@ async function runSplit(){
       for(let i=0;i<n;i++){
         const a=document.createElement('a');
         a.className='dl-btn'; a.style.cssText='display:inline-flex;width:100%;margin-bottom:4px;justify-content:center';
-        a.href='/api/download/'+jid; a.download=(s.filename||'video').replace(/\.[^.]+$/,'')+'_part'+(i+1)+'.mp4';
-        a.textContent='⬇ Segment '+(i+1);
+        a.href='/api/split-segment/'+jid+'/'+i;
+        a.download=(s.filename||'video').replace(/\.[^.]+$/,'')+'_part'+(i+1)+'.mp4';
+        a.textContent='⬇ Segment '+(i+1)+' ('+_fmtSec(splits[i-1]||0)+' → '+_fmtSec(splits[i]||s.duration)+')';
         wrap.appendChild(a);
       }
       document.getElementById('sp2-result').classList.add('show');
@@ -7149,7 +7347,7 @@ async function runSplit(){
   },1200);
 }
 
-// ── Color Grade ──
+// ── Color Grade — CSS filter live preview ──
 async function runColorGrade(){
   const s=state['bg']; if(!s){alert('Upload a video first');return;}
   const jid=await startJob('bg',{op:'brightness',out_ext:'mp4',filename:s.filename,size_mb:s.size_mb,
@@ -7157,13 +7355,10 @@ async function runColorGrade(){
     contrast:parseFloat(document.getElementById('bg-contrast').value),
     saturation:parseFloat(document.getElementById('bg-saturation').value)
   });
-  if(jid){
-    document.getElementById('bg-rvideo').style.display='block';
-    pollJob('bg',jid,'bg-rvideo','bg-dl',(s.filename||'video').replace(/\.[^.]+$/,'')+'_color.mp4');
-  }
+  if(jid) pollJob('bg',jid,'bg-rvideo','bg-dl',(s.filename||'video').replace(/\.[^.]+$/,'')+'_color.mp4');
 }
 
-// ── Thumbnail ──
+// ── Thumbnail — serve each frame via /api/thumb/jid/idx ──
 async function runThumbnail(){
   const s=state['th']; if(!s){alert('Upload a video first');return;}
   const count=parseInt(document.querySelector('input[name="th-count"]:checked').value)||3;
@@ -7182,15 +7377,22 @@ async function runThumbnail(){
       document.getElementById('th-dl-zip').href='/api/download-zip/'+jid;
       const grid=document.getElementById('th-grid');
       const n=d2.stats&&d2.stats.thumbnails?d2.stats.thumbnails:count;
+      const dur=d2.stats&&d2.stats.duration?d2.stats.duration:0;
       for(let i=0;i<n;i++){
+        const t=dur*(i+1)/(n+1);
         const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:4px';
         const img=document.createElement('img');
-        img.src='/api/download/'+jid; img.style.cssText='width:100%;border-radius:6px;border:1px solid var(--border);cursor:pointer';
+        img.src='/api/thumb/'+jid+'/'+i;  // ← each frame gets its own URL
+        img.style.cssText='width:100%;border-radius:6px;border:1px solid var(--border);cursor:pointer;background:var(--bg3)';
         img.onclick=()=>window.open(img.src,'_blank');
-        const a=document.createElement('a'); a.href=img.src; a.download='thumb_'+(i+1)+'.jpg';
-        a.style.cssText='font-family:var(--mono);font-size:.65rem;color:var(--muted);text-align:center;text-decoration:none';
+        img.onerror=()=>img.style.opacity='.3';
+        const timeLbl=document.createElement('div');
+        timeLbl.style.cssText='font-family:var(--mono);font-size:.6rem;color:var(--muted);text-align:center';
+        timeLbl.textContent='@ '+_fmtSec(t);
+        const a=document.createElement('a'); a.href='/api/thumb/'+jid+'/'+i; a.download='thumb_'+(i+1)+'.jpg';
+        a.style.cssText='font-family:var(--mono);font-size:.62rem;color:var(--accent);text-align:center;text-decoration:none;padding:3px 0;background:var(--accent-light);border-radius:4px;display:block';
         a.textContent='⬇ Frame '+(i+1);
-        wrap.appendChild(img); wrap.appendChild(a); grid.appendChild(wrap);
+        wrap.appendChild(img); wrap.appendChild(timeLbl); wrap.appendChild(a); grid.appendChild(wrap);
       }
       document.getElementById('th-result').classList.add('show');
       const run=document.getElementById('th-run');
