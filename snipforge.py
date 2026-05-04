@@ -4311,19 +4311,19 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
   <div class="nav-section">Create</div>
   <div class="nav-item" data-panel="gif" onclick="switchPanel(this)">
-    <span class="nav-icon">🎞</span>
+    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6h14M1 10h14M5 3v10M11 3v10"/></svg></span>
     <span class="nav-full">Video to GIF</span><span class="nav-short">GIF</span>
   </div>
   <div class="nav-item" data-panel="bgmusic" onclick="switchPanel(this)">
-    <span class="nav-icon">🎵</span>
+    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="10" r="2"/><path d="M7 12V4l7-2v8"/></svg></span>
     <span class="nav-full">Background Music</span><span class="nav-short">Music</span>
   </div>
   <div class="nav-item" data-panel="textoverlay" onclick="switchPanel(this)">
-    <span class="nav-icon">✍️</span>
+    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M11 2l3 3-8 8H3v-3l8-8z"/><path d="M9 4l3 3"/></svg></span>
     <span class="nav-full">Text Overlay</span><span class="nav-short">Text</span>
   </div>
   <div class="nav-item" data-panel="blur" onclick="switchPanel(this)">
-    <span class="nav-icon">🫥</span>
+    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="2" y="4" width="12" height="8" rx="2"/><path d="M6 8h4" stroke-dasharray="2 1"/></svg></span>
     <span class="nav-full">Blur Region</span><span class="nav-short">Blur</span>
   </div>
 
