@@ -66,39 +66,11 @@ def run(args):
     return r.stdout, r.stderr, r.returncode
 
 def get_duration(path):
-    # Try format duration first
     out, err, rc = run([_FFPROBE_EXE,"-v","error","-show_entries","format=duration",
                         "-of","default=noprint_wrappers=1:nokey=1", str(path)])
     v = out.strip()
-    if v and v != 'N/A':
-        try: return float(v)
-        except ValueError: pass
-    # Fallback: read from stream duration (works for WebM, MKV etc.)
-    out2, _, _ = run([_FFPROBE_EXE,"-v","error","-show_entries","stream=duration",
-                      "-of","default=noprint_wrappers=1:nokey=1", str(path)])
-    for line in out2.strip().splitlines():
-        line = line.strip()
-        if line and line != 'N/A':
-            try: return float(line)
-            except ValueError: continue
-    # Last resort: decode and measure
-    out3, _, _ = run([_FFPROBE_EXE,"-v","error","-select_streams","v:0",
-                      "-show_entries","stream=duration,nb_frames,r_frame_rate",
-                      "-of","json", str(path)])
-    try:
-        info = json.loads(out3)
-        st = info.get("streams", [{}])[0]
-        if st.get("duration") and st["duration"] != "N/A":
-            return float(st["duration"])
-        # estimate from frames/fps
-        frames = int(st.get("nb_frames", 0))
-        fps_raw = st.get("r_frame_rate", "30/1")
-        num, den = fps_raw.split("/")
-        fps = float(num) / float(den)
-        if frames and fps:
-            return frames / fps
-    except: pass
-    raise RuntimeError(f"Could not determine duration for {path}")
+    if not v: raise RuntimeError(f"ffprobe failed: {err.strip()}")
+    return float(v)
 
 def get_info(path):
     out, _, _ = run([_FFPROBE_EXE,"-v","error","-print_format","json",
@@ -132,88 +104,6 @@ def silences_to_keeps(silences, total, pad_ms=80):
         if merged and seg[0]<=merged[-1][1]: merged[-1]=(merged[-1][0],max(merged[-1][1],seg[1]))
         else: merged.append(list(seg))
     return merged
-
-
-def op_split(jid, src, dst_dir, splits):
-    """Split video at given timestamps into separate files."""
-    try:
-        prog(jid, "Reading video info…", 5)
-        dur = get_duration(src)
-        points = sorted([float(t) for t in splits if 0 < float(t) < dur])
-        boundaries = [0.0] + points + [dur]
-        segments = []
-        for i in range(len(boundaries) - 1):
-            t_start = boundaries[i]
-            t_end   = boundaries[i + 1]
-            seg_path = str(OUTPUT_DIR / f"{jid}_split_{i+1:02d}.mp4")
-            prog(jid, f"Cutting segment {i+1}/{len(boundaries)-1}…", int(10 + 80 * i / max(1, len(boundaries)-2)))
-            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
-                "-ss", str(t_start), "-to", str(t_end),
-                "-c", "copy", "-avoid_negative_ts", "1", seg_path])
-            if rc != 0:
-                _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
-                    "-ss", str(t_start), "-to", str(t_end),
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-                    "-c:a", "aac", "-movflags", "+faststart", seg_path])
-            if rc != 0:
-                raise RuntimeError(f"Split segment {i+1} failed: {err[-200:]}")
-            segments.append(seg_path)
-        jobs[jid]["split_files"] = segments
-        jobs[jid]["status"]   = "done"
-        jobs[jid]["progress"] = 100
-        jobs[jid]["result"]   = segments[0] if segments else str(dst_dir)
-        jobs[jid]["stats"]    = {"segments": len(segments), "duration": round(dur, 2)}
-        prog(jid, f"Done! {len(segments)} segments created.", 100)
-    except Exception as e:
-        fail(jid, e)
-
-
-def op_brightness(jid, src, dst, brightness=0.0, contrast=1.0, saturation=1.0):
-    """Adjust brightness, contrast and saturation."""
-    try:
-        prog(jid, "Applying color correction…", 20)
-        # eq filter: contrast, brightness, saturation
-        eq_filter = f"eq=brightness={brightness}:contrast={contrast}:saturation={saturation}"
-        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
-            "-vf", eq_filter,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
-            "-pix_fmt", "yuv420p", "-c:a", "copy",
-            "-movflags", "+faststart", str(dst)])
-        if rc != 0:
-            raise RuntimeError(f"Color correction failed: {err[-200:]}")
-        prog(jid, "Done! Color correction applied.", 100)
-        done(jid, dst, {"brightness": brightness, "contrast": contrast, "saturation": saturation})
-    except Exception as e:
-        fail(jid, e)
-
-
-def op_thumbnail(jid, src, dst, count=5):
-    """Extract best frame thumbnails from video."""
-    try:
-        prog(jid, "Reading video…", 10)
-        dur = get_duration(src)
-        count = max(1, min(int(count), 10))
-        thumbs = []
-        for i in range(count):
-            t = dur * (i + 1) / (count + 1)
-            thumb_path = str(OUTPUT_DIR / f"{jid}_thumb_{i+1:02d}.jpg")
-            prog(jid, f"Extracting frame {i+1}/{count}…", int(10 + 80 * (i+1) / count))
-            _, err, rc = run([_FFMPEG_EXE, "-y", "-ss", str(t), "-i", src,
-                "-frames:v", "1", "-q:v", "2", "-vf", "scale=640:-1", thumb_path])
-            if rc == 0 and os.path.exists(thumb_path):
-                thumbs.append(thumb_path)
-        if not thumbs:
-            raise RuntimeError("No thumbnails extracted")
-        # Copy first thumbnail as the "result" file
-        shutil.copy2(thumbs[0], str(dst))
-        jobs[jid]["thumb_files"] = thumbs
-        jobs[jid]["status"]   = "done"
-        jobs[jid]["progress"] = 100
-        jobs[jid]["result"]   = str(dst)
-        jobs[jid]["stats"]    = {"thumbnails": len(thumbs), "duration": round(dur, 2)}
-        prog(jid, f"Done! {len(thumbs)} thumbnails extracted.", 100)
-    except Exception as e:
-        fail(jid, e)
 
 
 def op_denoise(jid, src, dst, strength="medium"):
@@ -824,18 +714,6 @@ def fail(jid, err):
 def op_shorten(jid, src, dst, threshold=-40, min_silence=300, pad=80, speed=1.3, do_speed=True):
     try:
         prog(jid,"Analysing video…",0)
-        # Pre-transcode WebM/MKV to MP4 for reliable processing
-        src_ext = Path(src).suffix.lower()
-        if src_ext in ('.webm', '.mkv', '.avi', '.mov'):
-            prog(jid, f"Converting {src_ext} to MP4…", 2)
-            tmp_mp4 = str(Path(src).with_suffix('.tmp_conv.mp4'))
-            _, err_c, rc_c = run([_FFMPEG_EXE, "-y", "-i", src,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", tmp_mp4])
-            if rc_c == 0:
-                src = tmp_mp4
-            else:
-                prog(jid, "Conversion warning — trying anyway…", 2)
         total = get_duration(src)
         prog(jid,f"Duration: {fmt_time(total)}",5)
         prog(jid,f"Detecting silences…",10)
@@ -1321,32 +1199,6 @@ def init_db():
                 expires      INTEGER NOT NULL
             );
         ''')
-        # Promo tables — separate execute calls for PostgreSQL compatibility
-        db.execute('''CREATE TABLE IF NOT EXISTS promo_codes (
-            code         TEXT PRIMARY KEY,
-            plan         TEXT DEFAULT 'pro',
-            days         INTEGER DEFAULT 30,
-            max_uses     INTEGER DEFAULT 9999,
-            uses         INTEGER DEFAULT 0,
-            active       INTEGER DEFAULT 1,
-            created_at   TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        db.execute('''CREATE TABLE IF NOT EXISTS promo_redemptions (
-            id           TEXT PRIMARY KEY,
-            user_id      TEXT NOT NULL,
-            code         TEXT NOT NULL,
-            expires_at   TEXT NOT NULL,
-            created_at   TEXT DEFAULT CURRENT_TIMESTAMP
-        )''')
-        # Insert default codes — ON CONFLICT DO NOTHING works in both SQLite and PostgreSQL
-        try:
-            db.execute("INSERT INTO promo_codes (code, plan, days, max_uses) VALUES ('LAUNCH', 'pro', 30, 9999) ON CONFLICT (code) DO NOTHING")
-        except Exception:
-            pass
-        try:
-            db.execute("INSERT INTO promo_codes (code, plan, days, max_uses) VALUES ('PRODUCTHUNT', 'pro', 30, 9999) ON CONFLICT (code) DO NOTHING")
-        except Exception:
-            pass
 
 init_db()
 
@@ -1381,55 +1233,10 @@ def create_session(user_id):
                    (token, user_id, expires))
     return token
 
-def redeem_promo(user_id, code):
-    """Redeem a promo code for a user. Returns (success, message)."""
-    code = code.strip().upper()
-    try:
-        with get_db() as db:
-            row = db.execute(
-                'SELECT * FROM promo_codes WHERE code=? AND active=1', (code,)
-            ).fetchone()
-            if not row:
-                return False, "Invalid or expired promo code"
-            row = dict(row)
-            if row['uses'] >= row['max_uses']:
-                return False, "This promo code has reached its limit"
-            existing = db.execute(
-                'SELECT id FROM promo_redemptions WHERE user_id=? AND code=?',
-                (user_id, code)
-            ).fetchone()
-            if existing:
-                return False, "You've already used this promo code"
-            expires_at = (datetime.datetime.utcnow() +
-                          datetime.timedelta(days=row['days'])).isoformat()
-            db.execute(
-                'INSERT INTO promo_redemptions (id, user_id, code, expires_at) VALUES (?,?,?,?)',
-                (str(uuid.uuid4())[:8], user_id, code, expires_at)
-            )
-            db.execute('UPDATE promo_codes SET uses=uses+1 WHERE code=?', (code,))
-            db.execute('UPDATE users SET plan=? WHERE id=?', (row['plan'], user_id))
-        return True, f"🎉 Promo applied! You have {row['days']} days of {row['plan'].title()} access."
-    except Exception as e:
-        return False, f"Error applying promo: {str(e)}"
-
-
-def get_active_promo(user_id):
-    """Return active promo redemption for user if any."""
-    with get_db() as db:
-        row = db.execute(
-            'SELECT * FROM promo_redemptions WHERE user_id=? AND expires_at > ? ORDER BY expires_at DESC LIMIT 1',
-            (user_id, datetime.datetime.utcnow().isoformat())
-        ).fetchone()
-    return dict(row) if row else None
-
-
 def check_plan_limit(user):
     if TEST_MODE:
         return True, None  # bypass plan limits for automated testing
-    # Check if user has active promo — treat as pro
-    promo = get_active_promo(user['id'])
-    effective_plan = 'pro' if promo else user['plan']
-    plan = PLANS.get(effective_plan, PLANS['free'])
+    plan = PLANS.get(user['plan'], PLANS['free'])
     now_month = datetime.datetime.utcnow().strftime('%Y-%m')
     if user.get('month_reset') != now_month:
         with get_db() as db:
@@ -1811,20 +1618,6 @@ def api_process():
         elif op=="denoise":
             threading.Thread(target=op_denoise, args=(jid,src,str(dst),
                 data.get("strength","medium"))).start()
-        elif op=="split":
-            threading.Thread(target=op_split, args=(jid,src,str(dst),
-                data.get("splits",[]))).start()
-        elif op=="brightness":
-            threading.Thread(target=op_brightness, args=(jid,src,str(dst),
-                float(data.get("brightness",0.0)),
-                float(data.get("contrast",1.0)),
-                float(data.get("saturation",1.0)))).start()
-        elif op=="thumbnail":
-            ext2 = "jpg"
-            dst2 = OUTPUT_DIR / f"{jid}_out.jpg"
-            threading.Thread(target=op_thumbnail, args=(jid,src,str(dst2),
-                int(data.get("count",5)))).start()
-            return jsonify({"job_id":jid})
         else:
             fail(jid, f"Unknown operation: {op}")
 
@@ -2008,26 +1801,65 @@ def reset_password():
         db.execute('DELETE FROM password_resets WHERE token=?', (token,))
     return jsonify({"success": True})
 
+@app.route("/privacy")
+def privacy():
+    return """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Privacy Policy - Snipforge</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:Inter,sans-serif;max-width:800px;margin:0 auto;padding:40px 24px;color:#0d0d0d;line-height:1.7}
+h1{font-size:2rem;font-weight:700;margin-bottom:8px}
+h2{font-size:1.2rem;font-weight:600;margin:28px 0 8px}
+p,li{color:#444;font-size:.95rem}a{color:#e8420a}</style></head>
+<body>
+<a href="/" style="color:#e8420a;text-decoration:none;font-size:.9rem">← Back to Snipforge</a>
+<h1 style="margin-top:24px">Privacy Policy</h1>
+<p>Last updated: May 2026</p>
+<h2>What we collect</h2>
+<p>We collect your email address and name when you register. If you sign in with Google, we receive your Google profile information. We store your video processing history to show you your dashboard.</p>
+<h2>How we use it</h2>
+<p>We use your email to send password reset emails and important account notifications. We do not sell your data to third parties.</p>
+<h2>Video files</h2>
+<p>Videos you upload are processed on our servers and deleted automatically after processing. We do not permanently store your video files.</p>
+<h2>Payments</h2>
+<p>Payment processing is handled by Stripe. We do not store your credit card information.</p>
+<h2>Cookies</h2>
+<p>We use session cookies to keep you logged in. We do not use tracking or advertising cookies.</p>
+<h2>Contact</h2>
+<p>Questions? Email us at <a href="mailto:support@snipforge.video">support@snipforge.video</a></p>
+</body></html>"""
+
+@app.route("/terms")
+def terms():
+    return """<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Terms of Service - Snipforge</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:Inter,sans-serif;max-width:800px;margin:0 auto;padding:40px 24px;color:#0d0d0d;line-height:1.7}
+h1{font-size:2rem;font-weight:700;margin-bottom:8px}
+h2{font-size:1.2rem;font-weight:600;margin:28px 0 8px}
+p,li{color:#444;font-size:.95rem}a{color:#e8420a}</style></head>
+<body>
+<a href="/" style="color:#e8420a;text-decoration:none;font-size:.9rem">← Back to Snipforge</a>
+<h1 style="margin-top:24px">Terms of Service</h1>
+<p>Last updated: May 2026</p>
+<h2>Use of Service</h2>
+<p>Snipforge provides video editing tools. You may use the service for lawful purposes only. You are responsible for the content you upload and process.</p>
+<h2>Accounts</h2>
+<p>You must provide accurate information when creating an account. You are responsible for maintaining the security of your account.</p>
+<h2>Free and Paid Plans</h2>
+<p>Free accounts are limited to 3 videos per month. Paid plans are billed monthly or yearly via Stripe. You may cancel at any time.</p>
+<h2>Prohibited Use</h2>
+<p>You may not use Snipforge to process illegal content, infringe copyrights, or violate any applicable laws.</p>
+<h2>Limitation of Liability</h2>
+<p>Snipforge is provided as-is. We are not liable for any loss of data or damages arising from use of the service.</p>
+<h2>Contact</h2>
+<p>Questions? Email us at <a href="mailto:support@snipforge.video">support@snipforge.video</a></p>
+</body></html>"""
+
 @app.route("/favicon.ico")
 def favicon():
     from flask import Response
     svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#e8420a"/><text x="16" y="23" text-anchor="middle" font-size="20" fill="white">S</text></svg>'
     return Response(svg.encode(), mimetype="image/svg+xml")
-
-@app.route("/og-image.png")
-def og_image():
-    p = Path(_SCRIPT_DIR) / "og-image.png"
-    if p.exists():
-        return send_file(str(p), mimetype="image/png")
-    return "", 404
-
-@app.route("/demo-video")
-def demo_video():
-    p = Path(_SCRIPT_DIR) / "snipforge_demo.mp4"
-    if p.exists():
-        return send_file(str(p), mimetype="video/mp4",
-                         conditional=True)
-    return "", 404
 
 @app.route("/logout")
 def logout():
@@ -2067,6 +1899,7 @@ def google_login():
         "scope":         "openid email profile",
         "state":         state,
         "access_type":   "offline",
+        "prompt":        "select_account",
     }
     import urllib.parse
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
@@ -2549,352 +2382,6 @@ def api_my_transcriptions():
             (user["id"],)
         ).fetchall()
     return jsonify([dict(r) for r in rows])
-
-
-@app.route("/api/redeem-promo", methods=["POST"])
-@login_required
-def api_redeem_promo():
-    user = get_current_user()
-    code = (request.get_json(silent=True) or {}).get("code", "").strip()
-    if not code:
-        return jsonify({"error": "Enter a promo code"}), 400
-    success, msg = redeem_promo(user["id"], code)
-    if success:
-        return jsonify({"success": True, "message": msg})
-    return jsonify({"error": msg}), 400
-
-
-@app.route("/api/download-zip/<jid>")
-@login_required
-def api_download_zip(jid):
-    """Download all split segments or thumbnails as a zip."""
-    import zipfile, io
-    job = jobs.get(jid)
-    if not job: return jsonify({"error": "Not found"}), 404
-    files = job.get("split_files") or job.get("thumb_files") or []
-    if not files: return jsonify({"error": "No files"}), 404
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files:
-            if os.path.exists(f):
-                zf.write(f, os.path.basename(f))
-    buf.seek(0)
-    return send_file(buf, mimetype="application/zip",
-                     as_attachment=True, download_name=f"snipforge_{jid}.zip")
-
-
-@app.route("/api/thumb/<jid>/<int:idx>")
-def api_thumb(jid, idx):
-    """Serve a specific thumbnail by index."""
-    if not re.match(r'^[a-f0-9]{8}$', jid):
-        return jsonify({"error": "Invalid"}), 400
-    job = jobs.get(jid)
-    if not job: return jsonify({"error": "Not found"}), 404
-    thumbs = job.get("thumb_files", [])
-    if idx < 0 or idx >= len(thumbs):
-        return jsonify({"error": "Index out of range"}), 404
-    path = thumbs[idx]
-    if not os.path.exists(path):
-        return jsonify({"error": "File expired"}), 404
-    return send_file(path, mimetype="image/jpeg")
-
-
-@app.route("/api/split-segment/<jid>/<int:idx>")
-def api_split_segment(jid, idx):
-    """Serve a specific split segment by index."""
-    if not re.match(r'^[a-f0-9]{8}$', jid):
-        return jsonify({"error": "Invalid"}), 400
-    job = jobs.get(jid)
-    if not job: return jsonify({"error": "Not found"}), 404
-    segs = job.get("split_files", [])
-    if idx < 0 or idx >= len(segs):
-        return jsonify({"error": "Index out of range"}), 404
-    path = segs[idx]
-    if not os.path.exists(path):
-        return jsonify({"error": "File expired"}), 404
-    return send_file(path, as_attachment=True,
-                     download_name=f"segment_{idx+1:02d}.mp4",
-                     mimetype="video/mp4")
-
-
-# ─── AI TOOLKIT ROUTES ────────────────────────────────────────────────────────
-
-def _gpt(messages, max_tokens=1500):
-    """Call GPT-4o-mini synchronously, return text."""
-    import urllib.request as _ureq
-    if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY not set")
-    body = json.dumps({
-        "model": "gpt-4o-mini",
-        "messages": messages,
-        "max_tokens": max_tokens
-    }).encode()
-    req = _ureq.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=body,
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}",
-                 "Content-Type": "application/json"}
-    )
-    resp = json.loads(_ureq.urlopen(req, timeout=60).read())
-    return resp["choices"][0]["message"]["content"].strip()
-
-
-def _whisper_transcribe_segments(audio_path):
-    """Run Whisper with verbose_json to get word-level segments with timestamps."""
-    import urllib.request as _ureq
-    with open(audio_path, "rb") as af:
-        audio_data = af.read()
-    boundary = "----FormBoundary" + uuid.uuid4().hex
-    nl = "\r\n"
-    body = (
-        f"--{boundary}{nl}"
-        f'Content-Disposition: form-data; name="model"{nl}{nl}whisper-1{nl}'
-        f"--{boundary}{nl}"
-        f'Content-Disposition: form-data; name="response_format"{nl}{nl}verbose_json{nl}'
-        f"--{boundary}{nl}"
-        f'Content-Disposition: form-data; name="timestamp_granularities[]"{nl}{nl}segment{nl}'
-        f"--{boundary}{nl}"
-        f'Content-Disposition: form-data; name="file"; filename="audio.mp3"{nl}'
-        f"Content-Type: audio/mpeg{nl}{nl}"
-    ).encode() + audio_data + f"{nl}--{boundary}--{nl}".encode()
-    req = _ureq.Request(
-        "https://api.openai.com/v1/audio/transcriptions",
-        data=body,
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}",
-                 "Content-Type": f"multipart/form-data; boundary={boundary}"}
-    )
-    return json.loads(_ureq.urlopen(req, timeout=120).read())
-
-
-def _extract_audio_for_ai(src_path, jid):
-    """Extract mono 16kHz mp3 for AI processing, return path."""
-    tmpdir = tempfile.mkdtemp()
-    audio = os.path.join(tmpdir, "audio.mp3")
-    _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src_path,
-        "-vn", "-c:a", "libmp3lame", "-b:a", "64k", "-ar", "16000", "-ac", "1", audio])
-    if rc != 0:
-        audio = os.path.join(tmpdir, "audio.m4a")
-        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src_path,
-            "-vn", "-c:a", "aac", "-b:a", "64k", "-ar", "16000", "-ac", "1", audio])
-    if rc != 0:
-        raise RuntimeError(f"Audio extraction failed: {err[-200:]}")
-    return audio, tmpdir
-
-
-@app.route("/api/ai-smartclip", methods=["POST"])
-@login_required
-def api_ai_smartclip():
-    """Transcribe video, ask GPT to find best 30-60s highlight, trim it out."""
-    ip = get_ip()
-    if not check_rate_limit(ip): return jsonify({"error": "Rate limit exceeded"}), 429
-    if not OPENAI_API_KEY: return jsonify({"error": "OPENAI_API_KEY not set"}), 400
-    user = get_current_user()
-    ok, msg = check_plan_limit(user)
-    if not ok: return jsonify({"error": msg, "upgrade": True}), 403
-    increment_usage(user["id"])
-
-    # Accept either file_id (JSON) or raw file upload (multipart)
-    data = request.get_json(silent=True) or {}
-    file_id = data.get("file_id", "")
-    safe_name = data.get("filename", "video.mp4")
-    if file_id and re.match(r'^[a-f0-9]{8}$', file_id):
-        src_path = _save_file(file_id, "")
-        if not src_path: return jsonify({"error": "File not found or expired"}), 404
-        p = Path(src_path)
-    else:
-        f = request.files.get("file")
-        safe_name, err = validate_file(f)
-        if err: return jsonify({"error": err}), 400
-        jid_tmp = str(uuid.uuid4())[:8]
-        ext = Path(safe_name).suffix.lower()
-        p = UPLOAD_DIR / f"{jid_tmp}{ext}"
-        f.save(str(p))
-
-    result_id = str(uuid.uuid4())[:8]
-    jobs[result_id] = {"status": "running", "progress": 0, "log": [],
-                       "result": None, "error": None, "orig_filename": safe_name,
-                       "user_id": user["id"], "operation": "ai-smartclip"}
-
-    def do_smartclip():
-        try:
-            prog(result_id, "Extracting audio…", 10)
-            audio, tmpdir = _extract_audio_for_ai(str(p), result_id)
-
-            prog(result_id, "Transcribing with Whisper…", 25)
-            resp = _whisper_transcribe_segments(audio)
-            segments = resp.get("segments", [])
-            full_text = resp.get("text", "")
-            dur = get_duration(str(p))
-
-            if not segments:
-                raise RuntimeError("No speech detected in video")
-
-            # Build timestamped transcript for GPT
-            ts_lines = [f"[{s['start']:.1f}s - {s['end']:.1f}s] {s['text'].strip()}" for s in segments]
-            ts_transcript = "\n".join(ts_lines)
-
-            prog(result_id, "Finding best highlight with GPT…", 55)
-            gpt_resp = _gpt([
-                {"role": "system", "content": (
-                    "You are a video editor. Given a timestamped transcript, "
-                    "identify the single most engaging, self-contained 30-60 second clip. "
-                    "Respond ONLY with JSON: {\"start\": <float seconds>, \"end\": <float seconds>, \"reason\": \"<one sentence>\"}"
-                )},
-                {"role": "user", "content": f"Video duration: {dur:.1f}s\n\nTranscript:\n{ts_transcript[:6000]}"}
-            ], max_tokens=200)
-
-            # Parse GPT response
-            gpt_json = json.loads(re.search(r'\{.*\}', gpt_resp, re.DOTALL).group())
-            start_t = max(0.0, float(gpt_json["start"]))
-            end_t   = min(dur, float(gpt_json["end"]))
-            reason  = gpt_json.get("reason", "Best highlight")
-
-            if end_t - start_t < 5:
-                raise RuntimeError("GPT returned too short a clip, try a longer video")
-
-            prog(result_id, f"Trimming clip: {start_t:.1f}s → {end_t:.1f}s…", 75)
-            dst = OUTPUT_DIR / f"{result_id}_smartclip.mp4"
-            _, err2, rc = run([_FFMPEG_EXE, "-y", "-i", str(p),
-                "-ss", str(start_t), "-to", str(end_t),
-                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-                "-c:a", "aac", "-movflags", "+faststart", str(dst)])
-            if rc != 0:
-                raise RuntimeError(f"Clip trim failed: {err2[-200:]}")
-
-            jobs[result_id]["status"]   = "done"
-            jobs[result_id]["progress"] = 100
-            jobs[result_id]["result"]   = str(dst)
-            jobs[result_id]["stats"]    = {
-                "start": round(start_t, 1), "end": round(end_t, 1),
-                "clip_duration": round(end_t - start_t, 1),
-                "reason": reason, "words": len(full_text.split())
-            }
-            prog(result_id, f"Done! {round(end_t-start_t,1)}s highlight extracted.", 100)
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            p.unlink(missing_ok=True)
-        except Exception as e:
-            jobs[result_id]["status"] = "error"
-            jobs[result_id]["error"]  = str(e)
-
-    threading.Thread(target=do_smartclip, daemon=True).start()
-    return jsonify({"job_id": result_id})
-
-
-@app.route("/api/ai-analyze", methods=["POST"])
-@login_required
-def api_ai_analyze():
-    """Transcribe video, then generate chapters + title/description in one shot."""
-    ip = get_ip()
-    if not check_rate_limit(ip): return jsonify({"error": "Rate limit exceeded"}), 429
-    if not OPENAI_API_KEY: return jsonify({"error": "OPENAI_API_KEY not set"}), 400
-    user = get_current_user()
-    ok, msg = check_plan_limit(user)
-    if not ok: return jsonify({"error": msg, "upgrade": True}), 403
-    increment_usage(user["id"])
-
-    # Accept either file_id (JSON) or raw file upload (multipart)
-    data = request.get_json(silent=True) or {}
-    file_id = data.get("file_id", "")
-    safe_name = data.get("filename", "video.mp4")
-    mode = data.get("mode", "both")
-    if file_id and re.match(r'^[a-f0-9]{8}$', file_id):
-        src_path = _save_file(file_id, "")
-        if not src_path: return jsonify({"error": "File not found or expired"}), 404
-        p = Path(src_path)
-    else:
-        f = request.files.get("file")
-        safe_name, err = validate_file(f)
-        if err: return jsonify({"error": err}), 400
-        mode = request.form.get("mode", "both")
-        jid_tmp = str(uuid.uuid4())[:8]
-        ext = Path(safe_name).suffix.lower()
-        p = UPLOAD_DIR / f"{jid_tmp}{ext}"
-        f.save(str(p))
-
-    result_id = str(uuid.uuid4())[:8]
-    jobs[result_id] = {"status": "running", "progress": 0, "log": [],
-                       "result": None, "error": None, "orig_filename": safe_name,
-                       "user_id": user["id"], "operation": "ai-analyze"}
-
-    def do_analyze():
-        try:
-            prog(result_id, "Extracting audio…", 10)
-            audio, tmpdir = _extract_audio_for_ai(str(p), result_id)
-
-            prog(result_id, "Transcribing with Whisper…", 25)
-            resp = _whisper_transcribe_segments(audio)
-            segments = resp.get("segments", [])
-            full_text = resp.get("text", "").strip()
-            dur = get_duration(str(p))
-
-            if not full_text:
-                raise RuntimeError("No speech detected in video")
-
-            ts_lines = [f"[{s['start']:.0f}s] {s['text'].strip()}" for s in segments]
-            ts_transcript = "\n".join(ts_lines)
-
-            output = {}
-
-            if mode in ("chapters", "both"):
-                prog(result_id, "Generating chapter markers…", 55)
-                chapters_resp = _gpt([
-                    {"role": "system", "content": (
-                        "You are a YouTube creator assistant. Given a timestamped transcript, "
-                        "generate 3-8 YouTube chapter markers. "
-                        "Respond ONLY with JSON array: [{\"time\": \"0:00\", \"title\": \"Intro\"}, ...]"
-                    )},
-                    {"role": "user", "content": f"Duration: {dur:.0f}s\n\nTranscript:\n{ts_transcript[:5000]}"}
-                ], max_tokens=400)
-                chapters_match = re.search(r'\[.*\]', chapters_resp, re.DOTALL)
-                output["chapters"] = json.loads(chapters_match.group()) if chapters_match else []
-
-            if mode in ("metadata", "both"):
-                prog(result_id, "Generating title & description…", 75)
-                meta_resp = _gpt([
-                    {"role": "system", "content": (
-                        "You are a YouTube SEO expert. Given a transcript, generate: "
-                        "3 title options, a 150-word description, and 10 tags. "
-                        'Respond ONLY with JSON: {"titles": ["...", "...", "..."], "description": "...", "tags": ["...", ...]}'
-                    )},
-                    {"role": "user", "content": f"Transcript:\n{full_text[:4000]}"}
-                ], max_tokens=600)
-                meta_match = re.search(r'\{.*\}', meta_resp, re.DOTALL)
-                output["metadata"] = json.loads(meta_match.group()) if meta_match else {}
-
-            # Save as txt
-            txt_out = OUTPUT_DIR / f"{result_id}_analysis.txt"
-            lines = []
-            if "chapters" in output:
-                lines.append("=== CHAPTER MARKERS ===")
-                for ch in output["chapters"]:
-                    lines.append(f"{ch.get('time','?')} {ch.get('title','')}")
-                lines.append("")
-            if "metadata" in output:
-                meta = output["metadata"]
-                lines.append("=== TITLES ===")
-                for t in meta.get("titles", []):
-                    lines.append(f"• {t}")
-                lines.append("")
-                lines.append("=== DESCRIPTION ===")
-                lines.append(meta.get("description", ""))
-                lines.append("")
-                lines.append("=== TAGS ===")
-                lines.append(", ".join(meta.get("tags", [])))
-            txt_out.write_text("\n".join(lines), encoding="utf-8")
-
-            jobs[result_id]["status"]   = "done"
-            jobs[result_id]["progress"] = 100
-            jobs[result_id]["result"]   = str(txt_out)
-            jobs[result_id]["stats"]    = {"output": output, "words": len(full_text.split()), "duration": round(dur,2)}
-            prog(result_id, "Done! Analysis complete.", 100)
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            p.unlink(missing_ok=True)
-        except Exception as e:
-            jobs[result_id]["status"] = "error"
-            jobs[result_id]["error"]  = str(e)
-
-    threading.Thread(target=do_analyze, daemon=True).start()
-    return jsonify({"job_id": result_id})
 
 @app.route("/dashboard")
 @login_required
@@ -3420,16 +2907,7 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Snipforge — AI Video Toolkit</title>
-<meta name="description" content="24 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur, AI smart clip and more. Free to start.">
-<meta property="og:title" content="Snipforge. AI Video Toolkit. 24 Tools, Free to Start.">
-<meta property="og:description" content="24 AI-powered video tools in your browser. Trim, transcribe, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
-<meta property="og:image" content="https://snipforge.video/og-image.png">
-<meta property="og:url" content="https://snipforge.video">
-<meta property="og:type" content="website">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Snipforge. AI Video Toolkit. 24 Tools, Free to Start.">
-<meta name="twitter:description" content="24 AI-powered video tools in your browser. Trim, transcribe, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
-<meta name="twitter:image" content="https://snipforge.video/og-image.png">
+<meta name="description" content="18 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur and more. Free to start.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -3447,7 +2925,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:h
 
 /* ── NAV ── */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-.nav-logo{font-family:var(--tight);font-size:1.2rem;font-weight:900;color:var(--text);text-decoration:none;letter-spacing:-.04em}
+.nav-logo{font-family:'Space Grotesk',sans-serif;font-size:1.2rem;font-weight:700;color:var(--text);text-decoration:none;letter-spacing:-.02em}
 .nav-logo span{color:var(--accent)}
 .nav-right{display:flex;align-items:center;gap:8px}
 .nav-link{padding:7px 14px;font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;transition:color .15s}
@@ -3556,7 +3034,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;d
 
 /* ── FOOTER ── */
 footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--bg)}
-.footer-logo{font-family:var(--tight);font-size:1.1rem;font-weight:900;color:var(--text);letter-spacing:-.04em;text-decoration:none}
+.footer-logo{font-family:'Space Grotesk',sans-serif;font-size:1.1rem;font-weight:700;color:var(--text);letter-spacing:-.02em;text-decoration:none}
 .footer-links{display:flex;gap:24px}
 .footer-links a{font-size:.82rem;color:var(--muted);text-decoration:none;transition:color .15s}
 .footer-links a:hover{color:var(--text)}
@@ -3590,16 +3068,16 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
   <div class="hero-glow"></div>
   <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
   <h1>Edit videos.<br><span>Ship faster.</span></h1>
-  <p class="hero-sub">24 professional video tools in your browser. Trim, transcribe, AI smart clip, chapters, thumbnails, blur regions and more.</p>
+  <p class="hero-sub">18 professional video tools in your browser. Trim, transcribe, translate, watermark, convert to GIF, blur regions and more.</p>
   <div class="hero-btns">
     <a href="/register" class="btn-primary">Start for free <span>→</span></a>
     <a href="/pricing" class="btn-secondary">See pricing</a>
   </div>
   <div class="hero-stats">
-    <div><div class="stat-num">24+</div><div class="stat-lbl">Video Tools</div></div>
-    <div><div class="stat-num">5</div><div class="stat-lbl">AI Tools</div></div>
+    <div><div class="stat-num">18+</div><div class="stat-lbl">Video Tools</div></div>
     <div><div class="stat-num">20</div><div class="stat-lbl">Languages</div></div>
     <div><div class="stat-num">$5</div><div class="stat-lbl">Pro / month</div></div>
+    <div><div class="stat-num">AI</div><div class="stat-lbl">Transcription</div></div>
   </div>
 </section>
 
@@ -3610,21 +3088,20 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <div class="app-dot" style="background:#ff5f57"></div>
       <div class="app-dot" style="background:#febc2e"></div>
       <div class="app-dot" style="background:#28c840"></div>
-      <div class="app-bar-url">snipforge.video</div>
+      <div class="app-bar-url">snipforge.video/app</div>
     </div>
     <div class="app-content">
       <div class="app-sidebar">
-        <div class="app-nav-section">AI Tools</div>
-        <div class="app-nav-item active">🎯 AI Smart Clip</div>
-        <div class="app-nav-item">✂️ AI Shorten</div>
-        <div class="app-nav-item">📝 Transcribe</div>
-        <div class="app-nav-item">📋 Chapters &amp; Meta</div>
         <div class="app-nav-section">Edit</div>
+        <div class="app-nav-item active">✂️ AI Shorten</div>
         <div class="app-nav-item">⏱ Trim</div>
         <div class="app-nav-item">⚡ Speed</div>
         <div class="app-nav-section">Create</div>
         <div class="app-nav-item">🎞 Video to GIF</div>
         <div class="app-nav-item">🎵 Background Music</div>
+        <div class="app-nav-item">✍️ Text Overlay</div>
+        <div class="app-nav-section">AI</div>
+        <div class="app-nav-item">📝 Transcribe</div>
       </div>
       <div class="app-main">
         <div class="app-tool-title">✂️ AI Shorten</div>
@@ -3642,78 +3119,28 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
 <!-- TOOLS -->
 <section style="padding:80px 24px;background:var(--bg2);border-top:1px solid var(--border)">
 <div class="tools-section" style="padding:0;margin:0 auto">
-  <div class="section-tag">All 24 Tools</div>
+  <div class="section-tag">All Tools</div>
   <div class="section-title">Everything you need<br>in one place</div>
   <div class="section-sub">No switching between apps. No subscriptions per tool. Just upload and process.</div>
-
-  <!-- AI TOOLS GROUP -->
-  <div style="margin-bottom:48px">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 14px;background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(139,92,246,.1));border:1px solid rgba(37,99,235,.2);border-radius:100px;font-size:.72rem;font-weight:700;color:#2563eb;letter-spacing:.04em;text-transform:uppercase">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        AI-Powered
-      </div>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-    </div>
-    <div class="tools-grid">
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">✂️</div>
-        <div class="tool-name">AI Shorten</div>
-        <div class="tool-desc">Remove silences and filler words automatically</div>
-        <div class="tool-tag" style="background:#2563eb">AI</div>
-      </div>
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">📝</div>
-        <div class="tool-name">AI Transcribe</div>
-        <div class="tool-desc">Speech to text in 20 languages with translation</div>
-        <div class="tool-tag" style="background:#2563eb">AI</div>
-      </div>
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">🎯</div>
-        <div class="tool-name">AI Smart Clip</div>
-        <div class="tool-desc">Auto-finds the most engaging 30–60s highlight</div>
-        <div class="tool-tag" style="background:#2563eb">AI</div>
-      </div>
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">📋</div>
-        <div class="tool-name">AI Chapters &amp; Meta</div>
-        <div class="tool-desc">Generate YouTube chapters, titles, descriptions &amp; tags</div>
-        <div class="tool-tag" style="background:#2563eb">AI</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- EDIT / STANDARD TOOLS GROUP -->
-  <div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 14px;background:var(--bg);border:1px solid var(--border);border-radius:100px;font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Video Tools
-      </div>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-    </div>
-    <div class="tools-grid">
-      <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact start and end points</div></div>
-      <div class="tool-card"><div class="tool-icon">🎯</div><div class="tool-name">Multi-Trim</div><div class="tool-desc">Keep multiple sections and stitch together</div></div>
-      <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Speed up or slow down your video</div></div>
-      <div class="tool-card"><div class="tool-icon">✂️</div><div class="tool-name">Split</div><div class="tool-desc">Cut one video into multiple segments</div></div>
-      <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation in one click</div></div>
-      <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize for Social</div><div class="tool-desc">Crop to 16:9, 9:16, 1:1 for any platform</div></div>
-      <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with custom text</div></div>
-      <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips into one video</div></div>
-      <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI and more</div></div>
-      <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size without losing quality</div></div>
-      <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels precisely</div></div>
-      <div class="tool-card"><div class="tool-icon">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background hiss and hum</div></div>
-      <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull the audio track out as MP3</div></div>
-      <div class="tool-card"><div class="tool-icon">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove the audio track entirely</div></div>
-      <div class="tool-card"><div class="tool-icon">🎞</div><div class="tool-name">Video to GIF</div><div class="tool-desc">Convert video clips to animated GIFs</div></div>
-      <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Background Music</div><div class="tool-desc">Mix music into your video at custom volume</div></div>
-      <div class="tool-card"><div class="tool-icon">✍️</div><div class="tool-name">Text Overlay</div><div class="tool-desc">Add text anywhere on your video</div></div>
-      <div class="tool-card"><div class="tool-icon">🫥</div><div class="tool-name">Blur Region</div><div class="tool-desc">Blur faces or sensitive areas</div></div>
-      <div class="tool-card"><div class="tool-icon">🎨</div><div class="tool-name">Brightness &amp; Contrast</div><div class="tool-desc">Adjust brightness, contrast and saturation</div></div>
-      <div class="tool-card"><div class="tool-icon">🖼</div><div class="tool-name">Thumbnail Extractor</div><div class="tool-desc">Extract best frames as high-quality JPGs</div></div>
-    </div>
+  <div class="tools-grid">
+    <div class="tool-card"><div class="tool-icon">✂️</div><div class="tool-name">AI Shorten</div><div class="tool-desc">Remove silences and filler words automatically</div><div class="tool-tag">AI</div></div>
+    <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact start and end points</div></div>
+    <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Speed up or slow down your video</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation in one click</div></div>
+    <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize for Social</div><div class="tool-desc">Crop to 16:9, 9:16, 1:1 for any platform</div></div>
+    <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with custom text</div></div>
+    <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips into one video</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI and more</div></div>
+    <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size without losing quality</div></div>
+    <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels precisely</div></div>
+    <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull the audio track out as MP3</div></div>
+    <div class="tool-card"><div class="tool-icon">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove the audio track entirely</div></div>
+    <div class="tool-card"><div class="tool-icon">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background hiss and hum</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">🎞</div><div class="tool-name">Video to GIF</div><div class="tool-desc">Convert video clips to animated GIFs</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Background Music</div><div class="tool-desc">Mix music into your video at custom volume</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">✍️</div><div class="tool-name">Text Overlay</div><div class="tool-desc">Add text anywhere on your video</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">🫥</div><div class="tool-name">Blur Region</div><div class="tool-desc">Blur faces or sensitive areas</div><div class="tool-tag" style="background:var(--green)">NEW</div></div>
+    <div class="tool-card"><div class="tool-icon">📝</div><div class="tool-name">AI Transcribe</div><div class="tool-desc">Speech to text in 20 languages</div><div class="tool-tag">AI</div></div>
   </div>
 </div>
 </section>
@@ -3739,7 +3166,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <div class="feature-card">
         <div class="feature-icon">💰</div>
         <div class="feature-title">More tools for less</div>
-        <div class="feature-desc">Pro plan starts at $5/month. Unlimited videos, any duration, all 24 tools.</div>
+        <div class="feature-desc">Pro plan starts at $5/month. Unlimited videos, any duration, all 18 tools.</div>
       </div>
     </div>
   </div>
@@ -3759,7 +3186,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
     <div class="step">
       <div class="step-num">2</div>
       <h3>Upload & choose your tool</h3>
-      <p>Drop your video, pick from 24 tools and adjust the settings. Preview your changes live.</p>
+      <p>Drop your video, pick from 18 tools and adjust the settings. Preview your changes live.</p>
       <div class="step-arrow">→</div>
     </div>
     <div class="step">
@@ -3783,7 +3210,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <ul class="plan-features">
         <li>3 videos per month</li>
         <li>Max 5 min per video</li>
-        <li>All 24 tools</li>
+        <li>All 18 tools</li>
         <li class="no">Priority processing</li>
         <li class="no">Unlimited duration</li>
       </ul>
@@ -3798,7 +3225,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <ul class="plan-features">
         <li>Unlimited videos</li>
         <li>Any duration</li>
-        <li>All 24 tools</li>
+        <li>All 18 tools</li>
         <li>AI transcription</li>
         <li>Priority processing</li>
       </ul>
@@ -4193,10 +3620,6 @@ async function doRegister(){
     </div>
   </div>
 </div>
-<!-- Promo code on pricing page -->
-<div style="max-width:400px;margin:0 auto 40px;padding:0 24px;text-align:center">
-  <div style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Have a promo code? Apply it on your <a href="/account" style="color:var(--accent);text-decoration:none;font-weight:600">account page</a> after signing up.</div>
-</div>
 <script>
 let _billing='monthly';
 function toggleBilling(){
@@ -4277,54 +3700,7 @@ async function checkout(plan){
         <button class="danger-btn" onclick="cancelSub()">Cancel Plan</button>
       {% endif %}
     </div>
-    <!-- Promo Code -->
-    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-      <div style="font-size:.82rem;color:var(--muted);margin-bottom:8px;font-weight:600">Have a promo code?</div>
-      <div style="display:flex;gap:8px">
-        <input type="text" id="promo-input" placeholder="Enter code e.g. LAUNCH"
-          style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-family:var(--mono);font-size:.85rem;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase()">
-        <button onclick="redeemPromo()"
-          style="padding:9px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;white-space:nowrap">
-          Apply
-        </button>
-      </div>
-      <div id="promo-msg" style="margin-top:8px;font-size:.82rem;display:none"></div>
-    </div>
   </div>
-  <script>
-  async function redeemPromo(){
-    const code=document.getElementById('promo-input').value.trim().toUpperCase();
-    const msg=document.getElementById('promo-msg');
-    if(!code){msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Enter a promo code first';return;}
-    msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Checking…';
-    try {
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),8000);
-      const r=await fetch('/api/redeem-promo',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'include',
-        body:JSON.stringify({code}),
-        signal:controller.signal
-      });
-      clearTimeout(timeout);
-      const d=await r.json();
-      if(d.success){
-        msg.style.color='#22c55e';msg.textContent=d.message;
-        setTimeout(()=>location.reload(),1500);
-      } else {
-        msg.style.color='#e74c3c';msg.textContent=d.error||'Invalid code';
-      }
-    } catch(e) {
-      if(e.name==='AbortError'){
-        msg.style.color='#e74c3c';msg.textContent='Request timed out. Please try again.';
-      } else {
-        msg.style.color='#e74c3c';msg.textContent='Network error. Please try again.';
-      }
-    }
-  }
-  </script>
   <div class="account-card">
     <h3>Session</h3>
     <div class="account-row">
@@ -5012,30 +4388,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <span class="nav-full">Transcribe</span><span class="nav-short">Transcribe</span>
     <span class="nav-badge new">AI</span>
   </div>
-  <div class="nav-item" data-panel="smartclip" onclick="switchPanel(this)">
-    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><polygon points="3,2 13,8 3,14"/></svg></span>
-    <span class="nav-full">Smart Clip</span><span class="nav-short">Clip</span>
-    <span class="nav-badge new">AI</span>
-  </div>
-  <div class="nav-item" data-panel="aianalyze" onclick="switchPanel(this)">
-    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M2 4h12M2 8h8M2 12h5"/><circle cx="13" cy="11" r="2.5"/><path d="M14.8 13.8l1.2 1.2" stroke-linecap="round"/></svg></span>
-    <span class="nav-full">Chapters & Meta</span><span class="nav-short">Meta</span>
-    <span class="nav-badge new">AI</span>
-  </div>
-
-  <div class="nav-section">Edit</div>
-  <div class="nav-item" data-panel="split" onclick="switchPanel(this)">
-    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><path d="M8 2v12M3 6l5-4 5 4M3 10l5 4 5-4"/></svg></span>
-    <span class="nav-full">Split Video</span><span class="nav-short">Split</span>
-  </div>
-  <div class="nav-item" data-panel="colorgrade" onclick="switchPanel(this)">
-    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="8" cy="8" r="5"/><path d="M8 3v10M3 8h10"/></svg></span>
-    <span class="nav-full">Brightness</span><span class="nav-short">Color</span>
-  </div>
-  <div class="nav-item" data-panel="thumbnail" onclick="switchPanel(this)">
-    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.5" cy="6.5" r="1"/><path d="M2 11l3-3 3 3 2-2 4 4"/></svg></span>
-    <span class="nav-full">Thumbnail</span><span class="nav-short">Thumb</span>
-  </div>
 
   <div class="nav-section">Share</div>
   <div class="nav-item" data-panel="shares" onclick="switchPanel(this)">
@@ -5585,7 +4937,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── VIDEO TO GIF ── -->
 <div class="panel" id="panel-gif">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF (no audio, GIFs are silent)</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">🎞️</span>Video to GIF</div><div class="panel-sub">Convert your video into an animated GIF (no audio — GIFs are silent)</div></div>
   <div class="upload-zone" id="gif-dropzone"><input type="file" id="gif-file" accept="video/*">
     <div class="upload-zone-icon">🎞️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p>
   </div>
@@ -5777,7 +5129,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── TRANSCRIBE ── -->
 <div class="panel" id="panel-transcribe">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text in any language</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">📝</span>AI Transcribe</div><div class="panel-sub">Convert speech to text — any language</div></div>
   <div class="upload-zone" id="tc-dropzone"><input type="file" id="tc-file" accept="video/*,audio/*">
     <div class="upload-zone-icon">📝</div><h3>Drop your video or audio here</h3><p>MP4 · MOV · MP3 · WAV</p>
   </div>
@@ -5855,227 +5207,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <div id="tc-text" style="font-size:.9rem;line-height:1.7;color:var(--text);white-space:pre-wrap;max-height:300px;overflow-y:auto"></div>
     </div>
     <a class="dl-btn" id="tc-dl-txt" href="#" download="transcript.txt">⬇ Download Transcript (.txt)</a>
-  </div>
-</div>
-
-<!-- ── AI SMART CLIP ── -->
-<div class="panel" id="panel-smartclip">
-  <div class="panel-header">
-    <div class="panel-title"><span class="panel-title-icon">🎯</span>AI Smart Clip</div>
-    <div class="panel-sub">AI finds the most engaging 30–60s highlight from your video automatically</div>
-  </div>
-  <div class="upload-zone" id="sc-dropzone"><input type="file" id="sc-file" accept="video/*,audio/*">
-    <div class="upload-zone-icon">🎯</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
-  </div>
-  <div class="file-card" id="sc-filecard">
-    <div class="file-card-top">
-      <div class="file-thumb"><video id="sc-thumb" muted></video></div>
-      <div class="file-meta"><div class="file-name" id="sc-fname">—</div>
-        <div class="file-stats"><div class="file-stat">Duration <span id="sc-dur">—</span></div><div class="file-stat">Size <span id="sc-size">—</span></div></div>
-      </div>
-      <button class="file-change" onclick="resetUpload('sc')">Change</button>
-    </div>
-  </div>
-  <button class="run-btn" id="sc-run" disabled onclick="runSmartClip()">Upload a video first</button>
-  <div class="progress-box" id="sc-progress"><div class="progress-track"><div class="progress-fill" id="sc-pfill"></div></div><div class="log" id="sc-log"></div></div>
-  <div class="result-box" id="sc-result">
-    <div class="result-stats" id="sc-rstats"></div>
-    <div id="sc-reason-wrap" style="background:rgba(232,66,10,.06);border:1px solid rgba(232,66,10,.15);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:.85rem;display:none">
-      <strong>💡 Why this clip:</strong> <span id="sc-reason"></span>
-    </div>
-    <video id="sc-rvideo" controls style="width:100%;border-radius:10px;margin-bottom:12px;display:none"></video>
-    <a class="dl-btn" id="sc-dl" href="#" download="smartclip.mp4">⬇ Download Smart Clip</a>
-  </div>
-</div>
-
-<!-- ── AI CHAPTERS & META ── -->
-<div class="panel" id="panel-aianalyze">
-  <div class="panel-header">
-    <div class="panel-title"><span class="panel-title-icon">📋</span>Chapters &amp; Metadata</div>
-    <div class="panel-sub">Generate YouTube chapter markers, titles, descriptions and tags from your video</div>
-  </div>
-  <div class="upload-zone" id="aa-dropzone"><input type="file" id="aa-file" accept="video/*,audio/*">
-    <div class="upload-zone-icon">📋</div><h3>Drop your video here</h3><p>MP4 · MOV · MP3 · WAV</p>
-  </div>
-  <div class="file-card" id="aa-filecard">
-    <div class="file-card-top">
-      <div class="file-thumb"><video id="aa-thumb" muted></video></div>
-      <div class="file-meta"><div class="file-name" id="aa-fname">—</div>
-        <div class="file-stats"><div class="file-stat">Duration <span id="aa-dur">—</span></div><div class="file-stat">Size <span id="aa-size">—</span></div></div>
-      </div>
-      <button class="file-change" onclick="resetUpload('aa')">Change</button>
-    </div>
-  </div>
-  <div style="margin-bottom:14px">
-    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Generate</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer"><input type="checkbox" id="aa-do-chapters" checked> Chapter markers</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer"><input type="checkbox" id="aa-do-meta" checked> Title &amp; description &amp; tags</label>
-    </div>
-  </div>
-  <button class="run-btn" id="aa-run" disabled onclick="runAiAnalyze()">Upload a video first</button>
-  <div class="progress-box" id="aa-progress"><div class="progress-track"><div class="progress-fill" id="aa-pfill"></div></div><div class="log" id="aa-log"></div></div>
-  <div class="result-box" id="aa-result">
-    <div id="aa-chapters-wrap" style="display:none;margin-bottom:16px">
-      <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-        Chapter Markers <button onclick="copyEl('aa-chapters-text')" style="font-size:.65rem;padding:3px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--muted)">Copy</button>
-      </div>
-      <pre id="aa-chapters-text" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.82rem;white-space:pre-wrap;overflow-y:auto;max-height:200px"></pre>
-    </div>
-    <div id="aa-meta-wrap" style="display:none">
-      <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-        Titles <button onclick="copyEl('aa-titles-text')" style="font-size:.65rem;padding:3px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--muted)">Copy</button>
-      </div>
-      <div id="aa-titles-text" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.88rem;margin-bottom:12px"></div>
-      <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-        Description <button onclick="copyEl('aa-desc-text')" style="font-size:.65rem;padding:3px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--muted)">Copy</button>
-      </div>
-      <div id="aa-desc-text" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.85rem;line-height:1.6;margin-bottom:12px;white-space:pre-wrap"></div>
-      <div style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-        Tags <button onclick="copyEl('aa-tags-text')" style="font-size:.65rem;padding:3px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;cursor:pointer;color:var(--muted)">Copy</button>
-      </div>
-      <div id="aa-tags-text" style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:.82rem"></div>
-    </div>
-    <a class="dl-btn" id="aa-dl" href="#" download="analysis.txt" style="margin-top:14px;display:inline-flex">⬇ Download as .txt</a>
-  </div>
-</div>
-
-<!-- ── SPLIT VIDEO ── -->
-<div class="panel" id="panel-split">
-  <div class="panel-header">
-    <div class="panel-title"><span class="panel-title-icon">✂️</span>Split Video</div>
-    <div class="panel-sub">Click the timeline to place split markers. Drag to adjust, click × to remove.</div>
-  </div>
-  <div class="upload-zone" id="sp2-dropzone"><input type="file" id="sp2-file" accept="video/*">
-    <div class="upload-zone-icon">✂️</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
-  </div>
-  <div class="file-card" id="sp2-filecard">
-    <div class="file-card-top">
-      <div class="file-thumb"><video id="sp2-thumb" muted></video></div>
-      <div class="file-meta"><div class="file-name" id="sp2-fname">—</div>
-        <div class="file-stats"><div class="file-stat">Duration <span id="sp2-dur">—</span></div><div class="file-stat">Size <span id="sp2-size">—</span></div></div>
-      </div>
-      <button class="file-change" onclick="resetUpload('sp2')">Change</button>
-    </div>
-  </div>
-
-  <!-- Video preview + timeline -->
-  <div id="sp2-timeline" style="display:none;margin-bottom:16px">
-    <video id="sp2-preview" controls style="display:none;width:100%;border-radius:10px;margin-bottom:10px;max-height:220px;background:#000"></video>
-    <div style="font-family:var(--mono);font-size:.62rem;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between">
-      <span>👆 Click timeline to add split point</span>
-      <span id="sp2-count" style="color:var(--accent)"></span>
-    </div>
-    <div style="position:relative;height:48px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;overflow:visible;cursor:crosshair;margin-bottom:20px"
-         onclick="_addSplitAtClick(event)">
-      <div id="sp2-tl-track" style="position:absolute;inset:0;border-radius:8px;overflow:hidden"></div>
-    </div>
-    <!-- Hidden textarea keeps splits in sync -->
-    <textarea id="sp2-splits" style="display:none"></textarea>
-  </div>
-
-  <button class="run-btn" id="sp2-run" disabled onclick="runSplit()">Upload a video first</button>
-  <div class="progress-box" id="sp2-progress"><div class="progress-track"><div class="progress-fill" id="sp2-pfill"></div></div><div class="log" id="sp2-log"></div></div>
-  <div class="result-box" id="sp2-result">
-    <div class="result-stats" id="sp2-rstats"></div>
-    <div id="sp2-files-wrap" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
-    <a class="dl-btn" id="sp2-dl-zip" href="#" download="split_segments.zip">⬇ Download All as ZIP</a>
-  </div>
-</div>
-
-<!-- ── BRIGHTNESS / CONTRAST ── -->
-<div class="panel" id="panel-colorgrade">
-  <div class="panel-header">
-    <div class="panel-title"><span class="panel-title-icon">🎨</span>Brightness &amp; Contrast</div>
-    <div class="panel-sub">Adjust brightness, contrast and saturation. Live preview updates instantly.</div>
-  </div>
-  <div class="upload-zone" id="bg-dropzone"><input type="file" id="bg-file" accept="video/*">
-    <div class="upload-zone-icon">🎨</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
-  </div>
-  <div class="file-card" id="bg-filecard">
-    <div class="file-card-top">
-      <div class="file-thumb"><video id="bg-thumb" muted></video></div>
-      <div class="file-meta"><div class="file-name" id="bg-fname">—</div>
-        <div class="file-stats"><div class="file-stat">Duration <span id="bg-dur">—</span></div><div class="file-stat">Size <span id="bg-size">—</span></div></div>
-      </div>
-      <button class="file-change" onclick="resetUpload('bg')">Change</button>
-    </div>
-  </div>
-
-  <!-- Live CSS-filter preview -->
-  <video id="bg-preview" controls muted loop
-    style="display:none;width:100%;border-radius:10px;margin-bottom:14px;max-height:220px;background:#000;transition:filter .1s"></video>
-
-  <div style="margin-bottom:14px">
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Brightness</label>
-          <span id="bg-bright-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">0</span>
-        </div>
-        <input type="range" id="bg-brightness" min="-0.5" max="0.5" step="0.05" value="0" style="width:100%"
-          oninput="document.getElementById('bg-bright-val').textContent=parseFloat(this.value).toFixed(2);_updateBrightnessFilter()">
-      </div>
-      <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Contrast</label>
-          <span id="bg-contrast-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">1.0</span>
-        </div>
-        <input type="range" id="bg-contrast" min="0.5" max="2.0" step="0.05" value="1.0" style="width:100%"
-          oninput="document.getElementById('bg-contrast-val').textContent=parseFloat(this.value).toFixed(2);_updateBrightnessFilter()">
-      </div>
-      <div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <label style="font-family:var(--mono);font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Saturation</label>
-          <span id="bg-sat-val" style="font-family:var(--mono);font-size:.75rem;color:var(--accent)">1.0</span>
-        </div>
-        <input type="range" id="bg-saturation" min="0" max="2.0" step="0.05" value="1.0" style="width:100%"
-          oninput="document.getElementById('bg-sat-val').textContent=parseFloat(this.value).toFixed(2);_updateBrightnessFilter()">
-      </div>
-    </div>
-  </div>
-  <button class="run-btn" id="bg-run" disabled onclick="runColorGrade()">Upload a video first</button>
-  <div class="progress-box" id="bg-progress"><div class="progress-track"><div class="progress-fill" id="bg-pfill"></div></div><div class="log" id="bg-log"></div></div>
-  <div class="result-box" id="bg-result">
-    <div class="result-stats" id="bg-rstats"></div>
-    <video id="bg-rvideo" controls style="width:100%;border-radius:10px;margin-bottom:12px;display:none"></video>
-    <a class="dl-btn" id="bg-dl" href="#" download="color_corrected.mp4">⬇ Download Video</a>
-  </div>
-</div>
-
-<!-- ── THUMBNAIL EXTRACTOR ── -->
-<div class="panel" id="panel-thumbnail">
-  <div class="panel-header">
-    <div class="panel-title"><span class="panel-title-icon">🖼</span>Thumbnail Extractor</div>
-    <div class="panel-sub">Extract the best frames from your video as high-quality JPGs</div>
-  </div>
-  <div class="upload-zone" id="th-dropzone"><input type="file" id="th-file" accept="video/*">
-    <div class="upload-zone-icon">🖼</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM</p>
-  </div>
-  <div class="file-card" id="th-filecard">
-    <div class="file-card-top">
-      <div class="file-thumb"><video id="th-thumb" muted></video></div>
-      <div class="file-meta"><div class="file-name" id="th-fname">—</div>
-        <div class="file-stats"><div class="file-stat">Duration <span id="th-dur">—</span></div><div class="file-stat">Size <span id="th-size">—</span></div></div>
-      </div>
-      <button class="file-change" onclick="resetUpload('th')">Change</button>
-    </div>
-  </div>
-  <div style="margin-bottom:14px">
-    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:8px">How many thumbnails?</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer"><input type="radio" name="th-count" value="1"> 1 (best)</label>
-      <label style="display:flex;align-items:center;gap=6px;font-size:.88rem;cursor:pointer"><input type="radio" name="th-count" value="3" checked> 3</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer"><input type="radio" name="th-count" value="5"> 5</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:.88rem;cursor:pointer"><input type="radio" name="th-count" value="10"> 10</label>
-    </div>
-  </div>
-  <button class="run-btn" id="th-run" disabled onclick="runThumbnail()">Upload a video first</button>
-  <div class="progress-box" id="th-progress"><div class="progress-track"><div class="progress-fill" id="th-pfill"></div></div><div class="log" id="th-log"></div></div>
-  <div class="result-box" id="th-result">
-    <div class="result-stats" id="th-rstats"></div>
-    <div id="th-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px"></div>
-    <a class="dl-btn" id="th-dl-zip" href="#" download="thumbnails.zip">⬇ Download All as ZIP</a>
   </div>
 </div>
 
@@ -6247,10 +5378,7 @@ function getRunLabel(p) {
   const m = {sz:'✂ AI Shorten Video',tr:'Trim Video',mt:'Stitch Segments',sp:'Change Speed',
              ro:'Rotate / Flip',cr:'Resize Video',wm:'Add Watermark',
              vl:'Adjust Volume',cm:'Compress Video',cv:'Convert Format',au:'Extract Audio',
-             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',gif:'Convert to GIF',
-             bgmusic:'Add Music',textoverlay:'Apply Text',blur:'Blur Region',
-             sc:'🎯 Find Smart Clip',aa:'✨ Generate',sp2:'✂️ Split Video',
-             bg:'🎨 Apply Color',th:'🖼 Extract Thumbnails'};
+             mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',wm:'Apply Watermark',gif:'Convert to GIF',bgmusic:'Add Music',textoverlay:'Apply Text',blur:'Blur Region'};
   return m[p] || 'Process';
 }
 
@@ -7272,337 +6400,7 @@ window.pollJob = function(prefix, jobId, videoId, dlId, dlName){
   },1200);
 };
 
-['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blur','sc','aa','sp2','bg','th'].forEach(p=>setupUpload(p));
-
-// ── AI Smart Clip ──
-async function runSmartClip(){
-  const s=state['sc']; if(!s){alert('Upload a video first');return;}
-  const run=document.getElementById('sc-run');
-  run.disabled=true; run.textContent='Analysing…'; run.classList.add('working');
-  document.getElementById('sc-progress').classList.add('show');
-  document.getElementById('sc-result').classList.remove('show');
-  document.getElementById('sc-reason-wrap').style.display='none';
-  document.getElementById('sc-rvideo').style.display='none';
-  log('sc','Starting AI analysis…','info');
-
-  // Use file_id (already uploaded via /api/info)
-  const r=await fetch('/api/ai-smartclip',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({file_id:s.file_id, filename:s.filename})});
-  const d=await r.json();
-  if(d.error){log('sc','Error: '+d.error,'err');run.disabled=false;run.textContent=getRunLabel('sc');run.classList.remove('working');return;}
-  const jid=d.job_id;
-  let idx=0;
-  const iv=setInterval(async()=>{
-    const r2=await fetch('/api/status/'+jid+'?from='+idx);
-    const d2=await r2.json();
-    if(d2.log){d2.log.forEach(l=>log('sc',l,l.startsWith('Done')?'ok':l.startsWith('Error')?'err':'info'));idx+=d2.log.length;}
-    if(d2.progress!=null) setProgress('sc',d2.progress);
-    if(d2.status==='done'){
-      clearInterval(iv);
-      const dlUrl='/api/download/'+jid;
-      const vid=document.getElementById('sc-rvideo');
-      vid.src=dlUrl; vid.style.display='block';
-      document.getElementById('sc-dl').href=dlUrl;
-      document.getElementById('sc-dl').download=(s.filename||'clip').replace(/\.[^.]+$/,'')+'_smartclip.mp4';
-      if(d2.stats){
-        const st=d2.stats;
-        showStats('sc',{duration_in:st.clip_duration});
-        if(st.reason){
-          document.getElementById('sc-reason').textContent=st.reason;
-          document.getElementById('sc-reason-wrap').style.display='block';
-        }
-      }
-      document.getElementById('sc-result').classList.add('show');
-      run.disabled=false; run.textContent=getRunLabel('sc'); run.classList.remove('working');
-      addShareBtn('sc', jid, (s.filename||'video').replace(/\.[^.]+$/,'')+'_smartclip.mp4');
-    }
-    if(d2.status==='error'){
-      clearInterval(iv);
-      log('sc','Error: '+d2.error,'err');
-      run.disabled=false; run.textContent=getRunLabel('sc'); run.classList.remove('working');
-    }
-  },1500);
-}
-
-// ── AI Analyze (Chapters + Meta) ──
-async function runAiAnalyze(){
-  const s=state['aa']; if(!s){alert('Upload a video first');return;}
-  const run=document.getElementById('aa-run');
-  run.disabled=true; run.textContent='Analysing…'; run.classList.add('working');
-  document.getElementById('aa-progress').classList.add('show');
-  document.getElementById('aa-result').classList.remove('show');
-  log('aa','Starting AI analysis…','info');
-
-  const doChapters=document.getElementById('aa-do-chapters').checked;
-  const doMeta=document.getElementById('aa-do-meta').checked;
-  if(!doChapters && !doMeta){alert('Select at least one option');run.disabled=false;run.textContent=getRunLabel('aa');run.classList.remove('working');return;}
-  const mode = doChapters && doMeta ? 'both' : doChapters ? 'chapters' : 'metadata';
-
-  // Use file_id (already uploaded via /api/info)
-  const r=await fetch('/api/ai-analyze',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({file_id:s.file_id, filename:s.filename, mode})});
-  const d=await r.json();
-  if(d.error){log('aa','Error: '+d.error,'err');run.disabled=false;run.textContent=getRunLabel('aa');run.classList.remove('working');return;}
-  const jid=d.job_id;
-  let idx=0;
-  const iv=setInterval(async()=>{
-    const r2=await fetch('/api/status/'+jid+'?from='+idx);
-    const d2=await r2.json();
-    if(d2.log){d2.log.forEach(l=>log('aa',l,l.startsWith('Done')?'ok':l.startsWith('Error')?'err':'info'));idx+=d2.log.length;}
-    if(d2.progress!=null) setProgress('aa',d2.progress);
-    if(d2.status==='done'){
-      clearInterval(iv);
-      const out = d2.stats && d2.stats.output ? d2.stats.output : {};
-      if(out.chapters && out.chapters.length){
-        const txt=out.chapters.map(c=>c.time+' '+c.title).join('\n');
-        document.getElementById('aa-chapters-text').textContent=txt;
-        document.getElementById('aa-chapters-wrap').style.display='block';
-      }
-      if(out.metadata){
-        const m=out.metadata;
-        if(m.titles) document.getElementById('aa-titles-text').innerHTML=m.titles.map((t,i)=>`<div style="padding:4px 0;border-bottom:1px solid var(--border)">${i+1}. ${t}</div>`).join('');
-        if(m.description) document.getElementById('aa-desc-text').textContent=m.description;
-        if(m.tags) document.getElementById('aa-tags-text').innerHTML=m.tags.map(t=>`<span style="display:inline-block;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;margin:2px;font-size:.8rem">${t}</span>`).join('');
-        document.getElementById('aa-meta-wrap').style.display='block';
-      }
-      document.getElementById('aa-dl').href='/api/download/'+jid;
-      document.getElementById('aa-result').classList.add('show');
-      run.disabled=false; run.textContent=getRunLabel('aa'); run.classList.remove('working');
-    }
-    if(d2.status==='error'){
-      clearInterval(iv);
-      log('aa','Error: '+d2.error,'err');
-      run.disabled=false; run.textContent=getRunLabel('aa'); run.classList.remove('working');
-    }
-  },1500);
-}
-
-function copyEl(id){
-  const el=document.getElementById(id);
-  navigator.clipboard.writeText(el.textContent||el.innerText);
-  event.target.textContent='Copied!';
-  setTimeout(()=>event.target.textContent='Copy',2000);
-}
-
-// ── Split Video — draggable timeline ──
-let _splitMarkers = [];
-function _initSplitTimeline(){
-  const s=state['sp2']; if(!s||!s.duration) return;
-  const dur=s.duration;
-  const tl=document.getElementById('sp2-timeline');
-  const vid=document.getElementById('sp2-preview');
-  if(!tl) return;
-  tl.style.display='block';
-  vid.style.display='block';
-  // Use the object URL from the thumb element which setupUpload already set
-  const thumb=document.getElementById('sp2-thumb');
-  if(thumb && thumb.src) vid.src=thumb.src;
-  _splitMarkers=[];
-  _renderSplitTimeline();
-}
-function _renderSplitTimeline(){
-  const s=state['sp2']; if(!s) return;
-  const dur=s.duration;
-  const track=document.getElementById('sp2-tl-track');
-  if(!track) return;
-  track.innerHTML='';
-  // Render segment regions
-  const points=[0,..._splitMarkers.map(m=>m.t).sort((a,b)=>a-b),dur];
-  const colors=['rgba(232,66,10,.12)','rgba(37,99,235,.08)','rgba(22,163,74,.08)','rgba(139,92,246,.08)','rgba(234,179,8,.08)'];
-  for(let i=0;i<points.length-1;i++){
-    const seg=document.createElement('div');
-    seg.style.cssText=`position:absolute;top:0;bottom:0;left:${points[i]/dur*100}%;width:${(points[i+1]-points[i])/dur*100}%;background:${colors[i%colors.length]};border-right:1px dashed rgba(0,0,0,.15)`;
-    const lbl=document.createElement('span');
-    lbl.style.cssText='position:absolute;top:4px;left:4px;font-family:var(--mono);font-size:.55rem;color:var(--muted)';
-    lbl.textContent='Seg '+(i+1);
-    seg.appendChild(lbl); track.appendChild(seg);
-  }
-  // Render markers
-  _splitMarkers.forEach((m,i)=>{
-    const pin=document.createElement('div');
-    pin.style.cssText=`position:absolute;top:0;bottom:0;left:${m.t/dur*100}%;width:3px;background:var(--accent);cursor:ew-resize;z-index:10;transform:translateX(-1px)`;
-    pin.title='Drag to move · Click label to remove';
-    const lbl=document.createElement('div');
-    lbl.style.cssText='position:absolute;top:-22px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-family:var(--mono);font-size:.55rem;padding:1px 5px;border-radius:3px;white-space:nowrap;cursor:pointer;user-select:none';
-    lbl.textContent=_fmtSec(m.t)+'  ✕';
-    lbl.onclick=(e)=>{e.stopPropagation();_splitMarkers.splice(i,1);_renderSplitTimeline();_syncSplitInput();};
-    pin.appendChild(lbl);
-    // Drag logic
-    pin.addEventListener('mousedown',e=>{
-      e.preventDefault();
-      const rect=track.parentElement.getBoundingClientRect();
-      const move=ev=>{
-        const x=Math.max(0,Math.min(1,(ev.clientX-rect.left)/rect.width));
-        m.t=Math.round(x*dur*10)/10;
-        _renderSplitTimeline(); _syncSplitInput();
-      };
-      const up=()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};
-      document.addEventListener('mousemove',move); document.addEventListener('mouseup',up);
-    });
-    track.appendChild(pin);
-  });
-  // Time ticks
-  const tickCount=Math.min(10,Math.floor(dur/10));
-  for(let i=1;i<tickCount;i++){
-    const t=dur*i/tickCount;
-    const tick=document.createElement('div');
-    tick.style.cssText=`position:absolute;bottom:0;left:${t/dur*100}%;width:1px;height:8px;background:var(--border)`;
-    const tl=document.createElement('div');
-    tl.style.cssText='position:absolute;bottom:-16px;transform:translateX(-50%);font-family:var(--mono);font-size:.5rem;color:var(--muted)';
-    tl.textContent=_fmtSec(t);
-    tick.appendChild(tl); track.appendChild(tick);
-  }
-  _syncSplitInput();
-}
-function _fmtSec(s){ const m=Math.floor(s/60); return m+':'+(''+(Math.round(s%60))).padStart(2,'0'); }
-function _syncSplitInput(){
-  const sorted=_splitMarkers.map(m=>m.t).sort((a,b)=>a-b);
-  document.getElementById('sp2-splits').value=sorted.join('\n');
-  document.getElementById('sp2-count').textContent=sorted.length>0?`${sorted.length} split point${sorted.length>1?'s':''} → ${sorted.length+1} segments`:'Click timeline to add split points';
-}
-function _addSplitAtClick(e){
-  const s=state['sp2']; if(!s) return;
-  const track=document.getElementById('sp2-tl-track');
-  const rect=track.getBoundingClientRect();
-  const x=(e.clientX-rect.left)/rect.width;
-  const t=Math.round(x*s.duration*10)/10;
-  if(t<=0||t>=s.duration) return;
-  // Prevent adding too close to existing
-  if(_splitMarkers.some(m=>Math.abs(m.t-t)<0.5)) return;
-  _splitMarkers.push({t});
-  const vid=document.getElementById('sp2-preview');
-  if(vid){vid.currentTime=t;}
-  _renderSplitTimeline();
-}
-
-// Patch handleFile to init split timeline when sp2 file is loaded
-const _origHandleFile=handleFile;
-window.handleFile=async function(prefix,file){
-  await _origHandleFile(prefix,file);
-  if(prefix==='sp2') setTimeout(_initSplitTimeline,300);
-  if(prefix==='bg') _initBrightnessPreview();
-};
-
-function _initBrightnessPreview(){
-  const s=state['bg']; if(!s) return;
-  const vid=document.getElementById('bg-preview');
-  if(!vid) return;
-  // Use the original video preview already loaded in the thumb element
-  const thumb=document.getElementById('bg-thumb');
-  if(thumb&&thumb.src) vid.src=thumb.src;
-  vid.style.display='block';
-  _updateBrightnessFilter();
-}
-function _updateBrightnessFilter(){
-  const vid=document.getElementById('bg-preview'); if(!vid) return;
-  const b=parseFloat(document.getElementById('bg-brightness').value)||0;
-  const c=parseFloat(document.getElementById('bg-contrast').value)||1;
-  const sat=parseFloat(document.getElementById('bg-saturation').value)||1;
-  // CSS filter: brightness maps -0.5→0.5 to 0.5→1.5, contrast 0.5→2, saturate 0→2
-  vid.style.filter=`brightness(${1+b}) contrast(${c}) saturate(${sat})`;
-}
-
-async function runSplit(){
-  const s=state['sp2']; if(!s){alert('Upload a video first');return;}
-  const raw=document.getElementById('sp2-splits').value.trim();
-  const splits=raw.split(/[\s,\n]+/).map(v=>parseFloat(v)).filter(v=>!isNaN(v)&&v>0);
-  if(!splits.length){alert('Add at least one split point by clicking the timeline');return;}
-  const jid=await startJob('sp2',{op:'split',out_ext:'mp4',splits,filename:s.filename,size_mb:s.size_mb});
-  if(!jid) return;
-  let idx=0;
-  const iv=setInterval(async()=>{
-    const r2=await fetch('/api/status/'+jid+'?from='+idx);
-    const d2=await r2.json();
-    if(d2.log){d2.log.forEach(l=>log('sp2',l,l.startsWith('Done')?'ok':l.startsWith('Error')?'err':'info'));idx+=d2.log.length;}
-    if(d2.progress!=null) setProgress('sp2',d2.progress);
-    if(d2.status==='done'){
-      clearInterval(iv);
-      if(d2.stats) showStats('sp2',{duration_in:d2.stats.duration});
-      document.getElementById('sp2-dl-zip').href='/api/download-zip/'+jid;
-      const wrap=document.getElementById('sp2-files-wrap'); wrap.innerHTML='';
-      const n=d2.stats&&d2.stats.segments?d2.stats.segments:splits.length+1;
-      for(let i=0;i<n;i++){
-        const a=document.createElement('a');
-        a.className='dl-btn'; a.style.cssText='display:inline-flex;width:100%;margin-bottom:4px;justify-content:center';
-        a.href='/api/split-segment/'+jid+'/'+i;
-        a.download=(s.filename||'video').replace(/\.[^.]+$/,'')+'_part'+(i+1)+'.mp4';
-        a.textContent='⬇ Segment '+(i+1)+' ('+_fmtSec(splits[i-1]||0)+' → '+_fmtSec(splits[i]||s.duration)+')';
-        wrap.appendChild(a);
-      }
-      document.getElementById('sp2-result').classList.add('show');
-      const run=document.getElementById('sp2-run');
-      run.disabled=false; run.textContent=getRunLabel('sp2'); run.classList.remove('working');
-    }
-    if(d2.status==='error'){
-      clearInterval(iv);
-      log('sp2','Error: '+d2.error,'err');
-      const run=document.getElementById('sp2-run');
-      run.disabled=false; run.textContent=getRunLabel('sp2'); run.classList.remove('working');
-    }
-  },1200);
-}
-
-// ── Color Grade — CSS filter live preview ──
-async function runColorGrade(){
-  const s=state['bg']; if(!s){alert('Upload a video first');return;}
-  const jid=await startJob('bg',{op:'brightness',out_ext:'mp4',filename:s.filename,size_mb:s.size_mb,
-    brightness:parseFloat(document.getElementById('bg-brightness').value),
-    contrast:parseFloat(document.getElementById('bg-contrast').value),
-    saturation:parseFloat(document.getElementById('bg-saturation').value)
-  });
-  if(jid) pollJob('bg',jid,'bg-rvideo','bg-dl',(s.filename||'video').replace(/\.[^.]+$/,'')+'_color.mp4');
-}
-
-// ── Thumbnail — serve each frame via /api/thumb/jid/idx ──
-async function runThumbnail(){
-  const s=state['th']; if(!s){alert('Upload a video first');return;}
-  const count=parseInt(document.querySelector('input[name="th-count"]:checked').value)||3;
-  document.getElementById('th-grid').innerHTML='';
-  const jid=await startJob('th',{op:'thumbnail',out_ext:'jpg',filename:s.filename,size_mb:s.size_mb,count});
-  if(!jid) return;
-  let idx=0;
-  const iv=setInterval(async()=>{
-    const r2=await fetch('/api/status/'+jid+'?from='+idx);
-    const d2=await r2.json();
-    if(d2.log){d2.log.forEach(l=>log('th',l,l.startsWith('Done')?'ok':l.startsWith('Error')?'err':'info'));idx+=d2.log.length;}
-    if(d2.progress!=null) setProgress('th',d2.progress);
-    if(d2.status==='done'){
-      clearInterval(iv);
-      if(d2.stats) showStats('th',{duration_in:d2.stats.duration});
-      document.getElementById('th-dl-zip').href='/api/download-zip/'+jid;
-      const grid=document.getElementById('th-grid');
-      const n=d2.stats&&d2.stats.thumbnails?d2.stats.thumbnails:count;
-      const dur=d2.stats&&d2.stats.duration?d2.stats.duration:0;
-      for(let i=0;i<n;i++){
-        const t=dur*(i+1)/(n+1);
-        const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;gap:4px';
-        const img=document.createElement('img');
-        img.src='/api/thumb/'+jid+'/'+i;  // ← each frame gets its own URL
-        img.style.cssText='width:100%;border-radius:6px;border:1px solid var(--border);cursor:pointer;background:var(--bg3)';
-        img.onclick=()=>window.open(img.src,'_blank');
-        img.onerror=()=>img.style.opacity='.3';
-        const timeLbl=document.createElement('div');
-        timeLbl.style.cssText='font-family:var(--mono);font-size:.6rem;color:var(--muted);text-align:center';
-        timeLbl.textContent='@ '+_fmtSec(t);
-        const a=document.createElement('a'); a.href='/api/thumb/'+jid+'/'+i; a.download='thumb_'+(i+1)+'.jpg';
-        a.style.cssText='font-family:var(--mono);font-size:.62rem;color:var(--accent);text-align:center;text-decoration:none;padding:3px 0;background:var(--accent-light);border-radius:4px;display:block';
-        a.textContent='⬇ Frame '+(i+1);
-        wrap.appendChild(img); wrap.appendChild(timeLbl); wrap.appendChild(a); grid.appendChild(wrap);
-      }
-      document.getElementById('th-result').classList.add('show');
-      const run=document.getElementById('th-run');
-      run.disabled=false; run.textContent=getRunLabel('th'); run.classList.remove('working');
-    }
-    if(d2.status==='error'){
-      clearInterval(iv);
-      log('th','Error: '+d2.error,'err');
-      const run=document.getElementById('th-run');
-      run.disabled=false; run.textContent=getRunLabel('th'); run.classList.remove('working');
-    }
-  },1200);
-}
+['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blur'].forEach(p=>setupUpload(p));
 
 // Auto-open panel from URL param e.g. /?tool=compress
 const _urlTool = new URLSearchParams(window.location.search).get('tool');
