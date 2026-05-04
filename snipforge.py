@@ -3526,7 +3526,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
       <div class="app-dot" style="background:#ff5f57"></div>
       <div class="app-dot" style="background:#febc2e"></div>
       <div class="app-dot" style="background:#28c840"></div>
-      <div class="app-bar-url">snipforge.video/app</div>
+      <div class="app-bar-url">snipforge.video</div>
     </div>
     <div class="app-content">
       <div class="app-sidebar">
