@@ -4102,8 +4102,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .rec-btn{
   display:flex;align-items:center;gap:6px;
   padding:8px 16px;border:none;border-radius:8px;
-  font-family:var(--cond);font-size:.82rem;font-weight:700;
-  letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .12s;
+  font-family:'Inter',sans-serif;font-size:.85rem;font-weight:600;
+  letter-spacing:-.01em;text-transform:none;cursor:pointer;transition:all .12s;
 }
 .rec-btn.start{background:var(--accent);color:#fff}
 .rec-btn.start:hover{background:#d03a08}
