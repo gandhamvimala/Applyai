@@ -1903,6 +1903,13 @@ def favicon():
     svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#e8420a"/><text x="16" y="23" text-anchor="middle" font-size="20" fill="white">S</text></svg>'
     return Response(svg.encode(), mimetype="image/svg+xml")
 
+@app.route("/og-image.png")
+def og_image():
+    p = Path(_SCRIPT_DIR) / "og-image.png"
+    if p.exists():
+        return send_file(str(p), mimetype="image/png")
+    return "", 404
+
 @app.route("/logout")
 def logout():
     token = session.pop('auth_token', None)
@@ -3282,6 +3289,15 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Snipforge — AI Video Toolkit</title>
 <meta name="description" content="24 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur, AI smart clip and more. Free to start.">
+<meta property="og:title" content="Snipforge — AI Video Toolkit">
+<meta property="og:description" content="24 AI-powered video tools in your browser. Trim, transcribe, AI smart clip, chapters and more. Free to start.">
+<meta property="og:image" content="https://snipforge.video/og-image.png">
+<meta property="og:url" content="https://snipforge.video">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Snipforge — AI Video Toolkit">
+<meta name="twitter:description" content="24 AI-powered video tools in your browser. Free to start.">
+<meta name="twitter:image" content="https://snipforge.video/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
