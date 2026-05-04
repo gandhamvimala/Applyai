@@ -4187,7 +4187,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 
 @media(max-width:768px){
   /* Layout */
-  .app{display:block;max-height:none;overflow:visible}
+  html,body{overflow-y:auto}
+  .app{display:block;height:auto;overflow:visible}
   .topbar{position:sticky;top:0;z-index:100}
   .sidebar{
     display:flex;flex-direction:row;
