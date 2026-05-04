@@ -1320,25 +1320,33 @@ def init_db():
                 user_id      TEXT NOT NULL,
                 expires      INTEGER NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS promo_codes (
-                code         TEXT PRIMARY KEY,
-                plan         TEXT DEFAULT 'pro',
-                days         INTEGER DEFAULT 30,
-                max_uses     INTEGER DEFAULT 9999,
-                uses         INTEGER DEFAULT 0,
-                active       INTEGER DEFAULT 1,
-                created_at   TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS promo_redemptions (
-                id           TEXT PRIMARY KEY,
-                user_id      TEXT NOT NULL,
-                code         TEXT NOT NULL,
-                expires_at   TEXT NOT NULL,
-                created_at   TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            INSERT OR IGNORE INTO promo_codes (code, plan, days, max_uses) VALUES ('LAUNCH', 'pro', 30, 9999);
-            INSERT OR IGNORE INTO promo_codes (code, plan, days, max_uses) VALUES ('PRODUCTHUNT', 'pro', 30, 9999);
         ''')
+        # Promo tables — separate execute calls for PostgreSQL compatibility
+        db.execute('''CREATE TABLE IF NOT EXISTS promo_codes (
+            code         TEXT PRIMARY KEY,
+            plan         TEXT DEFAULT 'pro',
+            days         INTEGER DEFAULT 30,
+            max_uses     INTEGER DEFAULT 9999,
+            uses         INTEGER DEFAULT 0,
+            active       INTEGER DEFAULT 1,
+            created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+        )''')
+        db.execute('''CREATE TABLE IF NOT EXISTS promo_redemptions (
+            id           TEXT PRIMARY KEY,
+            user_id      TEXT NOT NULL,
+            code         TEXT NOT NULL,
+            expires_at   TEXT NOT NULL,
+            created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # Insert default codes — ON CONFLICT DO NOTHING works in both SQLite and PostgreSQL
+        try:
+            db.execute("INSERT INTO promo_codes (code, plan, days, max_uses) VALUES ('LAUNCH', 'pro', 30, 9999) ON CONFLICT (code) DO NOTHING")
+        except Exception:
+            pass
+        try:
+            db.execute("INSERT INTO promo_codes (code, plan, days, max_uses) VALUES ('PRODUCTHUNT', 'pro', 30, 9999) ON CONFLICT (code) DO NOTHING")
+        except Exception:
+            pass
 
 init_db()
 
@@ -1376,33 +1384,33 @@ def create_session(user_id):
 def redeem_promo(user_id, code):
     """Redeem a promo code for a user. Returns (success, message)."""
     code = code.strip().upper()
-    with get_db() as db:
-        # Check code exists and is active
-        row = db.execute(
-            'SELECT * FROM promo_codes WHERE code=? AND active=1', (code,)
-        ).fetchone()
-        if not row:
-            return False, "Invalid or expired promo code"
-        row = dict(row)
-        if row['uses'] >= row['max_uses']:
-            return False, "This promo code has reached its limit"
-        # Check not already redeemed by this user
-        existing = db.execute(
-            'SELECT * FROM promo_redemptions WHERE user_id=? AND code=?',
-            (user_id, code)
-        ).fetchone()
-        if existing:
-            return False, "You've already used this promo code"
-        # Apply
-        expires_at = (datetime.datetime.utcnow() +
-                      datetime.timedelta(days=row['days'])).isoformat()
-        db.execute(
-            'INSERT INTO promo_redemptions (id, user_id, code, expires_at) VALUES (?,?,?,?)',
-            (str(uuid.uuid4())[:8], user_id, code, expires_at)
-        )
-        db.execute('UPDATE promo_codes SET uses=uses+1 WHERE code=?', (code,))
-        db.execute('UPDATE users SET plan=? WHERE id=?', (row['plan'], user_id))
-    return True, f"🎉 Promo applied! You have {row['days']} days of {row['plan'].title()} access."
+    try:
+        with get_db() as db:
+            row = db.execute(
+                'SELECT * FROM promo_codes WHERE code=? AND active=1', (code,)
+            ).fetchone()
+            if not row:
+                return False, "Invalid or expired promo code"
+            row = dict(row)
+            if row['uses'] >= row['max_uses']:
+                return False, "This promo code has reached its limit"
+            existing = db.execute(
+                'SELECT id FROM promo_redemptions WHERE user_id=? AND code=?',
+                (user_id, code)
+            ).fetchone()
+            if existing:
+                return False, "You've already used this promo code"
+            expires_at = (datetime.datetime.utcnow() +
+                          datetime.timedelta(days=row['days'])).isoformat()
+            db.execute(
+                'INSERT INTO promo_redemptions (id, user_id, code, expires_at) VALUES (?,?,?,?)',
+                (str(uuid.uuid4())[:8], user_id, code, expires_at)
+            )
+            db.execute('UPDATE promo_codes SET uses=uses+1 WHERE code=?', (code,))
+            db.execute('UPDATE users SET plan=? WHERE id=?', (row['plan'], user_id))
+        return True, f"🎉 Promo applied! You have {row['days']} days of {row['plan'].title()} access."
+    except Exception as e:
+        return False, f"Error applying promo: {str(e)}"
 
 
 def get_active_promo(user_id):
@@ -4286,17 +4294,34 @@ async function checkout(plan){
   </div>
   <script>
   async function redeemPromo(){
-    const code=document.getElementById('promo-input').value.trim();
+    const code=document.getElementById('promo-input').value.trim().toUpperCase();
     const msg=document.getElementById('promo-msg');
     if(!code){msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Enter a promo code first';return;}
     msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Checking…';
-    const r=await fetch('/api/redeem-promo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-    const d=await r.json();
-    if(d.success){
-      msg.style.color='var(--green)';msg.textContent=d.message;
-      setTimeout(()=>location.reload(),1500);
-    } else {
-      msg.style.color='#e74c3c';msg.textContent=d.error;
+    try {
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),8000);
+      const r=await fetch('/api/redeem-promo',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({code}),
+        signal:controller.signal
+      });
+      clearTimeout(timeout);
+      const d=await r.json();
+      if(d.success){
+        msg.style.color='#22c55e';msg.textContent=d.message;
+        setTimeout(()=>location.reload(),1500);
+      } else {
+        msg.style.color='#e74c3c';msg.textContent=d.error||'Invalid code';
+      }
+    } catch(e) {
+      if(e.name==='AbortError'){
+        msg.style.color='#e74c3c';msg.textContent='Request timed out. Please try again.';
+      } else {
+        msg.style.color='#e74c3c';msg.textContent='Network error. Please try again.';
+      }
     }
   }
   </script>
