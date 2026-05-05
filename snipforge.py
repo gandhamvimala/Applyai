@@ -5413,7 +5413,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
   <div class="mob-sheet-section">⏺ Record &amp; Share</div>
   <div class="mob-tool-row" onclick="mobSelectTool('record','⏺️','Screen Recorder','Record screen, webcam, or both')">
-    <div class="mob-tool-icon">⏺️</div><div><div class="mob-tool-name">Screen Recorder</div><div class="mob-tool-desc">Record screen, webcam, or both</div></div><span class="mob-tool-badge new">NEW</span></div>
+    <div class="mob-tool-icon">⏺️</div><div><div class="mob-tool-name" id="rec-mob-name">Screen Recorder</div><div class="mob-tool-desc" id="rec-mob-desc">Record screen, webcam, or both</div></div><span class="mob-tool-badge new">NEW</span></div>
   <div class="mob-tool-row" onclick="mobSelectTool('shares','🔗','Shared Links','Manage your shared video links')">
     <div class="mob-tool-icon">🔗</div><div><div class="mob-tool-name">Shared Links</div><div class="mob-tool-desc">Manage your shared video links</div></div></div>
 </div>
@@ -7397,6 +7397,10 @@ function selectRecType(type){
     if(panelHeader) panelHeader.innerHTML='<span class="panel-title-icon">📷</span>Webcam Recorder';
     const panelSub=document.querySelector('#panel-record .panel-sub');
     if(panelSub) panelSub.textContent='Record yourself with your front or back camera';
+    const mobName=document.getElementById('rec-mob-name');
+    if(mobName) mobName.textContent='Webcam Recorder';
+    const mobDesc=document.getElementById('rec-mob-desc');
+    if(mobDesc) mobDesc.textContent='Record yourself with your camera';
   }
 })();
 
