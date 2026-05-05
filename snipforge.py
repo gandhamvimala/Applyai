@@ -7407,15 +7407,25 @@ async function startRecording(){
     if(recType==='screen'){
       stream=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
       if(audioSrc==='mic'||audioSrc==='both'){
-        const mic=await navigator.mediaDevices.getUserMedia({audio:true});
-        mic.getAudioTracks().forEach(t=>stream.addTrack(t));
+        try{
+          const mic=await navigator.mediaDevices.getUserMedia({audio:true});
+          mic.getAudioTracks().forEach(t=>stream.addTrack(t));
+        }catch(micErr){
+          // Mic denied — continue recording without mic audio
+          console.warn('Mic permission denied, recording without mic:',micErr.message);
+        }
       }
     } else if(recType==='webcam'){
       stream=await navigator.mediaDevices.getUserMedia({video:vRes,audio:audioSrc!=='none'});
     } else {
       // both - screen + webcam PiP
       const screen=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
-      const cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:audioSrc==='mic'||audioSrc==='both'});
+      let cam;
+      try{
+        cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:audioSrc==='mic'||audioSrc==='both'});
+      }catch(camErr){
+        cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:false});
+      }
       // Combine on canvas
       const canvas=document.createElement('canvas');
       canvas.width=vRes.width||1280; canvas.height=vRes.height||720;
