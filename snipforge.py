@@ -1566,7 +1566,7 @@ def add_security_headers(resp):
     )
     resp.headers['X-XSS-Protection']  = '0'  # Deprecated; CSP handles this now
     resp.headers['Referrer-Policy']   = 'strict-origin-when-cross-origin'
-    resp.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    resp.headers['Permissions-Policy'] = 'camera=(self), microphone=(self), display-capture=(self), geolocation=()'
     # Allow corporate proxies / security gateways to cache and inspect normally
     if not resp.headers.get('Cache-Control'):
         resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
@@ -7380,7 +7380,7 @@ function selectRecType(type){
   document.getElementById('rtype-'+type).classList.add('active');
 }
 
-// Mobile: hide Screen/Both options (getDisplayMedia not supported on mobile)
+// Mobile only: hide Screen/Both + system audio options
 (function(){
   if(!navigator.mediaDevices||typeof navigator.mediaDevices.getDisplayMedia!=='function'){
     document.getElementById('rtype-screen').style.display='none';
@@ -7389,7 +7389,6 @@ function selectRecType(type){
     document.getElementById('rec-mobile-note').style.display='block';
     recType='webcam';
     document.getElementById('rtype-webcam').classList.add('active');
-    // Hide system audio options — only relevant for screen recording
     const audioSel=document.getElementById('rec-audio-src');
     audioSel.querySelector('option[value="system"]').style.display='none';
     audioSel.querySelector('option[value="both"]').style.display='none';
@@ -7400,33 +7399,23 @@ async function startRecording(){
   try{
     const audioSrc=document.getElementById('rec-audio-src').value;
     const quality=document.getElementById('rec-quality').value;
-    const constraints={audio:audioSrc!=='none'};
     const vRes={high:{width:1920,height:1080},medium:{width:1280,height:720},low:{width:854,height:480}}[quality];
 
     let stream;
     if(recType==='screen'){
-      stream=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
+      // Request mic FIRST before getDisplayMedia — Chrome blocks mic if asked after screen on HTTP
+      let micStream=null;
       if(audioSrc==='mic'||audioSrc==='both'){
-        try{
-          const mic=await navigator.mediaDevices.getUserMedia({audio:true});
-          mic.getAudioTracks().forEach(t=>stream.addTrack(t));
-        }catch(micErr){
-          // Mic denied — continue recording without mic audio
-          console.warn('Mic permission denied, recording without mic:',micErr.message);
-        }
+        micStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
       }
+      stream=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
+      if(micStream) micStream.getAudioTracks().forEach(t=>stream.addTrack(t));
     } else if(recType==='webcam'){
       stream=await navigator.mediaDevices.getUserMedia({video:vRes,audio:audioSrc!=='none'});
     } else {
-      // both - screen + webcam PiP
+      // both - screen + webcam PiP — request cam+mic first
+      const cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:audioSrc==='mic'||audioSrc==='both'});
       const screen=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
-      let cam;
-      try{
-        cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:audioSrc==='mic'||audioSrc==='both'});
-      }catch(camErr){
-        cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:false});
-      }
-      // Combine on canvas
       const canvas=document.createElement('canvas');
       canvas.width=vRes.width||1280; canvas.height=vRes.height||720;
       const ctx=canvas.getContext('2d');
