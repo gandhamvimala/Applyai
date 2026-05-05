@@ -7389,6 +7389,10 @@ function selectRecType(type){
     document.getElementById('rec-mobile-note').style.display='block';
     recType='webcam';
     document.getElementById('rtype-webcam').classList.add('active');
+    // Hide system audio options — only relevant for screen recording
+    const audioSel=document.getElementById('rec-audio-src');
+    audioSel.querySelector('option[value="system"]').style.display='none';
+    audioSel.querySelector('option[value="both"]').style.display='none';
   }
 })();
 
