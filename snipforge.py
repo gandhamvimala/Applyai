@@ -4382,7 +4382,7 @@ async function checkout(plan){
           <span style="font-size:1.5rem">✅</span>
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:.9rem;color:#15803d">
-              {{ active_promo.code }} — Pro access active!
+              {{ active_promo.code }} Pro access active!
             </div>
             <div style="font-size:.75rem;color:#166534;margin-top:2px">
               Expires {{ active_promo.expires_at[:10] }} <span id="promo-days-left"></span>
@@ -4421,7 +4421,7 @@ async function checkout(plan){
         <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
           <span style="font-size:1.3rem">🚀</span>
           <div>
-            <div style="font-weight:700;font-size:.85rem;color:#c2410c">Launch Offer — 30 days Pro FREE</div>
+            <div style="font-weight:700;font-size:.85rem;color:#c2410c">Launch Offer: 30 days Pro FREE</div>
             <div style="font-size:.75rem;color:#9a3412;margin-top:2px">Use code <strong style="font-family:monospace;background:#fed7aa;padding:1px 5px;border-radius:4px">LAUNCH</strong> below to activate</div>
           </div>
         </div>
