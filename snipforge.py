@@ -1521,6 +1521,12 @@ def validate_out_ext(ext):
     allowed = {'mp4','mov','webm','mp3','wav','gif','avi'}
     return ext if ext in allowed else 'mp4'
 
+@app.before_request
+def force_https():
+    # On Railway/production, X-Forwarded-Proto is set by the proxy
+    if request.headers.get('X-Forwarded-Proto') == 'http':
+        return redirect(request.url.replace('http://', 'https://', 1), code=301)
+
 @app.after_request
 def add_security_headers(resp):
     resp.headers['X-Content-Type-Options'] = 'nosniff'
@@ -5111,12 +5117,10 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <header class="topbar">
   <div class="logo">Snip<span style="color:var(--accent)">forge</span></div>
-  <span class="logo-sub">CUT · FORGE · DELIVER</span>
   <div class="topbar-spacer"></div>
   <!-- Desktop nav -->
-  <a href="/dashboard" style="font-family:var(--mono);font-size:.7rem;padding:5px 12px;border-radius:6px;text-decoration:none;color:var(--muted);border:1px solid var(--border);transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Dashboard</a>
-  <div id="user-badge" style="display:flex;align-items:center;gap:10px"></div>
-  <div style="font-family:var(--mono);font-size:.55rem;padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--muted);border:1px solid var(--border);letter-spacing:.06em">BETA</div>
+  <a href="/dashboard" class="topbar-nav-link">Dashboard</a>
+  <div id="user-badge" style="display:flex;align-items:center;gap:8px"></div>
   <!-- Mobile: Choose Tool button -->
   <button class="mob-pick-btn" onclick="openMobSheet()">
     <svg viewBox="0 0 16 16" fill="none" stroke-width="2"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
@@ -7421,15 +7425,17 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
   if(u.error){window.location='/login';return;}
   window._user=u;
   const badge=document.getElementById('user-badge');
-  const planColors={'free':'#8a8780','pro':'#e8420a','team':'#6b3fa0'};
+  const planColors={'free':'#5a5a72','pro':'#e8420a','team':'#6b3fa0'};
   const planLabel={'free':'Free','pro':'Pro','team':'Team'};
   const pc=planColors[u.plan]||planColors.free;
   badge.innerHTML=`
-    <span style="font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;align-items:center;gap:5px">
+    <span style="font-family:'Inter',sans-serif;font-size:.85rem;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px">
       ${u.name.split(' ')[0]}
-      <span style="font-size:.52rem;padding:1px 5px;border-radius:3px;background:var(--bg3);color:${pc};border:1px solid var(--border);text-transform:uppercase;letter-spacing:.05em;vertical-align:middle">${planLabel[u.plan]||u.plan}</span>
+      <span style="font-size:.65rem;padding:2px 7px;border-radius:5px;background:var(--bg3);color:${pc};border:1px solid var(--border);text-transform:uppercase;letter-spacing:.05em;font-weight:700">${planLabel[u.plan]||u.plan}</span>
     </span>
-    <a href="/account" style="font-family:var(--mono);font-size:.65rem;padding:4px 10px;border:1px solid var(--border);border-radius:7px;color:var(--muted);text-decoration:none;background:var(--bg3)">Account</a>
+    <a href="/pricing" class="topbar-nav-link">Pricing</a>
+    <a href="/account" class="topbar-nav-link">Account</a>
+    <a href="/logout"  class="topbar-nav-link">Logout</a>
   `;
   if(u.plan==='free'){
     const bar=document.createElement('div');
