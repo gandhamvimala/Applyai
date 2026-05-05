@@ -5412,8 +5412,8 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <div class="mob-tool-icon">🔇</div><div><div class="mob-tool-name">Mute Audio</div><div class="mob-tool-desc">Remove the audio track completely</div></div></div>
 
   <div class="mob-sheet-section">⏺ Record &amp; Share</div>
-  <div class="mob-tool-row" onclick="mobSelectTool('record','⏺️','Screen Recorder','Record screen, webcam, or both')">
-    <div class="mob-tool-icon">⏺️</div><div><div class="mob-tool-name" id="rec-mob-name">Screen Recorder</div><div class="mob-tool-desc" id="rec-mob-desc">Record screen, webcam, or both</div></div><span class="mob-tool-badge new">NEW</span></div>
+  <div class="mob-tool-row" id="rec-mob-row" onclick="mobSelectTool('record','⏺️','Screen Recorder','Record screen, webcam, or both')">
+    <div class="mob-tool-icon" id="rec-mob-icon">⏺️</div><div><div class="mob-tool-name" id="rec-mob-name">Screen Recorder</div><div class="mob-tool-desc" id="rec-mob-desc">Record screen, webcam, or both</div></div><span class="mob-tool-badge new">NEW</span></div>
   <div class="mob-tool-row" onclick="mobSelectTool('shares','🔗','Shared Links','Manage your shared video links')">
     <div class="mob-tool-icon">🔗</div><div><div class="mob-tool-name">Shared Links</div><div class="mob-tool-desc">Manage your shared video links</div></div></div>
 </div>
@@ -7397,17 +7397,22 @@ function selectRecType(type){
     if(panelHeader) panelHeader.innerHTML='<span class="panel-title-icon">📷</span>Webcam Recorder';
     const panelSub=document.querySelector('#panel-record .panel-sub');
     if(panelSub) panelSub.textContent='Record yourself with your front or back camera';
-    const mobName=document.getElementById('rec-mob-name');
-    if(mobName) mobName.textContent='Webcam Recorder';
-    const mobDesc=document.getElementById('rec-mob-desc');
-    if(mobDesc) mobDesc.textContent='Record yourself with your camera';
     // Update MOB_TOOL_META so back bar shows correct title/desc when panel opens
     if(typeof MOB_TOOL_META!=='undefined'&&MOB_TOOL_META.record){
       MOB_TOOL_META.record.icon='📷';
       MOB_TOOL_META.record.title='Webcam Recorder';
       MOB_TOOL_META.record.sub='Record yourself with your camera';
     }
-    // Also update back bar directly if it's currently showing record panel
+    // Fix the onclick hardcoded strings and icon
+    const recRow=document.getElementById('rec-mob-row');
+    if(recRow) recRow.setAttribute('onclick',"mobSelectTool('record','📷','Webcam Recorder','Record yourself with your camera')");
+    const recIcon=document.getElementById('rec-mob-icon');
+    if(recIcon) recIcon.textContent='📷';
+    const mobName=document.getElementById('rec-mob-name');
+    if(mobName) mobName.textContent='Webcam Recorder';
+    const mobDesc=document.getElementById('rec-mob-desc');
+    if(mobDesc) mobDesc.textContent='Record yourself with your camera';
+    // Also update back bar directly if already showing
     const backTitle=document.getElementById('mob-back-title');
     const backSub=document.getElementById('mob-back-sub');
     if(backTitle&&backTitle.textContent==='Screen Recorder') backTitle.textContent='Webcam Recorder';
