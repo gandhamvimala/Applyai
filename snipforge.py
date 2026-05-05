@@ -1422,6 +1422,15 @@ def get_active_promo(user_id):
         ).fetchone()
     return dict(row) if row else None
 
+def get_expired_promo(user_id):
+    """Return most recent expired promo for user if any."""
+    with get_db() as db:
+        row = db.execute(
+            'SELECT * FROM promo_redemptions WHERE user_id=? AND expires_at <= ? ORDER BY expires_at DESC LIMIT 1',
+            (user_id, datetime.datetime.utcnow().isoformat())
+        ).fetchone()
+    return dict(row) if row else None
+
 
 def check_plan_limit(user):
     if TEST_MODE:
@@ -1429,6 +1438,12 @@ def check_plan_limit(user):
     # Check if user has active promo — treat as pro
     promo = get_active_promo(user['id'])
     effective_plan = 'pro' if promo else user['plan']
+    # Auto-downgrade: if promo expired and user has no paid subscription, revert to free
+    if not promo and user['plan'] == 'pro' and not user.get('stripe_subscription_id'):
+        with get_db() as db:
+            db.execute("UPDATE users SET plan='free' WHERE id=?", (user['id'],))
+        effective_plan = 'free'
+        user['plan'] = 'free'
     plan = PLANS.get(effective_plan, PLANS['free'])
     now_month = datetime.datetime.utcnow().strftime('%Y-%m')
     if user.get('month_reset') != now_month:
@@ -2301,7 +2316,8 @@ def account():
     user = get_current_user()
     return render_template_string(AUTH_HTML, page="account",
         stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS, user=user,
-        get_active_promo=get_active_promo)
+        get_active_promo=get_active_promo,
+        get_expired_promo=get_expired_promo)
 
 # ─── Shareable links ──────────────────────────────────────────────────────────
 
@@ -4358,6 +4374,8 @@ async function checkout(plan){
       </div>
 
       {% set active_promo = get_active_promo(user.id) if user else None %}
+      {% set expired_promo = get_expired_promo(user.id) if user else None %}
+
       {% if active_promo %}
         <!-- Active promo banner -->
         <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
@@ -4367,8 +4385,7 @@ async function checkout(plan){
               {{ active_promo.code }} — Pro access active!
             </div>
             <div style="font-size:.75rem;color:#166534;margin-top:2px">
-              Expires {{ active_promo.expires_at[:10] }} · {{ ((active_promo.expires_at[:10] | string) ) }}
-              <span id="promo-days-left"></span>
+              Expires {{ active_promo.expires_at[:10] }} <span id="promo-days-left"></span>
             </div>
           </div>
         </div>
@@ -4381,8 +4398,26 @@ async function checkout(plan){
           if(el) el.textContent = days > 0 ? '(' + days + ' days left)' : '(expired)';
         })();
         </script>
+
+      {% elif expired_promo %}
+        <!-- Expired promo — show upgrade prompt -->
+        <div style="background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1.5px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+          <span style="font-size:1.5rem">⏰</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:.9rem;color:#dc2626">
+              Your {{ expired_promo.code }} promo has expired
+            </div>
+            <div style="font-size:.75rem;color:#b91c1c;margin-top:2px">
+              Your 30-day free Pro access ended on {{ expired_promo.expires_at[:10] }}
+            </div>
+          </div>
+        </div>
+        <a href="/pricing" style="display:block;text-align:center;padding:11px;background:var(--accent);color:#fff;border-radius:9px;font-weight:700;font-size:.9rem;text-decoration:none;letter-spacing:.02em;margin-bottom:10px">
+          ⚡ Upgrade to Pro — $5/mo →
+        </a>
+
       {% else %}
-        <!-- Launch promo callout -->
+        <!-- No promo — show launch offer -->
         <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
           <span style="font-size:1.3rem">🚀</span>
           <div>
@@ -4392,7 +4427,8 @@ async function checkout(plan){
         </div>
       {% endif %}
 
-      <div style="display:flex;gap:8px">
+      {% if not active_promo %}
+      <div style="display:flex;gap:8px;margin-top:10px">
         <input type="text" id="promo-input" placeholder="Enter code e.g. LAUNCH"
           style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-family:var(--mono);font-size:.88rem;text-transform:uppercase;outline:none;transition:border-color .15s"
           oninput="this.value=this.value.toUpperCase()"
@@ -4405,6 +4441,7 @@ async function checkout(plan){
         </button>
       </div>
       <div id="promo-msg" style="margin-top:8px;font-size:.82rem;display:none;padding:8px 12px;border-radius:6px"></div>
+      {% endif %}
     </div>
   </div>
   <script>
