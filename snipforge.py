@@ -3124,9 +3124,9 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .topbar{display:flex;align-items:center;gap:12px;padding:0 28px;height:56px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
 .logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.2rem;letter-spacing:-.02em;color:var(--text);text-decoration:none;text-transform:none}
 .topbar-spacer{flex:1}
-.nav-link{font-family:var(--mono);font-size:.7rem;padding:5px 12px;border-radius:6px;text-decoration:none;color:var(--muted);border:1px solid transparent;transition:all .15s}
-.nav-link:hover{color:var(--text);border-color:var(--border)}
-.nav-link.active{color:var(--text);border-color:var(--border);background:var(--bg3)}
+.nav-link{font-family:var(--body);font-size:.85rem;font-weight:500;padding:7px 14px;border-radius:8px;text-decoration:none;color:var(--muted);border:1px solid transparent;transition:all .15s}
+.nav-link:hover{color:var(--text);background:var(--bg3)}
+.nav-link.active{color:var(--text);background:var(--bg3);border-color:var(--border)}
 .nav-link.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .nav-link.primary:hover{background:#cc3d00}
 
@@ -3948,9 +3948,10 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .logo{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.2rem;letter-spacing:-.02em;color:var(--text);text-decoration:none}
 .logo span{color:var(--accent)}
 .topbar-spacer{flex:1}
-.topbar-link{font-family:var(--body);font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;padding:7px 14px;border-radius:8px;transition:all .15s;margin-left:4px}
+.topbar-link{font-family:var(--body);font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;padding:7px 14px;border-radius:8px;transition:all .15s;margin-left:4px;border:1px solid transparent}
 .topbar-link:hover{color:var(--text);background:var(--bg3)}
-.topbar-link.primary{background:var(--accent);color:#fff;font-weight:600}
+.topbar-link.active{color:var(--text);background:var(--bg3);border-color:var(--border)}
+.topbar-link.primary{background:var(--accent);color:#fff;font-weight:600;border-color:var(--accent)}
 .topbar-link.primary:hover{background:var(--accent2)}
 
 /* ── auth forms ── */
