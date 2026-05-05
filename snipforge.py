@@ -1531,12 +1531,15 @@ def add_security_headers(resp):
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
         "https://fonts.googleapis.com https://js.stripe.com "
         "https://client.crisp.chat https://accounts.google.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com "
+        "https://js.stripe.com https://*.stripe.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https: blob:; "
         "media-src 'self' blob:; "
-        "connect-src 'self' https://api.stripe.com https://client.crisp.chat; "
-        "frame-src https://js.stripe.com https://accounts.google.com; "
+        "connect-src 'self' https://api.stripe.com https://*.stripe.com "
+        "https://client.crisp.chat; "
+        "frame-src https://js.stripe.com https://*.stripe.com "
+        "https://accounts.google.com; "
         "frame-ancestors 'self'; "
         "object-src 'none'"
     )
@@ -1947,17 +1950,22 @@ def register():
 def login():
     if request.method == "GET":
         return render_template_string(AUTH_HTML, page="login",
-            stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS)
+            stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS,
+            next=request.args.get("next",""))
     data  = request.get_json() or request.form
     email = (data.get("email","")).strip().lower()
     pwd   = data.get("password","")
+    next_url = (data.get("next","") or "").strip()
+    # Only allow relative URLs to prevent open redirect
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/"
     with get_db() as db:
         user = db.execute('SELECT * FROM users WHERE email=?',(email,)).fetchone()
     if not user or not user["password"] or not check_password_hash(user["password"], pwd):
         return jsonify({"error":"Invalid email or password"}),401
     token = create_session(user["id"])
     session['auth_token'] = token
-    return jsonify({"success":True, "redirect":"/"})
+    return jsonify({"success":True, "redirect": next_url or "/"})
 
 @app.route("/forgot-password", methods=["GET","POST"])
 def forgot_password():
@@ -2160,13 +2168,22 @@ def create_checkout():
         if not price_id:
             return jsonify({"error":"Stripe price ID not configured"}),400
         user = get_current_user()
-        # Create or get Stripe customer
+        # Create or get Stripe customer — validate stored ID is still live
         with get_db() as db:
             u = db.execute('SELECT * FROM users WHERE id=?',(user["id"],)).fetchone()
-        if u["stripe_customer_id"]:
-            customer_id = u["stripe_customer_id"]
-        else:
-            customer = stripe.Customer.create(email=user["email"], name=user["name"])
+        u = dict(u)
+        customer_id = u.get("stripe_customer_id") or ""
+        if customer_id:
+            # Verify the customer still exists in Stripe (handles deleted/test→live mismatches)
+            try:
+                stripe.Customer.retrieve(customer_id)
+            except stripe.error.InvalidRequestError:
+                # Customer doesn't exist — clear it and create fresh
+                customer_id = ""
+                with get_db() as db:
+                    db.execute('UPDATE users SET stripe_customer_id=NULL WHERE id=?', (user["id"],))
+        if not customer_id:
+            customer = stripe.Customer.create(email=user["email"], name=user.get("name",""))
             customer_id = customer.id
             with get_db() as db:
                 db.execute('UPDATE users SET stripe_customer_id=? WHERE id=?',
@@ -4056,9 +4073,10 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 async function doLogin(){
   const btn=document.querySelector('.submit-btn');
   btn.disabled=true; btn.textContent='Signing in…';
-  const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},
+  const next=new URLSearchParams(window.location.search).get('next')||'';
+  const r=await fetch('/login',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({email:document.getElementById('email').value,
-      password:document.getElementById('password').value})});
+      password:document.getElementById('password').value, next})});
   const d=await r.json();
   if(d.success){window.location=d.redirect||'/';}
   else{const e=document.getElementById('err');e.textContent=d.error;e.classList.add('show');btn.disabled=false;btn.textContent='Sign In';}
@@ -4230,12 +4248,29 @@ function toggleBilling(){
   document.getElementById('team-period').textContent=yearly?'saves $60/year · 5 seats':'up to 5 seats · billed monthly';
 }
 async function checkout(plan){
-  const r=await fetch('/api/create-checkout',{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({plan,billing:_billing})});
-  const d=await r.json();
-  if(d.url) window.location=d.url;
-  else if(d.error==='login_required'||d.error==='Login required') window.location='/register';
-  else alert(d.error||'Something went wrong');
+  const btn = event.target;
+  const orig = btn.textContent;
+  btn.textContent = 'Loading…'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/create-checkout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({plan, billing: _billing})
+    });
+    const d = await r.json();
+    if (d.url) {
+      window.location = d.url;
+    } else if (r.status === 401 || d.error === 'login_required' || d.error === 'Login required') {
+      window.location = '/login?next=/pricing';
+    } else {
+      alert(d.error || 'Something went wrong. Please try again.');
+      btn.textContent = orig; btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Network error. Please try again.');
+    btn.textContent = orig; btn.disabled = false;
+  }
 }
 </script>
 
