@@ -5420,7 +5420,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 
 <!-- ── SCREEN RECORDER ── -->
 <div class="panel" id="panel-record">
-  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">⏺️</span>Screen Recorder</div><div class="panel-sub">Record your screen, webcam, or both — right in the browser</div></div>
+  <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">⏺️</span>Screen Recorder</div><div class="panel-sub">Record your screen, webcam, or both right in the browser</div></div>
 
   <div class="settings-card">
     <h4>Recording Mode</h4>
@@ -7390,8 +7390,8 @@ function selectRecType(type){
     recType='webcam';
     document.getElementById('rtype-webcam').classList.add('active');
     const audioSel=document.getElementById('rec-audio-src');
-    audioSel.querySelector('option[value="system"]').style.display='none';
-    audioSel.querySelector('option[value="both"]').style.display='none';
+    audioSel.querySelector('option[value="system"]').remove();
+    audioSel.querySelector('option[value="both"]').remove();
   }
 })();
 
@@ -7419,8 +7419,20 @@ async function startRecording(){
       const canvas=document.createElement('canvas');
       canvas.width=vRes.width||1280; canvas.height=vRes.height||720;
       const ctx=canvas.getContext('2d');
-      const screenVid=document.createElement('video'); screenVid.srcObject=screen; screenVid.play();
-      const camVid=document.createElement('video'); camVid.srcObject=cam; camVid.play();
+      const screenVid=document.createElement('video');
+      screenVid.srcObject=screen;
+      screenVid.muted=true;
+      const camVid=document.createElement('video');
+      camVid.srcObject=cam;
+      camVid.muted=true;
+      // Wait for both videos to have dimensions before drawing
+      await Promise.all([
+        new Promise(r=>{ screenVid.onloadedmetadata=()=>{ screenVid.play(); r(); }; }),
+        new Promise(r=>{ camVid.onloadedmetadata=()=>{ camVid.play(); r(); }; })
+      ]);
+      // Use actual screen dimensions for canvas
+      if(screenVid.videoWidth) canvas.width=screenVid.videoWidth;
+      if(screenVid.videoHeight) canvas.height=screenVid.videoHeight;
       function drawFrame(){
         ctx.drawImage(screenVid,0,0,canvas.width,canvas.height);
         ctx.drawImage(camVid,canvas.width-330,canvas.height-250,320,240);
