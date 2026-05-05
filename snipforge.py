@@ -1738,7 +1738,11 @@ def api_process():
     ext = validate_out_ext(data.get("out_ext","mp4"))
     dst = OUTPUT_DIR/f"{jid}_out.{ext}"
     jobs[jid]['token']         = session.get('token','')
-    jobs[jid]['orig_filename']  = data.get('filename','')
+    # Use filename from request body; fall back to the actual uploaded file's name
+    body_filename = data.get('filename','').strip()
+    if not body_filename and src:
+        body_filename = Path(src).name
+    jobs[jid]['orig_filename']  = body_filename or 'video'
     jobs[jid]['user_id']        = user['id']
     jobs[jid]['operation']      = data.get('op','process')
     jobs[jid]['orig_size_mb']   = float(data.get('size_mb', 0))
@@ -2290,7 +2294,8 @@ def cancel_subscription():
 def account():
     user = get_current_user()
     return render_template_string(AUTH_HTML, page="account",
-        stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS, user=user)
+        stripe_key=STRIPE_PUBLISHABLE_KEY, plans=PLANS, user=user,
+        get_active_promo=get_active_promo)
 
 # ─── Shareable links ──────────────────────────────────────────────────────────
 
@@ -4036,7 +4041,13 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <header class="topbar">
   <a href="/" class="logo">Snip<span style="color:var(--accent)">forge</span></a>
   <div class="topbar-spacer"></div>
-  {% if page in ['login','register','pricing','forgot','reset'] %}
+  {% if user and page in ['pricing','account','success'] %}
+    <a href="/"          class="topbar-link">Editor</a>
+    <a href="/dashboard" class="topbar-link">Dashboard</a>
+    <a href="/pricing"   class="topbar-link{% if page == 'pricing' %} active{% endif %}">Pricing</a>
+    <a href="/account"   class="topbar-link{% if page == 'account' %} active{% endif %}">Account</a>
+    <a href="/logout"    class="topbar-link">Logout</a>
+  {% elif page in ['login','register','pricing','forgot','reset'] %}
     {% if page == 'login' %}
       <a href="/register" class="topbar-link">Register</a>
       <a href="/pricing"  class="topbar-link primary">Pricing</a>
@@ -4045,9 +4056,11 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       <a href="/pricing" class="topbar-link primary">Pricing</a>
     {% endif %}
   {% else %}
-    <a href="/"        class="topbar-link">App</a>
-    <a href="/account" class="topbar-link">Account</a>
-    <a href="/logout"  class="topbar-link">Logout</a>
+    <a href="/"          class="topbar-link">Editor</a>
+    <a href="/dashboard" class="topbar-link">Dashboard</a>
+    <a href="/pricing"   class="topbar-link">Pricing</a>
+    <a href="/account"   class="topbar-link">Account</a>
+    <a href="/logout"    class="topbar-link">Logout</a>
   {% endif %}
 </header>
 
@@ -4332,26 +4345,74 @@ async function checkout(plan){
       {% endif %}
     </div>
     <!-- Promo Code -->
-    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-      <div style="font-size:.82rem;color:var(--muted);margin-bottom:8px;font-weight:600">Have a promo code?</div>
+    <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
+      <div style="font-size:.82rem;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+        🎁 Promo Code
+      </div>
+
+      {% set active_promo = get_active_promo(user.id) if user else None %}
+      {% if active_promo %}
+        <!-- Active promo banner -->
+        <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+          <span style="font-size:1.5rem">✅</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:.9rem;color:#15803d">
+              {{ active_promo.code }} — Pro access active!
+            </div>
+            <div style="font-size:.75rem;color:#166534;margin-top:2px">
+              Expires {{ active_promo.expires_at[:10] }} · {{ ((active_promo.expires_at[:10] | string) ) }}
+              <span id="promo-days-left"></span>
+            </div>
+          </div>
+        </div>
+        <script>
+        (function(){
+          const exp = new Date('{{ active_promo.expires_at[:10] }}');
+          const now = new Date();
+          const days = Math.ceil((exp - now) / 86400000);
+          const el = document.getElementById('promo-days-left');
+          if(el) el.textContent = days > 0 ? '(' + days + ' days left)' : '(expired)';
+        })();
+        </script>
+      {% else %}
+        <!-- Launch promo callout -->
+        <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fdba74;border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.3rem">🚀</span>
+          <div>
+            <div style="font-weight:700;font-size:.85rem;color:#c2410c">Launch Offer — 30 days Pro FREE</div>
+            <div style="font-size:.75rem;color:#9a3412;margin-top:2px">Use code <strong style="font-family:monospace;background:#fed7aa;padding:1px 5px;border-radius:4px">LAUNCH</strong> below to activate</div>
+          </div>
+        </div>
+      {% endif %}
+
       <div style="display:flex;gap:8px">
         <input type="text" id="promo-input" placeholder="Enter code e.g. LAUNCH"
-          style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-family:var(--mono);font-size:.85rem;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase()">
-        <button onclick="redeemPromo()"
-          style="padding:9px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem;white-space:nowrap">
+          style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-family:var(--mono);font-size:.88rem;text-transform:uppercase;outline:none;transition:border-color .15s"
+          oninput="this.value=this.value.toUpperCase()"
+          onfocus="this.style.borderColor='var(--accent)'"
+          onblur="this.style.borderColor='var(--border)'">
+        <button onclick="redeemPromo()" id="promo-btn"
+          style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:.88rem;white-space:nowrap;transition:background .15s"
+          onmouseover="this.style.background='#c2410c'" onmouseout="this.style.background='var(--accent)'">
           Apply
         </button>
       </div>
-      <div id="promo-msg" style="margin-top:8px;font-size:.82rem;display:none"></div>
+      <div id="promo-msg" style="margin-top:8px;font-size:.82rem;display:none;padding:8px 12px;border-radius:6px"></div>
     </div>
   </div>
   <script>
   async function redeemPromo(){
-    const code=document.getElementById('promo-input').value.trim().toUpperCase();
+    const input=document.getElementById('promo-input');
+    const btn=document.getElementById('promo-btn');
+    const code=input.value.trim().toUpperCase();
     const msg=document.getElementById('promo-msg');
-    if(!code){msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Enter a promo code first';return;}
-    msg.style.display='block';msg.style.color='var(--muted)';msg.textContent='Checking…';
+    if(!code){
+      msg.style.display='block';msg.style.background='#fef2f2';msg.style.color='#dc2626';
+      msg.textContent='Enter a promo code first'; return;
+    }
+    btn.disabled=true; btn.textContent='Checking…';
+    msg.style.display='block';msg.style.background='#f8fafc';msg.style.color='var(--muted)';
+    msg.textContent='Verifying code…';
     try {
       const controller=new AbortController();
       const timeout=setTimeout(()=>controller.abort(),8000);
@@ -4365,19 +4426,22 @@ async function checkout(plan){
       clearTimeout(timeout);
       const d=await r.json();
       if(d.success){
-        msg.style.color='#22c55e';msg.textContent=d.message;
+        msg.style.background='#f0fdf4';msg.style.color='#15803d';
+        msg.textContent='🎉 ' + (d.message||'Promo applied! Reloading…');
+        input.value=''; btn.textContent='Applied!';
         setTimeout(()=>location.reload(),1500);
       } else {
-        msg.style.color='#e74c3c';msg.textContent=d.error||'Invalid code';
+        msg.style.background='#fef2f2';msg.style.color='#dc2626';
+        msg.textContent='❌ ' + (d.error||'Invalid code');
+        btn.disabled=false; btn.textContent='Apply';
       }
     } catch(e) {
-      if(e.name==='AbortError'){
-        msg.style.color='#e74c3c';msg.textContent='Request timed out. Please try again.';
-      } else {
-        msg.style.color='#e74c3c';msg.textContent='Network error. Please try again.';
-      }
+      msg.style.background='#fef2f2';msg.style.color='#dc2626';
+      msg.textContent=e.name==='AbortError'?'⏱ Request timed out. Try again.':'❌ Network error. Try again.';
+      btn.disabled=false; btn.textContent='Apply';
     }
   }
+  document.getElementById('promo-input').addEventListener('keydown',e=>{if(e.key==='Enter')redeemPromo();});
   </script>
   <div class="account-card">
     <h3>Session</h3>
@@ -6751,7 +6815,14 @@ async function startJob(prefix, body){
   document.getElementById(prefix+'-result').classList.remove('show');
   document.getElementById(prefix+'-log').innerHTML='';
   setProgress(prefix,0);
-  const r=await fetch('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file_id:s.file_id,...body})});
+  // Always include filename + size_mb so history never shows "Unknown"
+  const payload = {
+    file_id: s.file_id,
+    filename: s.filename || '',
+    size_mb: s.size_mb || 0,
+    ...body
+  };
+  const r=await fetch('/api/process',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const d=await r.json();
   if(d.error){log(prefix,d.error,'err');run.disabled=false;run.textContent=getRunLabel(prefix);run.classList.remove('working');return null;}
   return d.job_id;
