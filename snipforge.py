@@ -1524,9 +1524,28 @@ def validate_out_ext(ext):
 @app.after_request
 def add_security_headers(resp):
     resp.headers['X-Content-Type-Options'] = 'nosniff'
-    resp.headers['X-Frame-Options']        = 'SAMEORIGIN'
-    resp.headers['X-XSS-Protection']       = '1; mode=block'
-    resp.headers['Referrer-Policy']        = 'strict-origin-when-cross-origin'
+    # Removed X-Frame-Options SAMEORIGIN — it causes corporate proxy/firewall blocks.
+    # Use CSP frame-ancestors instead which is more compatible.
+    resp.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+        "https://fonts.googleapis.com https://js.stripe.com "
+        "https://client.crisp.chat https://accounts.google.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https: blob:; "
+        "media-src 'self' blob:; "
+        "connect-src 'self' https://api.stripe.com https://client.crisp.chat; "
+        "frame-src https://js.stripe.com https://accounts.google.com; "
+        "frame-ancestors 'self'; "
+        "object-src 'none'"
+    )
+    resp.headers['X-XSS-Protection']  = '0'  # Deprecated; CSP handles this now
+    resp.headers['Referrer-Policy']   = 'strict-origin-when-cross-origin'
+    resp.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    # Allow corporate proxies / security gateways to cache and inspect normally
+    if not resp.headers.get('Cache-Control'):
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
 @app.errorhandler(413)
@@ -4358,27 +4377,27 @@ HTML = r"""<!DOCTYPE html>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#f8f7f5;
+  --bg:#f4f4f6;
   --bg2:#ffffff;
-  --bg3:#f0eeeb;
-  --border:#e5e2dc;
-  --border2:#d4d0c8;
-  --text:#1a1916;
-  --muted:#8a8780;
+  --bg3:#ecedf1;
+  --border:#dddde5;
+  --border2:#c8c8d4;
+  --text:#0d0d12;
+  --muted:#5a5a72;
   --accent:#e8420a;
   --accent2:#f07030;
-  --green:#1a7a3c;
-  --green-bg:#edf7f1;
-  --blue:#1a5fa8;
-  --blue-bg:#edf3fb;
-  --purple:#6b3fa0;
+  --green:#0f6b30;
+  --green-bg:#e6f4ec;
+  --blue:#1552a8;
+  --blue-bg:#e8f0fb;
+  --purple:#5c2fa0;
   --cond:'Space Grotesk',sans-serif;
   --body:'Inter',sans-serif;
   --mono:'JetBrains Mono',monospace;
   --radius:10px;
   --radius-lg:14px;
-  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
-  --shadow-md:0 4px 12px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.04);
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --shadow-md:0 4px 12px rgba(0,0,0,.10),0 2px 4px rgba(0,0,0,.06);
 }
 html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;overflow-x:hidden}
 ::-webkit-scrollbar{width:4px;height:4px}
@@ -4425,10 +4444,10 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .topbar-nav-link{
   font-family:'Inter',sans-serif;font-size:.85rem;padding:6px 12px;
   border-radius:8px;text-decoration:none;
-  color:#6b6b80;border:1px solid transparent;
+  color:#44445a;border:1px solid transparent;
   transition:all .15s;white-space:nowrap;font-weight:500;
 }
-.topbar-nav-link:hover{color:#0d0d0d;background:#f5f5f7}
+.topbar-nav-link:hover{color:#0d0d12;background:#eeeef4}
 .topbar-user{
   display:flex;align-items:center;gap:6px;
   padding:5px 10px;border-radius:8px;cursor:pointer;
@@ -4456,8 +4475,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 }
 .sidebar::-webkit-scrollbar{display:none}
 .nav-section{
-  font-family:'Inter',sans-serif;font-size:.65rem;font-weight:600;
-  letter-spacing:.08em;color:#bbb;text-transform:uppercase;
+  font-family:'Inter',sans-serif;font-size:.65rem;font-weight:700;
+  letter-spacing:.09em;color:#8888aa;text-transform:uppercase;
   padding:16px 16px 4px;
 }
 .nav-item{
@@ -4465,16 +4484,16 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   padding:8px 12px;margin:0 8px;
   cursor:pointer;border-radius:8px;
   transition:all .1s;font-size:.875rem;
-  color:#6b6b80;font-weight:500;line-height:1.3;
+  color:#44445a;font-weight:500;line-height:1.3;
 }
-.nav-item:hover{background:#f5f5f7;color:#0d0d0d}
+.nav-item:hover{background:#eeeef4;color:#0d0d12}
 .nav-item.active{
-  background:rgba(232,66,10,.08);
+  background:rgba(232,66,10,.09);
   color:var(--accent);font-weight:600;
 }
-.nav-icon{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#bbb;font-size:1rem}
+.nav-icon{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#8888aa;font-size:1rem}
 .nav-item.active .nav-icon{color:var(--accent)}
-.nav-item:hover .nav-icon{color:#6b6b80}
+.nav-item:hover .nav-icon{color:#44445a}
 .nav-icon svg{width:15px;height:15px;flex-shrink:0;stroke-width:2}
 .nav-badge{
   margin-left:auto;font-family:'Inter',sans-serif;font-size:.6rem;
@@ -4497,12 +4516,12 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .panel-header{margin-bottom:20px}
 .panel-title{
   font-family:'Space Grotesk',sans-serif;font-size:1.3rem;font-weight:700;
-  letter-spacing:-.02em;color:#0d0d0d;
+  letter-spacing:-.02em;color:#0d0d12;
   display:flex;align-items:center;gap:8px;
 }
 .panel-title-icon{font-size:1.1rem;opacity:.85}
 .panel-title-icon{font-size:1.2rem}
-.panel-sub{color:#6b6b80;font-size:.875rem;margin-top:3px;font-weight:400}
+.panel-sub{color:#44445a;font-size:.875rem;margin-top:3px;font-weight:400}
 
 /* upload zone */
 .upload-zone{
@@ -4809,50 +4828,139 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 }
 .rec-saved.show{display:block}
 
+/* ── MOBILE DROPDOWN UI ─────────────────────────────────────── */
+/* Tool picker sheet — hidden by default */
+.mob-sheet-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:400;backdrop-filter:blur(2px);
+}
+.mob-sheet-overlay.open{display:block}
+.mob-sheet{
+  position:fixed;bottom:0;left:0;right:0;
+  background:#fff;border-radius:20px 20px 0 0;
+  max-height:80vh;overflow-y:auto;
+  z-index:401;padding:0 0 24px;
+  transform:translateY(100%);
+  transition:transform .28s cubic-bezier(.32,1,.5,1);
+  box-shadow:0 -4px 32px rgba(0,0,0,.18);
+}
+.mob-sheet.open{transform:translateY(0)}
+.mob-sheet-handle{
+  width:40px;height:4px;background:#dddde5;border-radius:4px;
+  margin:12px auto 8px;cursor:pointer;
+}
+.mob-sheet-title{
+  font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:700;
+  color:#0d0d12;padding:4px 18px 12px;
+  border-bottom:1px solid #eeeef4;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.mob-sheet-close{
+  width:28px;height:28px;border:none;background:#f0f0f5;border-radius:50%;
+  color:#44445a;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.mob-sheet-section{
+  font-family:'Inter',sans-serif;font-size:.62rem;font-weight:700;
+  letter-spacing:.1em;color:#8888aa;text-transform:uppercase;
+  padding:14px 18px 4px;
+}
+.mob-tool-row{
+  display:flex;align-items:center;gap:12px;
+  padding:11px 18px;cursor:pointer;
+  transition:background .1s;
+  border-radius:0;
+}
+.mob-tool-row:active{background:#f4f4f8}
+.mob-tool-icon{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:rgba(232,66,10,.08);display:flex;align-items:center;
+  justify-content:center;font-size:1.1rem;
+}
+.mob-tool-icon.ai{background:rgba(37,99,235,.08)}
+.mob-tool-name{font-size:.9rem;font-weight:600;color:#0d0d12;line-height:1.2}
+.mob-tool-desc{font-size:.72rem;color:#5a5a72;margin-top:1px;line-height:1.3}
+.mob-tool-badge{
+  margin-left:auto;flex-shrink:0;
+  font-size:.58rem;font-weight:700;padding:2px 7px;
+  border-radius:4px;letter-spacing:.04em;
+}
+.mob-tool-badge.ai{background:rgba(37,99,235,.1);color:#1552a8}
+.mob-tool-badge.new{background:rgba(22,163,74,.1);color:#0f6b30}
+
+/* Mobile tool view — the back-header shown when a tool is open */
+.mob-back-bar{
+  display:none;
+  position:sticky;top:56px;z-index:90;
+  background:#fff;
+  border-bottom:1px solid #eeeef4;
+  padding:0;
+  box-shadow:0 1px 6px rgba(0,0,0,.07);
+}
+.mob-back-inner{
+  display:flex;align-items:center;gap:0;height:50px;
+}
+.mob-back-btn{
+  display:flex;align-items:center;gap:6px;
+  padding:0 14px;height:100%;border:none;background:none;
+  font-family:'Inter',sans-serif;font-size:.85rem;font-weight:600;
+  color:var(--accent);cursor:pointer;flex-shrink:0;
+  white-space:nowrap;
+}
+.mob-back-btn svg{width:16px;height:16px;stroke:var(--accent);flex-shrink:0}
+.mob-back-tool{
+  flex:1;min-width:0;padding:0 10px;
+}
+.mob-back-title{
+  font-family:'Space Grotesk',sans-serif;font-size:.95rem;font-weight:700;
+  color:#0d0d12;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.mob-back-sub{
+  font-size:.7rem;color:#5a5a72;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* Mobile topbar "Choose Tool" button */
+.mob-pick-btn{
+  display:none;
+  align-items:center;gap:7px;
+  padding:7px 14px 7px 12px;
+  background:var(--accent);color:#fff;
+  border:none;border-radius:9px;
+  font-family:'Inter',sans-serif;font-size:.85rem;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+  box-shadow:0 2px 8px rgba(232,66,10,.25);
+}
+.mob-pick-btn svg{width:14px;height:14px;stroke:#fff;flex-shrink:0}
+
 @media(max-width:768px){
   /* Layout */
   .app{grid-template-columns:1fr;grid-template-rows:56px 1fr;max-height:none;overflow:visible}
-  .main{padding:16px 14px 120px;height:auto;overflow-y:visible}
+  .main{padding:0 0 32px;height:auto;overflow-y:visible}
 
   /* Topbar */
   .logo-wrap{width:auto;border-right:none;padding:0 12px}
-  .logo{font-size:1.1rem}
-  .topbar{padding:0 10px 0 0}
+  .logo{font-size:1.05rem}
+  .topbar{padding:0 12px 0 0;gap:6px}
+  .logo-sub{display:none}
+  .topbar-nav-link{display:none}
+  .topbar-spacer{flex:1}
+  #user-badge{gap:6px}
+  #user-badge a[href="/account"]{display:none}
+  #mob-menu-btn{display:flex !important}
 
-  /* Sidebar becomes bottom tab bar */
-  .sidebar{
-    display:flex;flex-direction:row;
-    position:fixed;bottom:0;left:0;right:0;
-    height:56px;width:100%;
-    border-right:none;border-top:1px solid var(--border);
-    overflow-x:auto;overflow-y:hidden;
-    padding:0;gap:0;
-    z-index:200;
-    scrollbar-width:none;
-    background:var(--bg2);
-    box-shadow:0 -2px 8px rgba(0,0,0,.06);
-  }
-  .sidebar::-webkit-scrollbar{display:none}
-  .nav-section{display:none}
-  .nav-item{
-    flex-direction:column;align-items:center;justify-content:center;
-    gap:2px;padding:5px 10px;margin:0;
-    border-radius:0;border-left:none;
-    min-width:58px;height:56px;
-    font-size:.56rem;letter-spacing:.01em;
-    border-top:2px solid transparent;
-    white-space:nowrap;font-weight:500;
-  }
-  .nav-item.active{
-    border-top-color:var(--accent);
-    background:rgba(232,66,10,.05);
-  }
-  .nav-icon{width:22px;height:22px;margin-bottom:2px}
-  .nav-icon svg{width:16px;height:16px}
-  .nav-badge{display:none}
+  /* Show the "Choose Tool" button in topbar on mobile */
+  .mob-pick-btn{display:flex}
 
-  /* Main content */
-  .panel-title{font-size:1.3rem}
+  /* Hide desktop sidebar completely on mobile */
+  .sidebar{display:none !important}
+
+  /* Show back bar when a tool is active */
+  .mob-back-bar{display:block}
+
+  /* Panel content */
+  .panel.active{padding:14px 14px 0}
+  .panel-header{display:none} /* replaced by mob-back-bar */
+
+  /* Fields */
   .field-row,.field-row.triple{grid-template-columns:1fr}
   .preset-grid.four{grid-template-columns:repeat(2,1fr)}
   .speed-grid{grid-template-columns:repeat(3,1fr) !important}
@@ -4866,22 +4974,19 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   /* Result */
   .result-stats{grid-template-columns:repeat(2,1fr)}
 
-  /* Hide tagline */
-  .logo-sub{display:none}
-
-  /* Topbar compress */
-  .topbar-nav-link{display:none}
-  #user-badge a[href="/account"]{display:none}
-  #mob-menu-btn{display:flex !important}
-
-  /* Nav labels */
+  /* Nav labels (not visible but keep for JS compat) */
   .nav-short{display:inline}
   .nav-full{display:none}
   .nav-badge{display:none}
 
-  /* Upgrade banner */
+  /* Upgrade banner above bottom */
   .upgrade-bar-text{font-size:.72rem}
   .upgrade-bar-text strong{display:inline}
+}
+
+@media(max-width:480px){
+  .speed-grid{grid-template-columns:repeat(2,1fr)}
+  .preset-grid{grid-template-columns:repeat(2,1fr)}
 }
 
 @media(max-width:480px){
@@ -4908,9 +5013,15 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   <div class="logo">Snip<span style="color:var(--accent)">forge</span></div>
   <span class="logo-sub">CUT · FORGE · DELIVER</span>
   <div class="topbar-spacer"></div>
+  <!-- Desktop nav -->
   <a href="/dashboard" style="font-family:var(--mono);font-size:.7rem;padding:5px 12px;border-radius:6px;text-decoration:none;color:var(--muted);border:1px solid var(--border);transition:all .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Dashboard</a>
   <div id="user-badge" style="display:flex;align-items:center;gap:10px"></div>
   <div style="font-family:var(--mono);font-size:.55rem;padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--muted);border:1px solid var(--border);letter-spacing:.06em">BETA</div>
+  <!-- Mobile: Choose Tool button -->
+  <button class="mob-pick-btn" onclick="openMobSheet()">
+    <svg viewBox="0 0 16 16" fill="none" stroke-width="2"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
+    Tools
+  </button>
 </header>
 
 <nav class="sidebar">
@@ -5044,6 +5155,93 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   </div>
 </nav>
 <main class="main">
+
+<!-- ── MOBILE: back bar (sticky, shows when a tool is open) ── -->
+<div class="mob-back-bar" id="mob-back-bar">
+  <div class="mob-back-inner">
+    <button class="mob-back-btn" onclick="mobGoBack()">
+      <svg viewBox="0 0 16 16" fill="none" stroke-width="2"><path d="M10 3L5 8l5 5"/></svg>
+      Tools
+    </button>
+    <div class="mob-back-tool">
+      <div class="mob-back-title" id="mob-back-title">AI Shorten</div>
+      <div class="mob-back-sub" id="mob-back-sub">Remove silences automatically</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MOBILE: tool picker sheet overlay + sheet ── -->
+<div class="mob-sheet-overlay" id="mob-sheet-overlay" onclick="closeMobSheet()"></div>
+<div class="mob-sheet" id="mob-sheet">
+  <div class="mob-sheet-handle" onclick="closeMobSheet()"></div>
+  <div class="mob-sheet-title">Choose a Tool <button class="mob-sheet-close" onclick="closeMobSheet()">✕</button></div>
+
+  <div class="mob-sheet-section">🤖 AI</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('shorten','✂️','AI Shorten','Remove silences automatically')">
+    <div class="mob-tool-icon ai">✂️</div><div><div class="mob-tool-name">AI Shorten</div><div class="mob-tool-desc">Remove silences &amp; filler words automatically</div></div><span class="mob-tool-badge ai">AI</span></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('transcribe','📝','AI Transcribe','Convert speech to text in any language')">
+    <div class="mob-tool-icon ai">📝</div><div><div class="mob-tool-name">AI Transcribe</div><div class="mob-tool-desc">Convert speech to text in any language</div></div><span class="mob-tool-badge ai">AI</span></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('smartclip','🎯','AI Smart Clip','Find the best highlight automatically')">
+    <div class="mob-tool-icon ai">🎯</div><div><div class="mob-tool-name">AI Smart Clip</div><div class="mob-tool-desc">Find the best highlight automatically</div></div><span class="mob-tool-badge ai">AI</span></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('aianalyze','📋','Chapters &amp; Metadata','Generate YouTube chapters &amp; titles')">
+    <div class="mob-tool-icon ai">📋</div><div><div class="mob-tool-name">Chapters &amp; Metadata</div><div class="mob-tool-desc">Generate YouTube chapters &amp; titles</div></div><span class="mob-tool-badge ai">AI</span></div>
+
+  <div class="mob-sheet-section">✏️ Edit</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('trim','🔪','Trim','Cut start and end of your video')">
+    <div class="mob-tool-icon">🔪</div><div><div class="mob-tool-name">Trim</div><div class="mob-tool-desc">Cut start and end of your video</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('multitrim','🎯','Multi-Trim','Keep multiple sections and stitch them')">
+    <div class="mob-tool-icon">🎯</div><div><div class="mob-tool-name">Multi-Trim</div><div class="mob-tool-desc">Keep multiple sections and stitch them</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('speed','⚡','Speed Control','Speed up or slow down your video')">
+    <div class="mob-tool-icon">⚡</div><div><div class="mob-tool-name">Speed Control</div><div class="mob-tool-desc">Speed up or slow down your video</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('split','✂️','Split Video','Split into segments on a timeline')">
+    <div class="mob-tool-icon">✂️</div><div><div class="mob-tool-name">Split Video</div><div class="mob-tool-desc">Split into segments on a timeline</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('colorgrade','🎨','Brightness &amp; Contrast','Adjust brightness, contrast, saturation')">
+    <div class="mob-tool-icon">🎨</div><div><div class="mob-tool-name">Brightness &amp; Contrast</div><div class="mob-tool-desc">Adjust brightness, contrast, saturation</div></div></div>
+
+  <div class="mob-sheet-section">🔀 Transform</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('rotate','🔄','Rotate / Flip','Fix orientation or mirror your video')">
+    <div class="mob-tool-icon">🔄</div><div><div class="mob-tool-name">Rotate / Flip</div><div class="mob-tool-desc">Fix orientation or mirror your video</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('crop','📐','Resize for Social','Fit to YouTube, TikTok, Instagram')">
+    <div class="mob-tool-icon">📐</div><div><div class="mob-tool-name">Resize for Social</div><div class="mob-tool-desc">Fit to YouTube, TikTok, Instagram</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('watermark','🏷️','Watermark','Add text watermark to your video')">
+    <div class="mob-tool-icon">🏷️</div><div><div class="mob-tool-name">Watermark</div><div class="mob-tool-desc">Add text watermark to your video</div></div></div>
+
+  <div class="mob-sheet-section">🎬 Create</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('gif','🎞️','Video to GIF','Convert your video into an animated GIF')">
+    <div class="mob-tool-icon">🎞️</div><div><div class="mob-tool-name">Video to GIF</div><div class="mob-tool-desc">Convert your video into an animated GIF</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('bgmusic','🎵','Background Music','Mix an audio track into your video')">
+    <div class="mob-tool-icon">🎵</div><div><div class="mob-tool-name">Background Music</div><div class="mob-tool-desc">Mix an audio track into your video</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('textoverlay','✏️','Text Overlay','Add text at any position in your video')">
+    <div class="mob-tool-icon">✏️</div><div><div class="mob-tool-name">Text Overlay</div><div class="mob-tool-desc">Add text at any position in your video</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('blur','🫥','Blur Region','Blur faces or sensitive areas')">
+    <div class="mob-tool-icon">🫥</div><div><div class="mob-tool-name">Blur Region</div><div class="mob-tool-desc">Blur faces or sensitive areas</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('thumbnail','🖼','Thumbnail Extractor','Extract best frames as high-quality JPGs')">
+    <div class="mob-tool-icon">🖼</div><div><div class="mob-tool-name">Thumbnail Extractor</div><div class="mob-tool-desc">Extract best frames as high-quality JPGs</div></div></div>
+
+  <div class="mob-sheet-section">📁 Files</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('merge','🔗','Merge Videos','Combine multiple videos into one')">
+    <div class="mob-tool-icon">🔗</div><div><div class="mob-tool-name">Merge Videos</div><div class="mob-tool-desc">Combine multiple videos into one</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('convert','🔄','Convert','Convert to MP4, MOV, WebM, GIF, MP3')">
+    <div class="mob-tool-icon">🔄</div><div><div class="mob-tool-name">Convert</div><div class="mob-tool-desc">Convert to MP4, MOV, WebM, GIF, MP3</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('compress','📦','Compress','Reduce file size while keeping quality')">
+    <div class="mob-tool-icon">📦</div><div><div class="mob-tool-name">Compress</div><div class="mob-tool-desc">Reduce file size while keeping quality</div></div></div>
+
+  <div class="mob-sheet-section">🔊 Audio</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('volume','🔊','Volume Control','Boost or reduce audio volume')">
+    <div class="mob-tool-icon">🔊</div><div><div class="mob-tool-name">Volume Control</div><div class="mob-tool-desc">Boost or reduce audio volume</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('denoise','🔕','Noise Removal','Remove background noise from audio')">
+    <div class="mob-tool-icon">🔕</div><div><div class="mob-tool-name">Noise Removal</div><div class="mob-tool-desc">Remove background noise from audio</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('audio','🎵','Extract Audio','Pull the audio track as MP3')">
+    <div class="mob-tool-icon">🎵</div><div><div class="mob-tool-name">Extract Audio</div><div class="mob-tool-desc">Pull the audio track as MP3</div></div></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('mute','🔇','Mute Audio','Remove the audio track completely')">
+    <div class="mob-tool-icon">🔇</div><div><div class="mob-tool-name">Mute Audio</div><div class="mob-tool-desc">Remove the audio track completely</div></div></div>
+
+  <div class="mob-sheet-section">⏺ Record &amp; Share</div>
+  <div class="mob-tool-row" onclick="mobSelectTool('record','⏺️','Screen Recorder','Record screen, webcam, or both')">
+    <div class="mob-tool-icon">⏺️</div><div><div class="mob-tool-name">Screen Recorder</div><div class="mob-tool-desc">Record screen, webcam, or both</div></div><span class="mob-tool-badge new">NEW</span></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('shares','🔗','Shared Links','Manage your shared video links')">
+    <div class="mob-tool-icon">🔗</div><div><div class="mob-tool-name">Shared Links</div><div class="mob-tool-desc">Manage your shared video links</div></div></div>
+</div>
 
 <!-- ── SCREEN RECORDER ── -->
 <div class="panel" id="panel-record">
@@ -6108,12 +6306,92 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 const state = {};
 
 // ── nav ──
+// ── tool metadata used by mobile sheet back-bar ──
+const MOB_TOOL_META = {
+  record:     {icon:'⏺️', title:'Screen Recorder',       sub:'Record screen, webcam, or both'},
+  shorten:    {icon:'✂️', title:'AI Shorten',             sub:'Remove silences automatically'},
+  trim:       {icon:'🔪', title:'Trim',                   sub:'Cut start and end of your video'},
+  multitrim:  {icon:'🎯', title:'Multi-Trim',             sub:'Keep multiple sections and stitch them'},
+  speed:      {icon:'⚡', title:'Speed Control',          sub:'Speed up or slow down your video'},
+  rotate:     {icon:'🔄', title:'Rotate / Flip',          sub:'Fix orientation or mirror your video'},
+  crop:       {icon:'📐', title:'Resize for Social',      sub:'Fit to YouTube, TikTok, Instagram'},
+  watermark:  {icon:'🏷️', title:'Watermark',              sub:'Add text watermark to your video'},
+  merge:      {icon:'🔗', title:'Merge Videos',           sub:'Combine multiple videos into one'},
+  convert:    {icon:'🔄', title:'Convert',                sub:'Convert to MP4, MOV, WebM, GIF, MP3'},
+  compress:   {icon:'📦', title:'Compress',               sub:'Reduce file size while keeping quality'},
+  volume:     {icon:'🔊', title:'Volume Control',         sub:'Boost or reduce audio volume'},
+  denoise:    {icon:'🔕', title:'Noise Removal',          sub:'Remove background noise from audio'},
+  audio:      {icon:'🎵', title:'Extract Audio',          sub:'Pull the audio track as MP3'},
+  mute:       {icon:'🔇', title:'Mute Audio',             sub:'Remove the audio track completely'},
+  gif:        {icon:'🎞️', title:'Video to GIF',           sub:'Convert to an animated GIF'},
+  bgmusic:    {icon:'🎵', title:'Background Music',       sub:'Mix an audio track into your video'},
+  textoverlay:{icon:'✏️', title:'Text Overlay',           sub:'Add text at any position'},
+  blur:       {icon:'🫥', title:'Blur Region',            sub:'Blur faces or sensitive areas'},
+  transcribe: {icon:'📝', title:'AI Transcribe',          sub:'Convert speech to text'},
+  smartclip:  {icon:'🎯', title:'AI Smart Clip',          sub:'Find the best highlight automatically'},
+  aianalyze:  {icon:'📋', title:'Chapters & Metadata',    sub:'Generate YouTube chapters & titles'},
+  split:      {icon:'✂️', title:'Split Video',            sub:'Split into segments on a timeline'},
+  colorgrade: {icon:'🎨', title:'Brightness & Contrast',  sub:'Adjust brightness, contrast, saturation'},
+  thumbnail:  {icon:'🖼', title:'Thumbnail Extractor',    sub:'Extract best frames as JPGs'},
+  shares:     {icon:'🔗', title:'Shared Links',           sub:'Manage your shared video links'},
+};
+
 function switchPanel(el) {
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   el.classList.add('active');
-  document.getElementById('panel-'+el.dataset.panel).classList.add('active');
-  if(el.dataset.panel==='shares') loadShares();
+  const panel = el.dataset.panel;
+  document.getElementById('panel-'+panel).classList.add('active');
+  if(panel==='shares') loadShares();
+  // Update mobile back bar
+  _updateMobBackBar(panel);
+}
+
+function _updateMobBackBar(panel) {
+  const meta = MOB_TOOL_META[panel] || {};
+  const titleEl = document.getElementById('mob-back-title');
+  const subEl   = document.getElementById('mob-back-sub');
+  if(titleEl) titleEl.textContent = meta.title || panel;
+  if(subEl)   subEl.textContent   = meta.sub   || '';
+}
+
+// ── Mobile sheet functions ──
+function openMobSheet() {
+  document.getElementById('mob-sheet-overlay').classList.add('open');
+  document.getElementById('mob-sheet').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobSheet() {
+  document.getElementById('mob-sheet-overlay').classList.remove('open');
+  document.getElementById('mob-sheet').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function mobSelectTool(panel, icon, title, sub) {
+  closeMobSheet();
+  // Find the nav item and switch panel
+  const navItem = document.querySelector(`.nav-item[data-panel="${panel}"]`);
+  if(navItem) {
+    switchPanel(navItem);
+  } else {
+    // Fallback: directly activate panel
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    const p = document.getElementById('panel-'+panel);
+    if(p) p.classList.add('active');
+    if(panel==='shares') loadShares();
+  }
+  // Update back bar with the values passed from the sheet row
+  const titleEl = document.getElementById('mob-back-title');
+  const subEl   = document.getElementById('mob-back-sub');
+  if(titleEl) titleEl.textContent = title;
+  if(subEl)   subEl.textContent   = sub;
+  // Scroll to top
+  window.scrollTo({top:0, behavior:'instant'});
+}
+
+function mobGoBack() {
+  openMobSheet();
 }
 
 async function loadShares(){
@@ -7609,6 +7887,11 @@ const _urlTool = new URLSearchParams(window.location.search).get('tool');
 if(_urlTool){
   const navItem = document.querySelector(`.nav-item[data-panel="${_urlTool}"]`);
   if(navItem) switchPanel(navItem);
+  else _updateMobBackBar(_urlTool);
+} else {
+  // Set back bar to default active tool on load
+  const activeNav = document.querySelector('.nav-item.active');
+  if(activeNav) _updateMobBackBar(activeNav.dataset.panel);
 }
 </script>
 </body>
