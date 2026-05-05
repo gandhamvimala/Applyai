@@ -7401,6 +7401,12 @@ function selectRecType(type){
     if(mobName) mobName.textContent='Webcam Recorder';
     const mobDesc=document.getElementById('rec-mob-desc');
     if(mobDesc) mobDesc.textContent='Record yourself with your camera';
+    // Update MOB_TOOL_META so back bar shows correct title/desc when panel opens
+    if(typeof MOB_TOOL_META!=='undefined'&&MOB_TOOL_META.record){
+      MOB_TOOL_META.record.icon='📷';
+      MOB_TOOL_META.record.title='Webcam Recorder';
+      MOB_TOOL_META.record.sub='Record yourself with your camera';
+    }
   }
 })();
 
