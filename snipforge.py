@@ -5441,7 +5441,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
         <span class="rec-type-sub">Screen + webcam PiP</span>
       </div>
     </div>
-    <div id="rec-mobile-note" style="display:none;font-family:var(--mono);font-size:.7rem;color:var(--muted);margin-bottom:10px">📱 Screen recording is not supported on mobile browsers. Webcam only.</div>
+
     <div class="field-row">
       <div class="field">
         <label>Audio Source</label>
@@ -7386,12 +7386,17 @@ function selectRecType(type){
     document.getElementById('rtype-screen').style.display='none';
     document.getElementById('rtype-both').style.display='none';
     document.getElementById('rec-type-grid').style.gridTemplateColumns='1fr';
-    document.getElementById('rec-mobile-note').style.display='block';
+
     recType='webcam';
     document.getElementById('rtype-webcam').classList.add('active');
     const audioSel=document.getElementById('rec-audio-src');
     audioSel.querySelector('option[value="system"]').remove();
     audioSel.querySelector('option[value="both"]').remove();
+    // Update title and description to reflect webcam-only on mobile
+    const panelHeader=document.querySelector('#panel-record .panel-title');
+    if(panelHeader) panelHeader.innerHTML='<span class="panel-title-icon">📷</span>Webcam Recorder';
+    const panelSub=document.querySelector('#panel-record .panel-sub');
+    if(panelSub) panelSub.textContent='Record yourself with your front or back camera';
   }
 })();
 
@@ -7433,12 +7438,13 @@ async function startRecording(){
       // Use actual screen dimensions for canvas
       if(screenVid.videoWidth) canvas.width=screenVid.videoWidth;
       if(screenVid.videoHeight) canvas.height=screenVid.videoHeight;
-      function drawFrame(){
+      // Use setInterval instead of requestAnimationFrame — rAF throttles when tab loses focus during screenshare
+      const drawInterval=setInterval(()=>{
         ctx.drawImage(screenVid,0,0,canvas.width,canvas.height);
         ctx.drawImage(camVid,canvas.width-330,canvas.height-250,320,240);
-        requestAnimationFrame(drawFrame);
-      }
-      drawFrame();
+      }, 1000/30);
+      // Stop interval when screen share ends
+      screen.getVideoTracks()[0].addEventListener('ended',()=>clearInterval(drawInterval));
       stream=canvas.captureStream(30);
       cam.getAudioTracks().forEach(t=>stream.addTrack(t));
       screen.getAudioTracks().forEach(t=>stream.addTrack(t));
