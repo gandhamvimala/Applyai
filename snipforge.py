@@ -7407,6 +7407,11 @@ function selectRecType(type){
       MOB_TOOL_META.record.title='Webcam Recorder';
       MOB_TOOL_META.record.sub='Record yourself with your camera';
     }
+    // Also update back bar directly if it's currently showing record panel
+    const backTitle=document.getElementById('mob-back-title');
+    const backSub=document.getElementById('mob-back-sub');
+    if(backTitle&&backTitle.textContent==='Screen Recorder') backTitle.textContent='Webcam Recorder';
+    if(backSub&&backSub.textContent==='Record screen, webcam, or both') backSub.textContent='Record yourself with your camera';
   }
 })();
 
