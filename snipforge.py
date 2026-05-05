@@ -5025,6 +5025,27 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 }
 
 /* Mobile topbar "Choose Tool" button */
+.mob-user-btn{
+  display:none;
+  width:34px;height:34px;border:1.5px solid var(--border);
+  border-radius:50%;background:var(--bg2);
+  align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;color:var(--text);
+}
+.mob-user-menu{
+  display:none;
+  position:fixed;top:58px;right:10px;
+  background:#fff;border:1px solid var(--border);
+  border-radius:12px;padding:6px;
+  min-width:190px;z-index:500;
+  box-shadow:0 8px 24px rgba(0,0,0,.14);
+}
+.mob-user-menu.open{display:block}
+.mob-user-name{font-family:'Inter',sans-serif;font-size:.82rem;font-weight:700;color:var(--text);padding:8px 10px 4px}
+.mob-user-divider{height:1px;background:var(--border);margin:4px 0}
+.mob-user-link{display:block;padding:10px 12px;font-family:'Inter',sans-serif;font-size:.88rem;font-weight:500;color:var(--text);text-decoration:none;border-radius:8px;transition:background .1s}
+.mob-user-link:active{background:var(--bg3)}
+
 .mob-pick-btn{
   display:none;
   align-items:center;gap:7px;
@@ -5049,11 +5070,11 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
   .logo-sub{display:none}
   .topbar-nav-link{display:none}
   .topbar-spacer{flex:1}
-  #user-badge{gap:6px}
-  #user-badge a[href="/account"]{display:none}
+  #user-badge{display:none !important}
   #mob-menu-btn{display:flex !important}
 
-  /* Show the "Choose Tool" button in topbar on mobile */
+  /* Show mobile buttons */
+  .mob-user-btn{display:flex}
   .mob-pick-btn{display:flex}
 
   /* Hide desktop sidebar completely on mobile */
@@ -5121,7 +5142,20 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   <!-- Desktop nav -->
   <a href="/dashboard" class="topbar-nav-link">Dashboard</a>
   <div id="user-badge" style="display:flex;align-items:center;gap:8px"></div>
-  <!-- Mobile: Choose Tool button -->
+  <!-- Mobile: user menu + Tools button -->
+  <button class="mob-user-btn" id="mob-user-btn" onclick="toggleMobUserMenu()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+  </button>
+  <!-- Mobile user dropdown -->
+  <div class="mob-user-menu" id="mob-user-menu">
+    <div class="mob-user-name" id="mob-user-name">Account</div>
+    <div class="mob-user-divider"></div>
+    <a href="/dashboard" class="mob-user-link">📊 Dashboard</a>
+    <a href="/pricing"   class="mob-user-link">💳 Pricing</a>
+    <a href="/account"   class="mob-user-link">⚙️ Account</a>
+    <div class="mob-user-divider"></div>
+    <a href="/logout"    class="mob-user-link" style="color:#e8420a">← Logout</a>
+  </div>
   <button class="mob-pick-btn" onclick="openMobSheet()">
     <svg viewBox="0 0 16 16" fill="none" stroke-width="2"><path d="M2 4h12M2 8h8M2 12h5"/></svg>
     Tools
@@ -7437,6 +7471,9 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
     <a href="/account" class="topbar-nav-link">Account</a>
     <a href="/logout"  class="topbar-nav-link">Logout</a>
   `;
+  // Populate mobile user menu name + plan badge
+  const mobName = document.getElementById('mob-user-name');
+  if(mobName) mobName.innerHTML = `${u.name.split(' ')[0]} <span style="font-size:.6rem;padding:1px 6px;border-radius:4px;background:var(--bg3);color:${pc};border:1px solid var(--border);text-transform:uppercase;font-weight:700;margin-left:4px">${planLabel[u.plan]||u.plan}</span>`;
   if(u.plan==='free'){
     const bar=document.createElement('div');
     const isMobile = window.innerWidth <= 768;
@@ -7453,6 +7490,18 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
     document.body.appendChild(bar);
   }
 }).catch(()=>window.location='/login');
+
+function toggleMobUserMenu(){
+  const menu = document.getElementById('mob-user-menu');
+  menu.classList.toggle('open');
+}
+document.addEventListener('click', e=>{
+  const menu = document.getElementById('mob-user-menu');
+  const btn  = document.getElementById('mob-user-btn');
+  if(menu && btn && !menu.contains(e.target) && !btn.contains(e.target)){
+    menu.classList.remove('open');
+  }
+});
 
 // Mobile menu toggle
 function toggleMobMenu(){
