@@ -1566,7 +1566,7 @@ def add_security_headers(resp):
     )
     resp.headers['X-XSS-Protection']  = '0'  # Deprecated; CSP handles this now
     resp.headers['Referrer-Policy']   = 'strict-origin-when-cross-origin'
-    resp.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    resp.headers['Permissions-Policy'] = 'camera=(self), microphone=(self), display-capture=(self), geolocation=()'
     # Allow corporate proxies / security gateways to cache and inspect normally
     if not resp.headers.get('Cache-Control'):
         resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
