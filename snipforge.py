@@ -7373,27 +7373,6 @@ async function runMute(){
 
 // ── SCREEN RECORDER ──
 let mediaRecorder=null, recChunks=[], recStream=null, recTimer=null, recSecs=0, recType='screen';
-let _recRafId=null, _recScreenStream=null, _recCamStream=null;
-
-// Hide screen/both options on mobile (getDisplayMedia not supported)
-(function initRecorderMobile(){
-  const isMobile=!navigator.mediaDevices||typeof navigator.mediaDevices.getDisplayMedia!=='function';
-  if(isMobile){
-    const grid=document.getElementById('rec-type-grid');
-    if(grid){
-      document.getElementById('rtype-screen').style.display='none';
-      document.getElementById('rtype-both').style.display='none';
-      grid.style.gridTemplateColumns='1fr';
-    }
-    const note=document.getElementById('rec-mobile-note');
-    if(note) note.style.display='block';
-    // Auto-select webcam
-    recType='webcam';
-    document.querySelectorAll('.rec-type-btn').forEach(b=>b.classList.remove('active'));
-    const wb=document.getElementById('rtype-webcam');
-    if(wb) wb.classList.add('active');
-  }
-})();
 
 function selectRecType(type){
   recType=type;
@@ -7401,14 +7380,20 @@ function selectRecType(type){
   document.getElementById('rtype-'+type).classList.add('active');
 }
 
+// Mobile: hide Screen/Both options (getDisplayMedia not supported on mobile)
+(function(){
+  if(!navigator.mediaDevices||typeof navigator.mediaDevices.getDisplayMedia!=='function'){
+    document.getElementById('rtype-screen').style.display='none';
+    document.getElementById('rtype-both').style.display='none';
+    document.getElementById('rec-type-grid').style.gridTemplateColumns='1fr';
+    document.getElementById('rec-mobile-note').style.display='block';
+    recType='webcam';
+    document.getElementById('rtype-webcam').classList.add('active');
+  }
+})();
+
 async function startRecording(){
   try{
-    // Guard: mobile doesn't have getDisplayMedia
-    if((recType==='screen'||recType==='both')&&(!navigator.mediaDevices||typeof navigator.mediaDevices.getDisplayMedia!=='function')){
-      alert('Screen recording is not supported on this device/browser.\nPlease use Webcam mode instead.');
-      return;
-    }
-
     const audioSrc=document.getElementById('rec-audio-src').value;
     const quality=document.getElementById('rec-quality').value;
     const constraints={audio:audioSrc!=='none'};
@@ -7416,11 +7401,7 @@ async function startRecording(){
 
     let stream;
     if(recType==='screen'){
-      // selfBrowserSurface:'include' lets Chrome offer the current tab without black screen
-      stream=await navigator.mediaDevices.getDisplayMedia({
-        video:{...vRes, selfBrowserSurface:'include'},
-        audio:audioSrc==='system'||audioSrc==='both'
-      });
+      stream=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
       if(audioSrc==='mic'||audioSrc==='both'){
         const mic=await navigator.mediaDevices.getUserMedia({audio:true});
         mic.getAudioTracks().forEach(t=>stream.addTrack(t));
@@ -7429,26 +7410,23 @@ async function startRecording(){
       stream=await navigator.mediaDevices.getUserMedia({video:vRes,audio:audioSrc!=='none'});
     } else {
       // both - screen + webcam PiP
-      _recScreenStream=await navigator.mediaDevices.getDisplayMedia({
-        video:{...vRes, selfBrowserSurface:'include'},
-        audio:audioSrc==='system'||audioSrc==='both'
-      });
-      _recCamStream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:audioSrc==='mic'||audioSrc==='both'});
+      const screen=await navigator.mediaDevices.getDisplayMedia({video:vRes,audio:audioSrc==='system'||audioSrc==='both'});
+      const cam=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240},audio:audioSrc==='mic'||audioSrc==='both'});
       // Combine on canvas
       const canvas=document.createElement('canvas');
       canvas.width=vRes.width||1280; canvas.height=vRes.height||720;
       const ctx=canvas.getContext('2d');
-      const screenVid=document.createElement('video'); screenVid.srcObject=_recScreenStream; screenVid.play();
-      const camVid=document.createElement('video'); camVid.srcObject=_recCamStream; camVid.play();
+      const screenVid=document.createElement('video'); screenVid.srcObject=screen; screenVid.play();
+      const camVid=document.createElement('video'); camVid.srcObject=cam; camVid.play();
       function drawFrame(){
         ctx.drawImage(screenVid,0,0,canvas.width,canvas.height);
         ctx.drawImage(camVid,canvas.width-330,canvas.height-250,320,240);
-        _recRafId=requestAnimationFrame(drawFrame);
+        requestAnimationFrame(drawFrame);
       }
       drawFrame();
       stream=canvas.captureStream(30);
-      _recCamStream.getAudioTracks().forEach(t=>stream.addTrack(t));
-      _recScreenStream.getAudioTracks().forEach(t=>stream.addTrack(t));
+      cam.getAudioTracks().forEach(t=>stream.addTrack(t));
+      screen.getAudioTracks().forEach(t=>stream.addTrack(t));
     }
 
     recStream=stream;
@@ -7484,11 +7462,6 @@ async function startRecording(){
 function stopRecording(){
   if(mediaRecorder&&mediaRecorder.state!=='inactive') mediaRecorder.stop();
   if(recStream) recStream.getTracks().forEach(t=>t.stop());
-  // Stop sub-streams used in 'both' mode
-  if(_recScreenStream){ _recScreenStream.getTracks().forEach(t=>t.stop()); _recScreenStream=null; }
-  if(_recCamStream){ _recCamStream.getTracks().forEach(t=>t.stop()); _recCamStream=null; }
-  // Cancel canvas draw loop
-  if(_recRafId){ cancelAnimationFrame(_recRafId); _recRafId=null; }
   if(recTimer) clearInterval(recTimer);
   document.getElementById('rec-start-btn').disabled=false;
   document.getElementById('rec-stop-btn').disabled=true;
