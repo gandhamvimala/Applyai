@@ -813,6 +813,7 @@ def done(jid, path, stats=None):
                 new_dur    = stats.get("new", stats.get("new_duration", 0)),
                 orig_size_mb = jobs[jid].get("orig_size_mb", 0),
                 new_size_mb  = round(os.path.getsize(str(path))/1e6, 1) if path and os.path.exists(str(path)) else 0,
+                result_path  = str(path) if path and os.path.exists(str(path)) else None,
             )
     except: pass
 
@@ -1293,6 +1294,7 @@ def init_db():
                 new_dur      REAL,
                 status       TEXT DEFAULT 'done',
                 job_id       TEXT,
+                result_path  TEXT,
                 created_at   TEXT DEFAULT CURRENT_TIMESTAMP
             );
             CREATE TABLE IF NOT EXISTS shared_links (
@@ -1349,6 +1351,18 @@ def init_db():
             pass
 
 init_db()
+
+# ─── DB migrations (add columns to existing deployments) ──────────────────────
+def _migrate_db():
+    try:
+        with get_db() as db:
+            try:
+                db.execute("ALTER TABLE video_history ADD COLUMN result_path TEXT")
+            except Exception:
+                pass  # column already exists
+    except Exception:
+        pass
+_migrate_db()
 
 # ─── Auth helpers ─────────────────────────────────────────────────────────────
 def get_current_user():
@@ -1461,12 +1475,12 @@ def increment_usage(user_id):
     with get_db() as db:
         db.execute('UPDATE users SET videos_this_month=videos_this_month+1 WHERE id=?', (user_id,))
 
-def save_history(user_id, job_id, filename, operation, orig_dur=0, new_dur=0, orig_size_mb=0, new_size_mb=0):
+def save_history(user_id, job_id, filename, operation, orig_dur=0, new_dur=0, orig_size_mb=0, new_size_mb=0, result_path=None):
     with get_db() as db:
         db.execute(
-            'INSERT INTO video_history (id,user_id,job_id,filename,operation,orig_dur,new_dur,orig_size_mb,new_size_mb) VALUES (?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO video_history (id,user_id,job_id,filename,operation,orig_dur,new_dur,orig_size_mb,new_size_mb,result_path) VALUES (?,?,?,?,?,?,?,?,?,?)',
             (str(uuid.uuid4())[:8], user_id, job_id, filename, operation,
-             round(orig_dur,2), round(new_dur,2), round(orig_size_mb,1), round(new_size_mb,1))
+             round(orig_dur,2), round(new_dur,2), round(orig_size_mb,1), round(new_size_mb,1), result_path)
         )
 
 # ─── Security config ──────────────────────────────────────────────────────────
@@ -1500,13 +1514,27 @@ def get_ip():
     return request.headers.get('X-Forwarded-For', request.remote_addr or '0.0.0.0').split(',')[0].strip()
 
 # ─── File cleanup thread ──────────────────────────────────────────────────────
+def _get_protected_paths():
+    """Return set of file paths that are saved in user history (don't delete these)."""
+    try:
+        with get_db() as db:
+            rows = db.execute('SELECT result_path FROM video_history WHERE result_path IS NOT NULL').fetchall()
+        return {row['result_path'] for row in rows if row['result_path']}
+    except:
+        return set()
+
 def _cleanup_loop():
     while True:
         time.sleep(300)  # check every 5 minutes
         now = time.time()
+        protected = _get_protected_paths()
         for folder in [UPLOAD_DIR, OUTPUT_DIR]:
             for f in list(folder.iterdir()):
                 try:
+                    fpath = str(f)
+                    # Never delete files saved to a user's history
+                    if fpath in protected:
+                        continue
                     if now - f.stat().st_mtime > FILE_TTL_SECONDS:
                         f.unlink()
                 except: pass
@@ -3007,7 +3035,30 @@ def rename_history(hid):
     with get_db() as db:
         db.execute('UPDATE video_history SET filename=? WHERE id=? AND user_id=?',
                    (safe_name, hid, user['id']))
-    return jsonify({"success": True, "filename": safe_name})# ─── HTML/CSS/JS frontend ─────────────────────────────────────────────────────
+    return jsonify({"success": True, "filename": safe_name})
+
+@app.route("/api/history/<hid>/download")
+@login_required
+def download_history_file(hid):
+    """Download a processed file from history using the stored result_path."""
+    user = get_current_user()
+    with get_db() as db:
+        row = db.execute(
+            'SELECT * FROM video_history WHERE id=? AND user_id=?',
+            (hid, user['id'])
+        ).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    row = dict(row)
+    result_path = row.get('result_path')
+    if not result_path or not os.path.exists(result_path):
+        return jsonify({"error": "File no longer available. Files are kept as long as your account exists, but may be removed if the server was restarted."}), 404
+    orig = row.get('filename', 'video')
+    suffix = Path(result_path).suffix
+    dl_name = Path(orig).stem + '_snipforge' + suffix if orig else Path(result_path).name
+    resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype='application/octet-stream')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 SHARE_HTML = r"""<!DOCTYPE html>
@@ -3407,7 +3458,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
           <th>Duration</th>
           <th>Size</th>
           <th>Date</th>
-          <th>Action</th>
+          <th>Download</th>
           <th></th>
         </tr>
       </thead>
@@ -3449,7 +3500,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
           </td>
           <td><span class="time-ago" data-ts="{{ h.created_at }}">{{ h.created_at[:10] if h.created_at else '—' }}</span></td>
           <td>
-            <a href="/?tool={{ h.operation or 'shorten' }}" class="dl-link" style="background:rgba(232,66,10,.12);color:var(--accent);border-color:rgba(232,66,10,.2)">↩ Redo</a>
+            <a href="/api/history/{{ h.id }}/download" class="dl-link">⬇ Download</a>
           </td>
           <td>
             <button class="del-btn" onclick="deleteHistory('{{ h.id }}')" title="Remove from history">✕</button>
@@ -5513,10 +5564,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="13" cy="3.5" r="2"/><circle cx="13" cy="12.5" r="2"/><circle cx="3" cy="8" r="2"/><path d="M5 7l6-2.5M5 9l6 2.5"/></svg></span>
     <span class="nav-full">Shared Links</span><span class="nav-short">Shares</span>
   </div>
-
-  <!-- Recent videos thumbnails in sidebar -->
-  <div class="nav-section" style="margin-top:8px">Recent</div>
-  <div id="sidebar-recent-thumbs" style="padding:0 8px 8px;display:flex;flex-direction:column;gap:6px"></div>
 </nav>
 <main class="main">
 
@@ -7770,38 +7817,6 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
     document.body.appendChild(bar);
   }
 }).catch(()=>window.location='/login');
-
-// Load recent video thumbnails into sidebar
-(async function loadSidebarRecent(){
-  try {
-    const r = await fetch('/api/history?limit=5');
-    const d = await r.json();
-    const container = document.getElementById('sidebar-recent-thumbs');
-    if(!container || !d.history || !d.history.length) return;
-    const emojiMap = {shorten:'✂️',trim:'✂️',compress:'🗜️',convert:'🔄',speed:'⚡',merge:'🔗',transcribe:'📝',smart_clip:'🎯',resize:'📐',gif:'🎞',blur:'🫥',watermark:'🏷️',rotate:'🔄',split:'✂️',volume:'🔊',noise:'🎙️',denoise:'🎙️',mute:'🔇',music:'🎵',text:'✍️',colorgrade:'🎨',thumbnail:'🖼'};
-    const bgMap = {shorten:'linear-gradient(135deg,#3d0a00,#7a1500)',trim:'linear-gradient(135deg,#001a3d,#003080)',compress:'linear-gradient(135deg,#1a0030,#3d0060)',convert:'linear-gradient(135deg,#003020,#006040)',speed:'linear-gradient(135deg,#2a1500,#5a3000)',transcribe:'linear-gradient(135deg,#001a30,#00305a)',smart_clip:'linear-gradient(135deg,#300030,#600060)',denoise:'linear-gradient(135deg,#001830,#003060)',noise:'linear-gradient(135deg,#001830,#003060)'};
-    container.innerHTML = d.history.slice(0,5).map(h=>{
-      const op = h.operation || 'shorten';
-      const emoji = emojiMap[op] || '🎬';
-      const dur = h.new_dur || h.orig_dur;
-      const timeStr = dur ? `${Math.floor(dur/60)}:${String(Math.floor(dur%60)).padStart(2,'0')}` : '';
-      const name = (h.filename || 'Unknown').replace(/\.[^.]+$/,'');
-      const opLabel = op.replace('_',' ');
-      const bg = bgMap[op] || 'linear-gradient(135deg,#16161c,#1e1e27)';
-      return `<a href="/?tool=${op}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:7px;overflow:hidden;cursor:pointer;text-decoration:none;display:block">
-        <div style="aspect-ratio:16/9;background:${bg};display:flex;align-items:center;justify-content:center;font-size:1.4rem;position:relative">
-          ${emoji}
-          ${timeStr?`<span style="position:absolute;bottom:3px;right:4px;background:rgba(0,0,0,.75);color:#fff;font-size:.55rem;padding:1px 4px;border-radius:3px;font-family:var(--mono)">${timeStr}</span>`:''}
-          <span style="position:absolute;top:3px;left:4px;background:rgba(232,66,10,.85);color:#fff;font-size:.5rem;padding:1px 5px;border-radius:3px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em">${opLabel}</span>
-        </div>
-        <div style="padding:5px 7px">
-          <div style="font-size:.68rem;font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-        </div>
-      </a>`;
-    }).join('');
-    }).join('');
-  } catch(e){}
-})();
 
 function toggleMobUserMenu(){
   const menu = document.getElementById('mob-user-menu');
