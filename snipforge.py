@@ -1627,6 +1627,101 @@ def api_token():
 def api_test_mode_check():
     return jsonify({"test_mode": TEST_MODE})
 
+# ─── Chunked upload routes (bypass Railway 100MB proxy limit) ─────────────────
+_chunk_registry = {}  # upload_id -> {chunks: set, total: int, ext: str, user_id: str}
+_chunk_lock = threading.Lock()
+
+@app.route("/api/upload-chunk", methods=["POST"])
+@login_required
+def api_upload_chunk():
+    """Receive one chunk of a large file upload."""
+    user = get_current_user()
+    upload_id = request.form.get('upload_id', '')
+    chunk_index = int(request.form.get('chunk_index', 0))
+    total_chunks = int(request.form.get('total_chunks', 1))
+    filename = request.form.get('filename', 'upload.mp4')
+    ext = Path(secure_filename(filename)).suffix.lower()
+    if ext not in ALLOWED_EXTS:
+        return jsonify({"error": f"File type not allowed: {ext}"}), 400
+
+    chunk = request.files.get('chunk')
+    if not chunk:
+        return jsonify({"error": "No chunk data"}), 400
+
+    # Save chunk to temp file
+    chunk_path = UPLOAD_DIR / f"{upload_id}_chunk_{chunk_index:04d}"
+    chunk.save(str(chunk_path))
+
+    with _chunk_lock:
+        if upload_id not in _chunk_registry:
+            _chunk_registry[upload_id] = {'chunks': set(), 'total': total_chunks, 'ext': ext, 'user_id': user['id']}
+        _chunk_registry[upload_id]['chunks'].add(chunk_index)
+        received = len(_chunk_registry[upload_id]['chunks'])
+        total = _chunk_registry[upload_id]['total']
+
+    return jsonify({"received": chunk_index, "total_received": received, "total_chunks": total})
+
+@app.route("/api/upload-finalize", methods=["POST"])
+@login_required
+def api_upload_finalize():
+    """Assemble chunks into final file and return file info."""
+    user = get_current_user()
+    data = request.get_json() or {}
+    upload_id = data.get('upload_id', '')
+    filename = data.get('filename', 'upload.mp4')
+    ext = Path(secure_filename(filename)).suffix.lower()
+
+    with _chunk_lock:
+        reg = _chunk_registry.get(upload_id)
+        if not reg:
+            return jsonify({"error": "Upload session not found"}), 404
+        total = reg['total']
+        received = len(reg['chunks'])
+
+    if received < total:
+        return jsonify({"error": f"Missing chunks: {received}/{total} received"}), 400
+
+    # Assemble chunks
+    jid = str(uuid.uuid4())[:8]
+    out_path = UPLOAD_DIR / f"{jid}{ext}"
+    try:
+        with open(str(out_path), 'wb') as out_f:
+            for i in range(total):
+                chunk_path = UPLOAD_DIR / f"{upload_id}_chunk_{i:04d}"
+                with open(str(chunk_path), 'rb') as cf:
+                    out_f.write(cf.read())
+                chunk_path.unlink(missing_ok=True)
+    except Exception as e:
+        return jsonify({"error": f"Assembly failed: {e}"}), 500
+
+    with _chunk_lock:
+        _chunk_registry.pop(upload_id, None)
+
+    # Check final size
+    actual_size = os.path.getsize(str(out_path))
+    if actual_size > MAX_FILE_BYTES:
+        out_path.unlink(missing_ok=True)
+        return jsonify({"error": f"File too large. Max {MAX_FILE_MB}MB"}), 400
+
+    safe_name = secure_filename(filename) or f"upload{ext}"
+    info = get_info(str(out_path))
+    try: dur = get_duration(str(out_path))
+    except: dur = 0
+    vs  = next((s for s in info.get("streams",[]) if s.get("codec_type")=="video"),{})
+    as_ = next((s for s in info.get("streams",[]) if s.get("codec_type")=="audio"),{})
+    return jsonify({
+        "file_id":  jid,
+        "filename": safe_name,
+        "duration": round(dur, 2),
+        "size_mb":  round(actual_size/1e6, 1),
+        "width":    vs.get("width", 0),
+        "height":   vs.get("height", 0),
+        "fps":      vs.get("r_frame_rate", ""),
+        "vcodec":   vs.get("codec_name", ""),
+        "acodec":   as_.get("codec_name", ""),
+        "ext":      ext.lstrip(".")
+    })
+
 @app.route("/api/info", methods=["POST"])
 def api_info():
     ip = get_ip()
@@ -6843,32 +6938,94 @@ async function handleFile(prefix, file) {
   run.textContent = 'Uploading…';
   const thumb = document.getElementById(prefix+'-thumb');
   if (thumb) { thumb.src = URL.createObjectURL(file); }
-  const fd = new FormData();
-  fd.append('file', file);
 
-  // Use XHR for upload progress on large files
-  const d = await new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/info');
-    xhr.timeout = 0; // no timeout — large files can take time
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const pct = Math.round(e.loaded / e.total * 100);
-        run.textContent = pct < 100 ? `Uploading ${pct}%…` : 'Processing…';
+  // Hard limit check
+  const MAX_BYTES = 500 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    log(prefix, `File too large (${(file.size/1024/1024).toFixed(0)}MB). Max is 500MB.`, 'err');
+    run.textContent = 'Upload failed'; return;
+  }
+
+  const CHUNK_SIZE = 40 * 1024 * 1024; // 40MB chunks — safely under Railway's 100MB proxy limit
+  let d;
+
+  if (file.size <= CHUNK_SIZE) {
+    // Small file — direct upload
+    const fd = new FormData();
+    fd.append('file', file);
+    d = await new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/info');
+      xhr.timeout = 0;
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round(e.loaded / e.total * 100);
+          run.textContent = pct < 100 ? `Uploading ${pct}%…` : 'Processing…';
+        }
+      };
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState !== 4) return;
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch { resolve({error: 'Bad server response'}); }
+        } else if (xhr.status === 0) {
+          resolve({error: 'Upload blocked. Try a smaller file.'});
+        } else {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch { resolve({error: `Server error ${xhr.status}`}); }
+        }
+      };
+      xhr.send(fd);
+    });
+  } else {
+    // Large file — chunked upload
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const uploadId = Math.random().toString(36).slice(2) + Date.now();
+    run.textContent = `Uploading 0/${totalChunks} chunks…`;
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      const fd = new FormData();
+      fd.append('chunk', chunk, file.name);
+      fd.append('upload_id', uploadId);
+      fd.append('chunk_index', i);
+      fd.append('total_chunks', totalChunks);
+      fd.append('filename', file.name);
+
+      const ok = await new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload-chunk');
+        xhr.timeout = 0;
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState !== 4) return;
+          resolve(xhr.status >= 200 && xhr.status < 300);
+        };
+        xhr.send(fd);
+      });
+
+      if (!ok) {
+        log(prefix, `Chunk ${i+1} failed. Please try again.`, 'err');
+        run.textContent = 'Upload failed'; return;
       }
-    };
-    xhr.onload = () => {
-      try {
-        const parsed = JSON.parse(xhr.responseText);
-        resolve(parsed);
-      } catch {
-        resolve({error: `Server error ${xhr.status}. Try again.`});
-      }
-    };
-    xhr.onerror = () => resolve({error: `Upload failed (network error). Your file may be too large for the server. Try files under 200MB.`});
-    xhr.ontimeout = () => resolve({error: 'Upload timed out.'});
-    xhr.send(fd);
-  });
+      run.textContent = `Uploading ${i+1}/${totalChunks} chunks…`;
+    }
+
+    // Finalize
+    run.textContent = 'Processing…';
+    try {
+      const resp = await fetch('/api/upload-finalize', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({upload_id: uploadId, filename: file.name})
+      });
+      d = await resp.json();
+    } catch(e) {
+      log(prefix, 'Finalize failed. Please try again.', 'err');
+      run.textContent = 'Upload failed'; return;
+    }
+  }
   if (d.error) { log(prefix, d.error, 'err'); run.textContent='Upload failed'; return; }
   state[prefix] = d;
   if (document.getElementById(prefix+'-fname')) document.getElementById(prefix+'-fname').textContent = d.filename;
