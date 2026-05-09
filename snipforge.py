@@ -1486,7 +1486,7 @@ def save_history(user_id, job_id, filename, operation, orig_dur=0, new_dur=0, or
 # ─── Security config ──────────────────────────────────────────────────────────
 MAX_FILE_MB       = 500                          # max upload size
 MAX_FILE_BYTES    = MAX_FILE_MB * 1024 * 1024
-FILE_TTL_SECONDS  = 3600                         # delete files after 1 hour
+FILE_TTL_SECONDS  = 7200                         # delete files after 2 hours (gives time for large video processing)
 RATE_LIMIT        = 10                           # max jobs per IP per hour
 TEST_MODE         = os.environ.get('SNIPFORGE_TEST_MODE','') == '1'  # bypass rate limit for testing
 ALLOWED_EXTS      = {'.mp4','.mov','.avi','.webm','.mkv','.flv','.wmv','.m4v','.mp3','.wav','.aac'}
@@ -6849,8 +6849,26 @@ async function handleFile(prefix, file) {
   if (thumb) { thumb.src = URL.createObjectURL(file); }
   const fd = new FormData();
   fd.append('file', file);
-  const r = await fetch('/api/info', { method:'POST', body:fd });
-  const d = await r.json();
+
+  // Use XHR for upload progress on large files
+  const d = await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/info');
+    xhr.timeout = 0; // no timeout — large files can take time
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        run.textContent = pct < 100 ? `Uploading ${pct}%…` : 'Processing…';
+      }
+    };
+    xhr.onload = () => {
+      try { resolve(JSON.parse(xhr.responseText)); }
+      catch { resolve({error: 'Server error. Try a smaller file or check your connection.'}); }
+    };
+    xhr.onerror = () => resolve({error: 'Upload failed. Check your connection.'});
+    xhr.ontimeout = () => resolve({error: 'Upload timed out. Try a smaller file.'});
+    xhr.send(fd);
+  });
   if (d.error) { log(prefix, d.error, 'err'); run.textContent='Upload failed'; return; }
   state[prefix] = d;
   if (document.getElementById(prefix+'-fname')) document.getElementById(prefix+'-fname').textContent = d.filename;
@@ -7017,8 +7035,15 @@ function renumberSegs(){document.querySelectorAll('.segment-row').forEach((r,i)=
 async function addMergeFile(input){
   const file=input.files[0]; if(!file) return;
   const fd=new FormData(); fd.append('file',file);
-  const r=await fetch('/api/info',{method:'POST',body:fd});
-  const d=await r.json();
+  const btn=document.querySelector('#mg-run');
+  const d = await new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/info');
+    xhr.timeout = 0;
+    xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({error:'Server error'}); }};
+    xhr.onerror = () => resolve({error:'Upload failed'});
+    xhr.send(fd);
+  });
   if(d.error){alert(d.error);return;}
   const list=document.getElementById('merge-list');
   const item=document.createElement('div'); item.className='merge-item'; item.dataset.id=d.file_id;
@@ -8381,7 +8406,11 @@ if __name__ == "__main__":
         from waitress import serve
         print(f"   Server: Waitress (production) · {args.workers} workers")
         print(f"   Ready!\n")
-        serve(app, host=args.host, port=args.port, threads=args.workers)
+        serve(app, host=args.host, port=args.port, threads=args.workers,
+              channel_timeout=600,        # 10 min: time to receive full request body
+              connection_limit=100,
+              cleanup_interval=30,
+              max_request_body_size=MAX_FILE_BYTES + 1024*1024)  # match Flask limit
     except ImportError:
         try:
             import gunicorn
