@@ -3040,7 +3040,7 @@ def rename_history(hid):
 @app.route("/api/history/<hid>/download")
 @login_required
 def download_history_file(hid):
-    """Download a processed file from history using the stored result_path."""
+    """Download or stream a processed file from history using the stored result_path."""
     user = get_current_user()
     with get_db() as db:
         row = db.execute(
@@ -3056,8 +3056,15 @@ def download_history_file(hid):
     orig = row.get('filename', 'video')
     suffix = Path(result_path).suffix
     dl_name = Path(orig).stem + '_snipforge' + suffix if orig else Path(result_path).name
-    resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype='application/octet-stream')
+    # Stream mode for video player (no Content-Disposition attachment)
+    stream = request.args.get('stream', '0') == '1'
+    mime = 'video/mp4' if suffix.lower() in ('.mp4','.mov') else 'application/octet-stream'
+    if stream:
+        resp = send_file(result_path, mimetype=mime, conditional=True)
+    else:
+        resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype='application/octet-stream')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Accept-Ranges'] = 'bytes'
     return resp
 
 
@@ -3382,9 +3389,15 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       'blur': '🫥', 'text': '✍️', 'thumbnail': '🖼', 'colorgrade': '🎨',
       'mute': '🔇', 'music': '🎵', 'extract': '🎵'
     } %}
-    <a href="/?tool={{ op }}" class="thumb-item" style="text-decoration:none">
+    {% set has_file = h.result_path %}
+    <div class="thumb-item" onclick="openVideoModal('{{ h.id }}','{{ (h.filename or 'Video')|e }}','{{ op }}','{{ has_file }}')" style="cursor:pointer">
       <div class="thumb-preview" style="background:{{ bg_map.get(op, 'linear-gradient(135deg,#16161c,#1e1e27)') }}">
         <span style="font-size:2rem">{{ icon_map.get(op, '🎬') }}</span>
+        {% if has_file %}
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;background:rgba(0,0,0,.4)" class="thumb-play-overlay">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="18" fill="rgba(255,255,255,.2)"/><path d="M14 11l14 7-14 7V11z" fill="#fff"/></svg>
+        </div>
+        {% endif %}
         {% set dur = h.new_dur or h.orig_dur %}
         {% if dur %}
         <div class="thumb-badge">{{ '%d:%02d'|format((dur/60)|int, dur%60|int) }}</div>
@@ -3393,12 +3406,81 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
       </div>
       <div class="thumb-info">
         <div class="thumb-name" title="{{ h.filename or 'Unknown' }}">{{ h.filename or 'Unknown' }}</div>
-        <div class="thumb-sub">{{ h.created_at[:10] if h.created_at else '—' }}</div>
+        <div class="thumb-sub" style="display:flex;align-items:center;justify-content:space-between">
+          <span>{{ h.created_at[:10] if h.created_at else '—' }}</span>
+          {% if has_file %}<span style="color:var(--accent);font-size:.6rem;font-weight:600">▶ Play</span>{% else %}<span style="color:var(--muted);font-size:.6rem">expired</span>{% endif %}
+        </div>
       </div>
-    </a>
+    </div>
     {% endfor %}
   </div>
   {% endif %}
+
+<!-- Video Preview Modal -->
+<div id="video-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:820px;overflow:hidden;position:relative">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
+      <div>
+        <div id="modal-title" style="font-weight:700;font-size:1rem;color:var(--text)"></div>
+        <div id="modal-op" style="font-size:.72rem;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <a id="modal-dl" href="#" class="dl-link" style="padding:6px 14px">⬇ Download</a>
+        <button onclick="closeVideoModal()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);width:32px;height:32px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+    </div>
+    <div style="background:#000;position:relative">
+      <video id="modal-video" controls style="width:100%;max-height:460px;display:block"></video>
+      <div id="modal-no-file" style="display:none;padding:60px;text-align:center;background:var(--bg3)">
+        <div style="font-size:2.5rem;margin-bottom:12px">⏰</div>
+        <div style="font-weight:700;margin-bottom:6px;color:var(--text)">File no longer available</div>
+        <div style="font-size:.85rem;color:var(--muted)">This file was processed before persistent storage was enabled, or the server was restarted.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.thumb-item:hover .thumb-play-overlay{opacity:1 !important}
+</style>
+<script>
+function openVideoModal(hid, filename, op, hasFile){
+  const modal = document.getElementById('video-modal');
+  const video = document.getElementById('modal-video');
+  const noFile = document.getElementById('modal-no-file');
+  const dlBtn = document.getElementById('modal-dl');
+  document.getElementById('modal-title').textContent = filename;
+  document.getElementById('modal-op').textContent = op.replace('_',' ').toUpperCase();
+  if(hasFile && hasFile !== 'None' && hasFile !== ''){
+    const dlSrc = `/api/history/${hid}/download`;
+    const streamSrc = `/api/history/${hid}/download?stream=1`;
+    video.src = streamSrc;
+    video.style.display = 'block';
+    noFile.style.display = 'none';
+    dlBtn.href = dlSrc;
+    dlBtn.style.display = '';
+  } else {
+    video.src = '';
+    video.style.display = 'none';
+    noFile.style.display = 'block';
+    dlBtn.style.display = 'none';
+  }
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+function closeVideoModal(){
+  const modal = document.getElementById('video-modal');
+  const video = document.getElementById('modal-video');
+  video.pause();
+  video.src = '';
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.getElementById('video-modal').addEventListener('click', function(e){
+  if(e.target === this) closeVideoModal();
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeVideoModal(); });
+</script>
 
   <!-- History table -->
   <div class="section-header">
@@ -5412,8 +5494,12 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     </a>
   </div>
   <div class="topbar-spacer"></div>
-  <!-- Desktop nav -->
+  <!-- Desktop nav — always visible, no JS dependency -->
   <a href="/dashboard" class="topbar-nav-link">Dashboard</a>
+  <a href="/pricing"   class="topbar-nav-link">Pricing</a>
+  <a href="/account"   class="topbar-nav-link">Account</a>
+  <a href="/logout"    class="topbar-nav-link">Logout</a>
+  <!-- User name + plan badge — filled by JS -->
   <div id="user-badge" style="display:flex;align-items:center;gap:8px"></div>
   <!-- Mobile: user menu + Tools button -->
   <button class="mob-user-btn" id="mob-user-btn" onclick="toggleMobUserMenu()">
@@ -7794,9 +7880,6 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
       ${u.name.split(' ')[0]}
       <span style="font-size:.65rem;padding:2px 7px;border-radius:5px;background:${u.plan==='pro'?'rgba(232,66,10,.25)':u.plan==='team'?'rgba(96,165,250,.2)':'rgba(255,255,255,.1)'};color:${pc};border:1px solid ${u.plan==='pro'?'rgba(232,66,10,.4)':u.plan==='team'?'rgba(96,165,250,.35)':'rgba(255,255,255,.2)'};text-transform:uppercase;letter-spacing:.05em;font-weight:700">${planLabel[u.plan]||u.plan}</span>
     </span>
-    <a href="/pricing" class="topbar-nav-link">Pricing</a>
-    <a href="/account" class="topbar-nav-link">Account</a>
-    <a href="/logout"  class="topbar-nav-link">Logout</a>
   `;
   // Populate mobile user menu name + plan badge
   const mobName = document.getElementById('mob-user-name');
