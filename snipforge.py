@@ -3498,149 +3498,194 @@ LANDING_HTML = """<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
-  --bg:#ffffff;--bg2:#f7f8fa;--bg3:#f0f1f5;
-  --border:#e8e9ef;--text:#0d0d12;--muted:#6b7280;
-  --accent:#e8420a;--accent2:#f05a28;--accent-light:#fff1ed;
-  --green:#16a34a;--sans:'Inter',sans-serif;--tight:'Inter Tight',sans-serif;
-  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
-  --shadow-lg:0 8px 32px rgba(0,0,0,.12);
+  --bg:#0f0f13;--bg2:#16161c;--bg3:#1e1e27;
+  --border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.12);
+  --text:#ffffff;--muted:#8a8f9e;--muted2:#b0b5c4;
+  --accent:#e8420a;--accent2:#f05a28;--accent-light:rgba(232,66,10,.15);
+  --accent-glow:rgba(232,66,10,.3);
+  --green:#22c55e;--sans:'Inter',sans-serif;--tight:'Inter Tight',sans-serif;
+  --radius:12px;
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.3);
+  --shadow-lg:0 8px 40px rgba(0,0,0,.6);
+  --card-bg:rgba(255,255,255,.04);
+  --card-border:rgba(255,255,255,.07);
 }
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
 /* ── NAV ── */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
-.nav-logo{font-family:var(--tight);font-size:1.2rem;font-weight:900;color:var(--text);text-decoration:none;letter-spacing:-.04em}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;height:60px;padding:0 32px;display:flex;align-items:center;justify-content:space-between;background:rgba(15,15,19,.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-logo{display:flex;align-items:center;gap:8px;font-family:var(--tight);font-size:1.25rem;font-weight:900;color:var(--text);text-decoration:none;letter-spacing:-.04em}
+.nav-logo-icon{width:28px;height:28px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center}
+.nav-logo-icon svg{width:16px;height:16px;fill:#fff}
 .nav-logo span{color:var(--accent)}
 .nav-right{display:flex;align-items:center;gap:8px}
 .nav-link{padding:7px 14px;font-size:.85rem;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;transition:color .15s}
 .nav-link:hover{color:var(--text)}
 .nav-btn{padding:8px 18px;background:var(--accent);color:#fff;border-radius:8px;font-size:.85rem;font-weight:600;text-decoration:none;transition:all .15s}
-.nav-btn:hover{background:var(--accent2);transform:translateY(-1px)}
+.nav-btn:hover{background:var(--accent2);transform:translateY(-1px);box-shadow:0 4px 16px var(--accent-glow)}
 
 /* ── HERO ── */
-.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 24px 80px;position:relative;overflow:hidden}
-.hero-glow{position:absolute;width:800px;height:800px;border-radius:50%;background:radial-gradient(circle,rgba(232,66,10,.07) 0%,transparent 70%);top:-200px;left:50%;transform:translateX(-50%);pointer-events:none}
-.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:var(--accent-light);border:1px solid rgba(232,66,10,.25);border-radius:100px;font-size:.72rem;font-weight:600;color:var(--accent);margin-bottom:28px;letter-spacing:.04em}
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:120px 64px 80px;position:relative;overflow:hidden;max-width:1300px;margin:0 auto}
+.hero-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse 80% 60% at 60% 40%, rgba(180,50,10,.18) 0%, transparent 65%), radial-gradient(ellipse 50% 40% at 20% 80%, rgba(100,20,5,.12) 0%, transparent 60%)}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;background:var(--accent-light);border:1px solid rgba(232,66,10,.3);border-radius:100px;font-size:.72rem;font-weight:600;color:var(--accent);margin-bottom:28px;letter-spacing:.04em}
 .hero-badge::before{content:'';width:5px;height:5px;background:var(--accent);border-radius:50%;animation:blink 2s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.hero h1{font-family:var(--tight);font-size:clamp(3rem,8vw,6.5rem);font-weight:900;line-height:1;letter-spacing:-.04em;margin-bottom:24px;color:var(--text)}
+.hero h1{font-family:var(--tight);font-size:clamp(3rem,7vw,5.5rem);font-weight:900;line-height:1.02;letter-spacing:-.04em;margin-bottom:24px;color:var(--text);max-width:720px}
 .hero h1 span{color:var(--accent)}
-.hero-sub{font-size:clamp(1rem,2vw,1.2rem);color:var(--muted);max-width:540px;line-height:1.7;margin-bottom:40px;font-weight:400}
-.hero-btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:64px}
-.btn-primary{padding:14px 28px;background:var(--accent);color:#fff;border-radius:10px;font-size:.95rem;font-weight:600;text-decoration:none;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
-.btn-primary:hover{background:var(--accent2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(232,66,10,.3)}
-.btn-secondary{padding:14px 28px;background:var(--bg);color:var(--text);border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;font-weight:500;text-decoration:none;transition:all .2s}
-.btn-secondary:hover{border-color:var(--muted);background:var(--bg2)}
-.hero-stats{display:flex;gap:48px;flex-wrap:wrap;justify-content:center}
-.stat-num{font-family:var(--tight);font-size:2rem;font-weight:900;color:var(--text);line-height:1}
-.stat-lbl{font-size:.75rem;color:var(--muted);margin-top:4px;font-weight:500}
+.hero-sub{font-size:1.05rem;color:var(--muted2);max-width:480px;line-height:1.7;margin-bottom:36px;font-weight:400}
+.hero-btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:56px}
+.btn-primary{padding:13px 26px;background:var(--accent);color:#fff;border-radius:10px;font-size:.95rem;font-weight:600;text-decoration:none;transition:all .2s;display:inline-flex;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(232,66,10,.35)}
+.btn-primary:hover{background:var(--accent2);transform:translateY(-2px);box-shadow:0 8px 28px rgba(232,66,10,.45)}
+.btn-secondary{padding:13px 26px;background:var(--card-bg);color:var(--text);border:1px solid var(--border2);border-radius:10px;font-size:.95rem;font-weight:500;text-decoration:none;transition:all .2s}
+.btn-secondary:hover{border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.07)}
+.hero-trust{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.trust-item{display:flex;align-items:center;gap:7px;font-size:.8rem;color:var(--muted);font-weight:500}
+.trust-dot{width:4px;height:4px;background:var(--muted);border-radius:50%}
+.trust-shield{width:16px;height:16px;background:rgba(34,197,94,.15);border-radius:4px;display:flex;align-items:center;justify-content:center}
+.trust-shield svg{width:10px;height:10px;stroke:#22c55e}
 
-/* ── APP PREVIEW ── */
-.app-preview{max-width:1100px;margin:0 auto 80px;padding:0 24px}
-.app-preview-inner{background:var(--bg2);border:1px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:var(--shadow-lg)}
-.app-bar{padding:14px 20px;background:var(--bg);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-.app-dot{width:12px;height:12px;border-radius:50%}
-.app-bar-url{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:.75rem;color:var(--muted);font-family:monospace;max-width:280px;margin:0 auto}
-.app-content{display:grid;grid-template-columns:200px 1fr;min-height:320px}
-.app-sidebar{background:var(--bg);border-right:1px solid var(--border);padding:16px 0}
-.app-nav-item{padding:8px 16px;font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:8px;cursor:default}
-.app-nav-item.active{background:var(--accent-light);color:var(--accent);font-weight:600;border-left:2px solid var(--accent)}
-.app-nav-section{padding:12px 16px 4px;font-size:.62rem;color:var(--muted);letter-spacing:.1em;font-weight:600;text-transform:uppercase}
-.app-main{padding:24px;background:var(--bg2)}
-.app-tool-title{font-size:1.2rem;font-weight:700;margin-bottom:4px}
-.app-tool-sub{font-size:.8rem;color:var(--muted);margin-bottom:20px}
-.app-upload{border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center;background:var(--bg)}
-.app-upload-icon{font-size:2rem;margin-bottom:8px}
-.app-upload-text{font-size:.85rem;font-weight:600;margin-bottom:4px}
-.app-upload-sub{font-size:.72rem;color:var(--muted)}
+/* ── HERO SPLIT LAYOUT ── */
+.hero-layout{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;min-height:100vh;padding:100px 64px 80px;max-width:1300px;margin:0 auto;position:relative}
+
+/* ── FEATURE LIST (LEFT HERO) ── */
+.feature-list{display:flex;flex-direction:column;gap:20px;margin-bottom:40px}
+.feature-row{display:flex;align-items:flex-start;gap:14px}
+.feature-row-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem}
+.feature-row-text h4{font-size:.95rem;font-weight:700;margin-bottom:3px;color:var(--text)}
+.feature-row-text p{font-size:.8rem;color:var(--muted);line-height:1.5}
+
+/* ── APP MOCKUP (RIGHT HERO) ── */
+.app-mockup{background:var(--bg2);border:1px solid var(--border2);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-lg);position:relative}
+.app-mockup::before{content:'';position:absolute;inset:0;border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.03),transparent);pointer-events:none;z-index:1}
+.app-titlebar{padding:12px 16px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.app-dot{width:11px;height:11px;border-radius:50%}
+.app-titlebar-logo{display:flex;align-items:center;gap:6px;margin-left:8px;font-family:var(--tight);font-size:.9rem;font-weight:900;letter-spacing:-.03em}
+.app-titlebar-logo span{color:var(--accent)}
+.app-titlebar-logo-icon{width:18px;height:18px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center}
+.app-titlebar-logo-icon svg{width:10px;height:10px;fill:#fff}
+.app-layout{display:grid;grid-template-columns:180px 1fr}
+.app-sidebar{background:rgba(0,0,0,.25);border-right:1px solid var(--border);padding:12px 0}
+.app-sidebar-logo{padding:10px 14px 14px;display:flex;align-items:center;gap:7px;font-family:var(--tight);font-size:.95rem;font-weight:900;letter-spacing:-.03em;border-bottom:1px solid var(--border);margin-bottom:8px}
+.app-sidebar-logo-icon{width:22px;height:22px;background:var(--accent);border-radius:5px;display:flex;align-items:center;justify-content:center}
+.app-sidebar-logo-icon svg{width:12px;height:12px;fill:#fff}
+.app-sidebar-logo span{color:var(--accent)}
+.app-nav-item{padding:8px 14px;font-size:.77rem;color:var(--muted);display:flex;align-items:center;gap:8px;cursor:default;border-radius:6px;margin:1px 6px;transition:all .15s}
+.app-nav-item.active{background:var(--accent);color:#fff;font-weight:600}
+.app-nav-item svg{width:14px;height:14px;stroke:currentColor;flex-shrink:0}
+.app-main{padding:18px;background:rgba(255,255,255,.01)}
+.app-welcome{margin-bottom:14px}
+.app-welcome h3{font-size:.95rem;font-weight:700;margin-bottom:2px}
+.app-welcome p{font-size:.72rem;color:var(--muted)}
+.app-cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.app-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:flex-start;gap:10px}
+.app-card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem}
+.app-card h4{font-size:.75rem;font-weight:700;margin-bottom:2px}
+.app-card p{font-size:.65rem;color:var(--muted);line-height:1.4}
+.app-recent{margin-top:4px}
+.app-recent-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.app-recent-hdr span{font-size:.8rem;font-weight:700}
+.app-recent-hdr a{font-size:.7rem;color:var(--accent);text-decoration:none;font-weight:500}
+.app-thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.app-thumb{background:var(--bg3);border:1px solid var(--border);border-radius:7px;aspect-ratio:16/9;overflow:hidden;position:relative}
+.app-thumb-inner{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:1.4rem}
+.app-thumb-time{position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,.75);color:#fff;font-size:.55rem;padding:1px 4px;border-radius:3px;font-weight:600}
+.app-thumb-label{font-size:.62rem;color:var(--text);font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-thumb-sub{font-size:.55rem;color:var(--muted)}
+.app-sidebar-footer{margin-top:auto;padding:10px 8px}
+.app-sidebar-promo{background:linear-gradient(135deg,rgba(232,66,10,.2),rgba(232,66,10,.08));border:1px solid rgba(232,66,10,.25);border-radius:9px;padding:10px 12px;margin:8px 6px 6px;text-align:center}
+.app-sidebar-promo h5{font-size:.72rem;font-weight:700;margin-bottom:2px;display:flex;align-items:center;gap:5px;justify-content:center}
+.app-sidebar-promo p{font-size:.62rem;color:var(--muted);line-height:1.4}
 
 /* ── TOOLS ── */
-.tools-section{padding:80px 24px;max-width:1100px;margin:0 auto}
-.section-tag{display:inline-block;padding:4px 12px;background:var(--accent-light);color:var(--accent);border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.06em;margin-bottom:16px;text-transform:uppercase}
-.section-title{font-family:var(--tight);font-size:clamp(2rem,5vw,3.2rem);font-weight:900;letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
-.section-sub{font-size:1rem;color:var(--muted);max-width:560px;line-height:1.6;margin-bottom:48px}
-.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-.tool-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:all .2s;cursor:default;position:relative;overflow:hidden}
-.tool-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(232,66,10,.03),transparent);opacity:0;transition:opacity .2s}
-.tool-card:hover{border-color:rgba(232,66,10,.3);transform:translateY(-2px);box-shadow:var(--shadow)}
-.tool-card:hover::before{opacity:1}
-.tool-icon{width:40px;height:40px;background:var(--accent-light);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;margin-bottom:12px}
-.tool-name{font-size:.9rem;font-weight:700;margin-bottom:4px;color:var(--text)}
-.tool-desc{font-size:.75rem;color:var(--muted);line-height:1.5}
-.tool-tag{position:absolute;top:12px;right:12px;padding:2px 8px;background:var(--accent);color:#fff;border-radius:4px;font-size:.6rem;font-weight:700;letter-spacing:.04em}
+.tools-section{padding:80px 64px;max-width:1300px;margin:0 auto}
+.section-tag{display:inline-block;padding:4px 12px;background:var(--accent-light);color:var(--accent);border:1px solid rgba(232,66,10,.25);border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.06em;margin-bottom:16px;text-transform:uppercase}
+.section-title{font-family:var(--tight);font-size:clamp(2rem,5vw,3rem);font-weight:900;letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
+.section-sub{font-size:1rem;color:var(--muted2);max-width:560px;line-height:1.6;margin-bottom:48px}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.tool-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:18px;transition:all .2s;cursor:default;position:relative;overflow:hidden}
+.tool-card:hover{border-color:rgba(232,66,10,.35);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4),0 0 0 1px rgba(232,66,10,.1)}
+.tool-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:10px}
+.tool-name{font-size:.88rem;font-weight:700;margin-bottom:3px;color:var(--text)}
+.tool-desc{font-size:.73rem;color:var(--muted);line-height:1.5}
+.tool-tag{position:absolute;top:11px;right:11px;padding:2px 7px;background:var(--accent);color:#fff;border-radius:4px;font-size:.58rem;font-weight:700;letter-spacing:.04em}
+.group-label{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.group-pill{display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:100px;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.group-divider{flex:1;height:1px;background:var(--border)}
 
 /* ── FEATURES ── */
-.features-section{padding:80px 24px;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.features-inner{max-width:1100px;margin:0 auto}
-.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}
-.feature-card{background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:var(--shadow)}
-.feature-icon{width:48px;height:48px;background:var(--accent-light);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:16px}
-.feature-title{font-size:1rem;font-weight:700;margin-bottom:8px}
-.feature-desc{font-size:.83rem;color:var(--muted);line-height:1.6}
+.features-section{padding:80px 64px;background:rgba(255,255,255,.015);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.features-inner{max-width:1300px;margin:0 auto}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
+.feature-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;padding:28px}
+.feature-icon{width:46px;height:46px;background:var(--accent-light);border:1px solid rgba(232,66,10,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin-bottom:16px}
+.feature-title{font-size:.95rem;font-weight:700;margin-bottom:8px}
+.feature-desc{font-size:.82rem;color:var(--muted2);line-height:1.6}
 
 /* ── HOW IT WORKS ── */
-.how-section{padding:80px 24px;max-width:900px;margin:0 auto;text-align:center}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
-.step{padding:28px 20px;background:var(--bg);border:1px solid var(--border);border-radius:16px;position:relative;box-shadow:var(--shadow)}
-.step-num{width:36px;height:36px;background:var(--accent);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--tight);font-weight:900;font-size:1rem;margin:0 auto 16px}
-.step h3{font-size:.95rem;font-weight:700;margin-bottom:8px}
-.step p{font-size:.78rem;color:var(--muted);line-height:1.6}
-.step-arrow{position:absolute;right:-14px;top:50%;transform:translateY(-50%);font-size:1.2rem;color:var(--accent);z-index:1}
+.how-section{padding:80px 64px;max-width:1000px;margin:0 auto;text-align:center}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px}
+.step{padding:28px 20px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;position:relative}
+.step-num{width:34px;height:34px;background:var(--accent);color:#fff;border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:var(--tight);font-weight:900;font-size:.95rem;margin:0 auto 14px}
+.step h3{font-size:.92rem;font-weight:700;margin-bottom:8px}
+.step p{font-size:.77rem;color:var(--muted2);line-height:1.6}
+.step-arrow{position:absolute;right:-11px;top:50%;transform:translateY(-50%);font-size:1rem;color:var(--accent);z-index:1}
 
 /* ── PRICING ── */
-.pricing-section{padding:80px 24px;max-width:1000px;margin:0 auto;text-align:center}
-.pricing-toggle{display:inline-flex;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--border);border-radius:100px;padding:6px 18px;margin-bottom:40px;font-size:.85rem}
-.pricing-toggle input{display:none}
-.toggle-track{width:40px;height:22px;background:var(--accent);border-radius:100px;position:relative;cursor:pointer;transition:background .2s}
-.toggle-track::after{content:'';position:absolute;width:16px;height:16px;background:#fff;border-radius:50%;top:3px;left:3px;transition:transform .2s}
-.toggle-track.yearly::after{transform:translateX(18px)}
-.save-badge{background:var(--green);color:#fff;padding:2px 8px;border-radius:4px;font-size:.65rem;font-weight:700}
-.pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.pricing-card{background:var(--bg);border:1.5px solid var(--border);border-radius:16px;padding:28px;text-align:left;box-shadow:var(--shadow);position:relative}
-.pricing-card.popular{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),var(--shadow)}
-.popular-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:3px 14px;border-radius:100px;font-size:.65rem;font-weight:700;letter-spacing:.06em;white-space:nowrap}
-.plan-name{font-size:.75rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
-.plan-price{font-family:var(--tight);font-size:2.8rem;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px}
-.plan-price sup{font-size:1.2rem;vertical-align:top;margin-top:8px}
-.plan-price sub{font-size:.9rem;font-weight:400;color:var(--muted)}
-.plan-period{font-size:.75rem;color:var(--muted);margin-bottom:20px}
+.pricing-section{padding:80px 64px;max-width:1100px;margin:0 auto;text-align:center}
+.pricing-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
+.pricing-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;padding:28px;text-align:left;position:relative}
+.pricing-card.popular{border-color:var(--accent);background:rgba(232,66,10,.05);box-shadow:0 0 40px rgba(232,66,10,.1)}
+.popular-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:3px 14px;border-radius:100px;font-size:.63rem;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+.plan-name{font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.plan-price{font-family:var(--tight);font-size:2.6rem;font-weight:900;color:var(--text);line-height:1;margin-bottom:4px}
+.plan-price sup{font-size:1.1rem;vertical-align:top;margin-top:8px}
+.plan-price sub{font-size:.85rem;font-weight:400;color:var(--muted)}
+.plan-period{font-size:.73rem;color:var(--muted);margin-bottom:20px}
 .plan-divider{height:1px;background:var(--border);margin:16px 0}
 .plan-features{list-style:none;margin-bottom:20px}
-.plan-features li{font-size:.82rem;color:var(--muted);padding:5px 0;display:flex;align-items:center;gap:8px}
-.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0;font-size:.85rem}
-.plan-features li.no::before{content:'✕';color:#d1d5db}
-.plan-features li.no{color:#d1d5db}
-.plan-btn{display:block;width:100%;padding:11px;border-radius:9px;text-align:center;text-decoration:none;font-weight:600;font-size:.88rem;transition:all .2s}
-.plan-btn.free{background:var(--bg2);color:var(--text);border:1px solid var(--border)}
-.plan-btn.free:hover{border-color:var(--muted)}
+.plan-features li{font-size:.8rem;color:var(--muted2);padding:5px 0;display:flex;align-items:center;gap:8px}
+.plan-features li::before{content:'✓';color:var(--green);font-weight:700;flex-shrink:0}
+.plan-features li.no::before{content:'✕';color:rgba(255,255,255,.2)}
+.plan-features li.no{color:rgba(255,255,255,.25)}
+.plan-btn{display:block;width:100%;padding:11px;border-radius:9px;text-align:center;text-decoration:none;font-weight:600;font-size:.87rem;transition:all .2s}
+.plan-btn.free{background:var(--card-bg);color:var(--text);border:1px solid var(--border2)}
+.plan-btn.free:hover{border-color:rgba(255,255,255,.3)}
 .plan-btn.paid{background:var(--accent);color:#fff}
-.plan-btn.paid:hover{background:var(--accent2)}
+.plan-btn.paid:hover{background:var(--accent2);box-shadow:0 4px 16px var(--accent-glow)}
 
 /* ── FOOTER ── */
-footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;background:var(--bg)}
-.footer-logo{font-family:var(--tight);font-size:1.1rem;font-weight:900;color:var(--text);letter-spacing:-.04em;text-decoration:none}
+footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.footer-logo{display:flex;align-items:center;gap:7px;font-family:var(--tight);font-size:1.1rem;font-weight:900;color:var(--text);letter-spacing:-.04em;text-decoration:none}
+.footer-logo span{color:var(--accent)}
 .footer-links{display:flex;gap:24px}
-.footer-links a{font-size:.82rem;color:var(--muted);text-decoration:none;transition:color .15s}
+.footer-links a{font-size:.8rem;color:var(--muted);text-decoration:none;transition:color .15s}
 .footer-links a:hover{color:var(--text)}
-.footer-copy{font-size:.75rem;color:var(--muted)}
+.footer-copy{font-size:.73rem;color:var(--muted)}
 
-@media(max-width:768px){
-  nav{padding:0 20px}
-  .app-content{grid-template-columns:1fr}
-  .app-sidebar{display:none}
-  .tools-grid{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){
+  .hero-layout{grid-template-columns:1fr;padding:100px 24px 60px;gap:40px}
+  .app-mockup{display:none}
+  .tools-section,.features-section,.how-section,.pricing-section{padding-left:24px;padding-right:24px}
   .features-grid,.steps,.pricing-cards{grid-template-columns:1fr}
   .step-arrow{display:none}
-  .hero-stats{gap:24px}
+  footer{padding:32px 24px}
+}
+@media(max-width:600px){
+  .tools-grid{grid-template-columns:repeat(2,1fr)}
+  .app-cards-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
 <body>
+<div class="hero-bg"></div>
 
 <!-- NAV -->
 <nav>
-  <a href="/" class="nav-logo">Snip<span style="color:var(--accent)">forge</span></a>
+  <a href="/" class="nav-logo">
+    <div class="nav-logo-icon"><svg viewBox="0 0 16 16"><path d="M3 8l4-5 2 3 2-2 2 4H3z"/></svg></div>
+    snip<span>forge</span>
+  </a>
   <div class="nav-right">
     <a href="/pricing" class="nav-link">Pricing</a>
     <a href="/login" class="nav-link">Log in</a>
@@ -3648,54 +3693,174 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
   </div>
 </nav>
 
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-glow"></div>
-  <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
-  <h1>Edit videos.<br><span>Ship faster.</span></h1>
-  <p class="hero-sub">24 professional video tools in your browser. Trim, transcribe, AI smart clip, chapters, thumbnails, blur regions and more.</p>
-  <div class="hero-btns">
-    <a href="/register" class="btn-primary">Start for free <span>→</span></a>
-    <a href="/pricing" class="btn-secondary">See pricing</a>
-  </div>
-  <div class="hero-stats">
-    <div><div class="stat-num">24+</div><div class="stat-lbl">Video Tools</div></div>
-    <div><div class="stat-num">5</div><div class="stat-lbl">AI Tools</div></div>
-    <div><div class="stat-num">20</div><div class="stat-lbl">Languages</div></div>
-    <div><div class="stat-num">$5</div><div class="stat-lbl">Pro / month</div></div>
-  </div>
-</section>
+<!-- HERO SPLIT LAYOUT -->
+<div class="hero-layout">
+  <!-- LEFT: Copy + Feature list -->
+  <div>
+    <div class="hero-badge">✂ AI-Powered Video Toolkit</div>
+    <h1>Turn Long Videos<br><span>Into Shareable</span><br>Clips. Instantly.</h1>
+    <p class="hero-sub">AI-powered video tools to cut, trim, and shorten videos in seconds.</p>
 
-<!-- APP PREVIEW -->
-<div class="app-preview">
-  <div class="app-preview-inner">
-    <div class="app-bar">
+    <div class="feature-list">
+      <div class="feature-row">
+        <div class="feature-row-icon" style="background:rgba(239,68,68,.15)">✂️</div>
+        <div class="feature-row-text">
+          <h4>AI Video Trimmer</h4>
+          <p>Remove silence, pauses &amp; filler words</p>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-row-icon" style="background:rgba(139,92,246,.15)">✨</div>
+        <div class="feature-row-text">
+          <h4>Smart Clips</h4>
+          <p>Extract the most important highlights</p>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-row-icon" style="background:rgba(59,130,246,.15)">⚡</div>
+        <div class="feature-row-text">
+          <h4>Speed &amp; Resize</h4>
+          <p>Change speed, resize &amp; format instantly</p>
+        </div>
+      </div>
+      <div class="feature-row">
+        <div class="feature-row-icon" style="background:rgba(16,185,129,.15)">CC</div>
+        <div class="feature-row-text">
+          <h4>Auto Captions</h4>
+          <p>Accurate captions in seconds</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-btns">
+      <a href="/register" class="btn-primary">Start for free →</a>
+      <a href="/pricing" class="btn-secondary">See pricing</a>
+    </div>
+    <div class="hero-trust">
+      <div class="trust-item">
+        <div class="trust-shield"><svg viewBox="0 0 10 10" fill="none" stroke-width="1.5"><path d="M5 1L1.5 2.5v3C1.5 7.5 3 9 5 9.5 7 9 8.5 7.5 8.5 5.5v-3L5 1z"/></svg></div>
+        No credit card
+      </div>
+      <div class="trust-dot"></div>
+      <div class="trust-item">Free to start</div>
+      <div class="trust-dot"></div>
+      <div class="trust-item">24 AI Tools</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: App Mockup -->
+  <div class="app-mockup">
+    <div class="app-titlebar">
       <div class="app-dot" style="background:#ff5f57"></div>
       <div class="app-dot" style="background:#febc2e"></div>
       <div class="app-dot" style="background:#28c840"></div>
-      <div class="app-bar-url">snipforge.video</div>
+      <div class="app-titlebar-logo">
+        <div class="app-titlebar-logo-icon"><svg viewBox="0 0 16 16"><path d="M3 8l4-5 2 3 2-2 2 4H3z"/></svg></div>
+        snip<span>forge</span>
+      </div>
     </div>
-    <div class="app-content">
+    <div class="app-layout">
       <div class="app-sidebar">
-        <div class="app-nav-section">AI Tools</div>
-        <div class="app-nav-item active">🎯 AI Smart Clip</div>
-        <div class="app-nav-item">✂️ AI Shorten</div>
-        <div class="app-nav-item">📝 Transcribe</div>
-        <div class="app-nav-item">📋 Chapters &amp; Meta</div>
-        <div class="app-nav-section">Edit</div>
-        <div class="app-nav-item">⏱ Trim</div>
-        <div class="app-nav-item">⚡ Speed</div>
-        <div class="app-nav-section">Create</div>
-        <div class="app-nav-item">🎞 Video to GIF</div>
-        <div class="app-nav-item">🎵 Background Music</div>
+        <div class="app-nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Dashboard
+        </div>
+        <div class="app-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M6 12h12M6 6l6-3 6 3M6 18l6 3 6-3"/></svg>
+          Trim Video
+        </div>
+        <div class="app-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Smart Clips
+        </div>
+        <div class="app-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          Speed &amp; Resize
+        </div>
+        <div class="app-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M16 5v14"/></svg>
+          Captions
+        </div>
+        <div class="app-nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          My Videos
+        </div>
+        <div class="app-sidebar-promo">
+          <h5>⚡ 24 AI Tools</h5>
+          <p>Everything you need,<br>all in one place.</p>
+        </div>
       </div>
       <div class="app-main">
-        <div class="app-tool-title">✂️ AI Shorten</div>
-        <div class="app-tool-sub">Remove silences and filler words automatically</div>
-        <div class="app-upload">
-          <div class="app-upload-icon">🎬</div>
-          <div class="app-upload-text">Drop your video here</div>
-          <div class="app-upload-sub">MP4 · MOV · WebM · AVI · Max 500MB</div>
+        <div class="app-welcome">
+          <h3>Welcome back, Vimala 👋</h3>
+          <p>Create better videos in less time with AI.</p>
+        </div>
+        <div class="app-cards-grid">
+          <div class="app-card">
+            <div class="app-card-icon" style="background:rgba(239,68,68,.15)">✂️</div>
+            <div>
+              <h4>Trim Video</h4>
+              <p>Remove unwanted parts and cut with precision</p>
+            </div>
+          </div>
+          <div class="app-card">
+            <div class="app-card-icon" style="background:rgba(139,92,246,.15)">✨</div>
+            <div>
+              <h4>Smart Clips</h4>
+              <p>Extract key highlights automatically</p>
+            </div>
+          </div>
+          <div class="app-card">
+            <div class="app-card-icon" style="background:rgba(59,130,246,.15)">⚡</div>
+            <div>
+              <h4>Speed &amp; Resize</h4>
+              <p>Adjust speed and change aspect ratio</p>
+            </div>
+          </div>
+          <div class="app-card">
+            <div class="app-card-icon" style="background:rgba(16,185,129,.15)" style="font-size:.6rem;font-weight:800;color:#10b981">CC</div>
+            <div>
+              <h4>Auto Captions</h4>
+              <p>Add accurate subtitles in seconds</p>
+            </div>
+          </div>
+        </div>
+        <div class="app-recent">
+          <div class="app-recent-hdr"><span>Recent Projects</span><a href="#">View all</a></div>
+          <div class="app-thumbs">
+            <div>
+              <div class="app-thumb" style="background:linear-gradient(135deg,#1a0a2e,#3d1a6e)">
+                <div class="app-thumb-inner">🎬</div>
+                <div class="app-thumb-time">02:45</div>
+              </div>
+              <div class="app-thumb-label">Product Demo</div>
+              <div class="app-thumb-sub">Trimmed</div>
+            </div>
+            <div>
+              <div class="app-thumb" style="background:linear-gradient(135deg,#0a1628,#1a3a5c)">
+                <div class="app-thumb-inner">🎤</div>
+                <div class="app-thumb-time">01:15</div>
+              </div>
+              <div class="app-thumb-label">Customer Interview</div>
+              <div class="app-thumb-sub">Smart Clip</div>
+            </div>
+            <div>
+              <div class="app-thumb" style="background:linear-gradient(135deg,#1a0505,#4a1010)">
+                <div class="app-thumb-inner">🖥️</div>
+                <div class="app-thumb-time">03:20</div>
+              </div>
+              <div class="app-thumb-label">Feature Walkthrough</div>
+              <div class="app-thumb-sub">Speed 1.5x</div>
+            </div>
+            <div>
+              <div class="app-thumb" style="background:linear-gradient(135deg,#0a1a0a,#1a4a1a)">
+                <div class="app-thumb-inner">🐛</div>
+                <div class="app-thumb-time">02:10</div>
+              </div>
+              <div class="app-thumb-label">Bug Reproduction</div>
+              <div class="app-thumb-sub">Captions Added</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -3703,42 +3868,41 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
 </div>
 
 <!-- TOOLS -->
-<section style="padding:80px 24px;background:var(--bg2);border-top:1px solid var(--border)">
-<div class="tools-section" style="padding:0;margin:0 auto">
+<section style="background:rgba(255,255,255,.015);border-top:1px solid var(--border)">
+<div class="tools-section">
   <div class="section-tag">All 24 Tools</div>
   <div class="section-title">Everything you need<br>in one place</div>
   <div class="section-sub">No switching between apps. No subscriptions per tool. Just upload and process.</div>
 
-  <!-- AI TOOLS GROUP -->
-  <div style="margin-bottom:48px">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 14px;background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(139,92,246,.1));border:1px solid rgba(37,99,235,.2);border-radius:100px;font-size:.72rem;font-weight:700;color:#2563eb;letter-spacing:.04em;text-transform:uppercase">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+  <div style="margin-bottom:44px">
+    <div class="group-label">
+      <div class="group-pill" style="background:linear-gradient(135deg,rgba(37,99,235,.15),rgba(139,92,246,.15));border:1px solid rgba(37,99,235,.25);color:#6ea8fe">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
         AI-Powered
       </div>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <div class="group-divider"></div>
     </div>
     <div class="tools-grid">
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">✂️</div>
+      <div class="tool-card" style="border-color:rgba(37,99,235,.2)">
+        <div class="tool-icon" style="background:rgba(37,99,235,.15)">✂️</div>
         <div class="tool-name">AI Shorten</div>
         <div class="tool-desc">Remove silences and filler words automatically</div>
         <div class="tool-tag" style="background:#2563eb">AI</div>
       </div>
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">📝</div>
+      <div class="tool-card" style="border-color:rgba(37,99,235,.2)">
+        <div class="tool-icon" style="background:rgba(37,99,235,.15)">📝</div>
         <div class="tool-name">AI Transcribe</div>
         <div class="tool-desc">Speech to text in 20 languages with translation</div>
         <div class="tool-tag" style="background:#2563eb">AI</div>
       </div>
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">🎯</div>
+      <div class="tool-card" style="border-color:rgba(37,99,235,.2)">
+        <div class="tool-icon" style="background:rgba(37,99,235,.15)">🎯</div>
         <div class="tool-name">AI Smart Clip</div>
         <div class="tool-desc">Auto-finds the most engaging 30–60s highlight</div>
         <div class="tool-tag" style="background:#2563eb">AI</div>
       </div>
-      <div class="tool-card" style="border-color:rgba(37,99,235,.2);background:linear-gradient(135deg,rgba(37,99,235,.03),var(--bg))">
-        <div class="tool-icon" style="background:rgba(37,99,235,.1)">📋</div>
+      <div class="tool-card" style="border-color:rgba(37,99,235,.2)">
+        <div class="tool-icon" style="background:rgba(37,99,235,.15)">📋</div>
         <div class="tool-name">AI Chapters &amp; Meta</div>
         <div class="tool-desc">Generate YouTube chapters, titles, descriptions &amp; tags</div>
         <div class="tool-tag" style="background:#2563eb">AI</div>
@@ -3746,36 +3910,35 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
     </div>
   </div>
 
-  <!-- EDIT / STANDARD TOOLS GROUP -->
   <div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <div style="display:inline-flex;align-items:center;gap:7px;padding:5px 14px;background:var(--bg);border:1px solid var(--border);border-radius:100px;font-size:.72rem;font-weight:700;color:var(--muted);letter-spacing:.04em;text-transform:uppercase">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <div class="group-label">
+      <div class="group-pill" style="background:var(--card-bg);border:1px solid var(--border2);color:var(--muted)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
         Video Tools
       </div>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <div class="group-divider"></div>
     </div>
     <div class="tools-grid">
-      <div class="tool-card"><div class="tool-icon">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact start and end points</div></div>
-      <div class="tool-card"><div class="tool-icon">🎯</div><div class="tool-name">Multi-Trim</div><div class="tool-desc">Keep multiple sections and stitch together</div></div>
-      <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Speed up or slow down your video</div></div>
-      <div class="tool-card"><div class="tool-icon">✂️</div><div class="tool-name">Split</div><div class="tool-desc">Cut one video into multiple segments</div></div>
-      <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation in one click</div></div>
-      <div class="tool-card"><div class="tool-icon">📐</div><div class="tool-name">Resize for Social</div><div class="tool-desc">Crop to 16:9, 9:16, 1:1 for any platform</div></div>
-      <div class="tool-card"><div class="tool-icon">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with custom text</div></div>
-      <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips into one video</div></div>
-      <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI and more</div></div>
-      <div class="tool-card"><div class="tool-icon">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size without losing quality</div></div>
-      <div class="tool-card"><div class="tool-icon">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels precisely</div></div>
-      <div class="tool-card"><div class="tool-icon">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background hiss and hum</div></div>
-      <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull the audio track out as MP3</div></div>
-      <div class="tool-card"><div class="tool-icon">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove the audio track entirely</div></div>
-      <div class="tool-card"><div class="tool-icon">🎞</div><div class="tool-name">Video to GIF</div><div class="tool-desc">Convert video clips to animated GIFs</div></div>
-      <div class="tool-card"><div class="tool-icon">🎵</div><div class="tool-name">Background Music</div><div class="tool-desc">Mix music into your video at custom volume</div></div>
-      <div class="tool-card"><div class="tool-icon">✍️</div><div class="tool-name">Text Overlay</div><div class="tool-desc">Add text anywhere on your video</div></div>
-      <div class="tool-card"><div class="tool-icon">🫥</div><div class="tool-name">Blur Region</div><div class="tool-desc">Blur faces or sensitive areas</div></div>
-      <div class="tool-card"><div class="tool-icon">🎨</div><div class="tool-name">Brightness &amp; Contrast</div><div class="tool-desc">Adjust brightness, contrast and saturation</div></div>
-      <div class="tool-card"><div class="tool-icon">🖼</div><div class="tool-name">Thumbnail Extractor</div><div class="tool-desc">Extract best frames as high-quality JPGs</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">⏱</div><div class="tool-name">Trim</div><div class="tool-desc">Cut video to exact start and end points</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🎯</div><div class="tool-name">Multi-Trim</div><div class="tool-desc">Keep multiple sections and stitch together</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">⚡</div><div class="tool-name">Speed</div><div class="tool-desc">Speed up or slow down your video</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">✂️</div><div class="tool-name">Split</div><div class="tool-desc">Cut one video into multiple segments</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🔄</div><div class="tool-name">Rotate / Flip</div><div class="tool-desc">Fix video orientation in one click</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">📐</div><div class="tool-name">Resize for Social</div><div class="tool-desc">Crop to 16:9, 9:16, 1:1 for any platform</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🏷️</div><div class="tool-name">Watermark</div><div class="tool-desc">Brand your videos with custom text</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🔗</div><div class="tool-name">Merge</div><div class="tool-desc">Stitch multiple clips into one video</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🔄</div><div class="tool-name">Convert</div><div class="tool-desc">MP4, MOV, WebM, AVI and more</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🗜️</div><div class="tool-name">Compress</div><div class="tool-desc">Reduce file size without losing quality</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🔊</div><div class="tool-name">Volume</div><div class="tool-desc">Adjust audio levels precisely</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🎙️</div><div class="tool-name">Noise Removal</div><div class="tool-desc">Clean up background hiss and hum</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🎵</div><div class="tool-name">Extract Audio</div><div class="tool-desc">Pull the audio track out as MP3</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🔇</div><div class="tool-name">Mute</div><div class="tool-desc">Remove the audio track entirely</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🎞</div><div class="tool-name">Video to GIF</div><div class="tool-desc">Convert video clips to animated GIFs</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🎵</div><div class="tool-name">Background Music</div><div class="tool-desc">Mix music into your video at custom volume</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">✍️</div><div class="tool-name">Text Overlay</div><div class="tool-desc">Add text anywhere on your video</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🫥</div><div class="tool-name">Blur Region</div><div class="tool-desc">Blur faces or sensitive areas</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🎨</div><div class="tool-name">Brightness &amp; Contrast</div><div class="tool-desc">Adjust brightness, contrast and saturation</div></div>
+      <div class="tool-card"><div class="tool-icon" style="background:rgba(232,66,10,.12)">🖼</div><div class="tool-name">Thumbnail Extractor</div><div class="tool-desc">Extract best frames as high-quality JPGs</div></div>
     </div>
   </div>
 </div>
@@ -3837,7 +4000,7 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
 <div class="pricing-section">
   <div class="section-tag">Pricing</div>
   <div class="section-title">Simple pricing.<br>No surprises.</div>
-  <div class="pricing-cards" style="margin-top:48px">
+  <div class="pricing-cards">
     <div class="pricing-card">
       <div class="plan-name">Free</div>
       <div class="plan-price"><sup>$</sup>0<sub>/mo</sub></div>
@@ -3886,7 +4049,10 @@ footer{padding:40px 32px;border-top:1px solid var(--border);display:flex;align-i
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-logo">Snip<span style="color:var(--accent)">forge</span></div>
+  <div class="footer-logo">
+    <div class="nav-logo-icon" style="width:22px;height:22px;border-radius:5px"><svg viewBox="0 0 16 16" style="width:12px;height:12px;fill:#fff"><path d="M3 8l4-5 2 3 2-2 2 4H3z"/></svg></div>
+    snip<span>forge</span>
+  </div>
   <div class="footer-links">
     <a href="/pricing">Pricing</a>
     <a href="/login">Login</a>
