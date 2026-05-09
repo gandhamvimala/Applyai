@@ -3783,10 +3783,10 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
         </div>
       </div>
       <div class="feature-row">
-        <div class="feature-row-icon" style="background:rgba(16,185,129,.15)">CC</div>
+        <div class="feature-row-icon" style="background:rgba(16,185,129,.15)">📝</div>
         <div class="feature-row-text">
-          <h4>Auto Captions</h4>
-          <p>Accurate captions in seconds</p>
+          <h4>Transcribe &amp; Translate</h4>
+          <p>Speech to text in 20 languages</p>
         </div>
       </div>
     </div>
@@ -3802,8 +3802,6 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
       </div>
       <div class="trust-dot"></div>
       <div class="trust-item">Free to start</div>
-      <div class="trust-dot"></div>
-      <div class="trust-item">24 AI Tools</div>
     </div>
   </div>
 
@@ -3877,10 +3875,10 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
             </div>
           </div>
           <div class="app-card">
-            <div class="app-card-icon" style="background:rgba(16,185,129,.15)" style="font-size:.6rem;font-weight:800;color:#10b981">CC</div>
+            <div class="app-card-icon" style="background:rgba(16,185,129,.15)">📝</div>
             <div>
-              <h4>Auto Captions</h4>
-              <p>Add accurate subtitles in seconds</p>
+              <h4>Transcribe</h4>
+              <p>Speech to text, 20 languages</p>
             </div>
           </div>
         </div>
@@ -4879,15 +4877,6 @@ html,body{background:var(--sb-bg);color:var(--text);font-family:var(--body);min-
 .nav-badge.hot{background:rgba(232,66,10,.2);color:var(--accent)}
 .nav-badge.ai{background:rgba(96,165,250,.15);color:#60a5fa}
 
-/* Sidebar promo block */
-.sidebar-promo{
-  margin:10px 10px 6px;padding:12px 14px;
-  background:linear-gradient(135deg,rgba(232,66,10,.2),rgba(232,66,10,.08));
-  border:1px solid rgba(232,66,10,.3);border-radius:10px;text-align:center;
-}
-.sidebar-promo h5{font-size:.75rem;font-weight:700;color:var(--sb-text);margin-bottom:3px;display:flex;align-items:center;gap:5px;justify-content:center}
-.sidebar-promo p{font-size:.65rem;color:var(--sb-muted);line-height:1.4}
-
 /* main content — LIGHT */
 .main{background:#f7f7f8;padding:32px 36px 100px;overflow-y:auto;height:calc(100vh - 60px)}
 @media(max-width:768px){
@@ -5507,12 +5496,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   <div class="nav-item" data-panel="shares" onclick="switchPanel(this)">
     <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><circle cx="13" cy="3.5" r="2"/><circle cx="13" cy="12.5" r="2"/><circle cx="3" cy="8" r="2"/><path d="M5 7l6-2.5M5 9l6 2.5"/></svg></span>
     <span class="nav-full">Shared Links</span><span class="nav-short">Shares</span>
-  </div>
-
-  <!-- Sidebar promo -->
-  <div class="sidebar-promo" id="sidebar-promo-block" style="margin-top:12px">
-    <h5>⚡ 24 AI Tools</h5>
-    <p>Everything you need,<br>all in one place.</p>
   </div>
 
   <!-- Recent videos thumbnails in sidebar -->
@@ -7744,9 +7727,9 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
   const planLabel={'free':'Free','pro':'Pro','team':'Team'};
   const pc=planColors[u.plan]||planColors.free;
   badge.innerHTML=`
-    <span style="font-family:'Inter',sans-serif;font-size:.85rem;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px">
+    <span style="font-family:'Inter',sans-serif;font-size:.85rem;font-weight:500;color:rgba(255,255,255,.85);display:flex;align-items:center;gap:6px">
       ${u.name.split(' ')[0]}
-      <span style="font-size:.65rem;padding:2px 7px;border-radius:5px;background:var(--bg3);color:${pc};border:1px solid var(--border);text-transform:uppercase;letter-spacing:.05em;font-weight:700">${planLabel[u.plan]||u.plan}</span>
+      <span style="font-size:.65rem;padding:2px 7px;border-radius:5px;background:${u.plan==='pro'?'rgba(232,66,10,.25)':u.plan==='team'?'rgba(96,165,250,.2)':'rgba(255,255,255,.1)'};color:${pc};border:1px solid ${u.plan==='pro'?'rgba(232,66,10,.4)':u.plan==='team'?'rgba(96,165,250,.35)':'rgba(255,255,255,.2)'};text-transform:uppercase;letter-spacing:.05em;font-weight:700">${planLabel[u.plan]||u.plan}</span>
     </span>
     <a href="/pricing" class="topbar-nav-link">Pricing</a>
     <a href="/account" class="topbar-nav-link">Account</a>
@@ -7754,7 +7737,7 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
   `;
   // Populate mobile user menu name + plan badge
   const mobName = document.getElementById('mob-user-name');
-  if(mobName) mobName.innerHTML = `${u.name.split(' ')[0]} <span style="font-size:.6rem;padding:1px 6px;border-radius:4px;background:var(--bg3);color:${pc};border:1px solid var(--border);text-transform:uppercase;font-weight:700;margin-left:4px">${planLabel[u.plan]||u.plan}</span>`;
+  if(mobName) mobName.innerHTML = `${u.name.split(' ')[0]} <span style="font-size:.6rem;padding:1px 6px;border-radius:4px;background:${u.plan==='pro'?'rgba(232,66,10,.25)':'rgba(255,255,255,.1)'};color:${pc};border:1px solid ${u.plan==='pro'?'rgba(232,66,10,.4)':'rgba(255,255,255,.2)'};text-transform:uppercase;font-weight:700;margin-left:4px">${planLabel[u.plan]||u.plan}</span>`;
   if(u.plan==='free'){
     const bar=document.createElement('div');
     const isMobile = window.innerWidth <= 768;
