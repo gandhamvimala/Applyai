@@ -3350,21 +3350,9 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 .quick-icon{font-size:1.6rem;display:block;margin-bottom:6px}
 .quick-label{font-family:var(--cond);font-size:.82rem;font-weight:700;letter-spacing:.04em;color:var(--muted2)}
 
-/* video thumbnails grid */
-.thumb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:28px}
-.thumb-item{background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px;overflow:hidden;transition:all .15s;display:block;text-decoration:none;color:inherit}
-.thumb-item:hover{border-color:rgba(232,66,10,.4);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.4)}
-.thumb-preview{aspect-ratio:16/9;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:2rem;position:relative}
-.thumb-badge{position:absolute;bottom:5px;right:5px;background:rgba(0,0,0,.75);color:#fff;font-size:.58rem;padding:2px 5px;border-radius:3px;font-family:var(--mono);font-weight:600}
-.thumb-op-badge{position:absolute;top:5px;left:5px;font-family:var(--mono);font-size:.55rem;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.06em}
-.thumb-info{padding:8px 10px}
-.thumb-name{font-size:.78rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
-.thumb-sub{font-size:.65rem;color:var(--muted);font-family:var(--mono)}
-
 @media(max-width:768px){
   .stats-row{grid-template-columns:repeat(2,1fr)}
   .quick-grid{grid-template-columns:repeat(2,1fr)}
-  .thumb-grid{grid-template-columns:repeat(2,1fr)}
   .history-table th:nth-child(3),.history-table td:nth-child(3),
   .history-table th:nth-child(4),.history-table td:nth-child(4){display:none}
 }
@@ -3419,137 +3407,6 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <a href="/pricing" class="upgrade-btn">Upgrade to Pro →</a>
     {% endif %}
   </div>
-
-  <!-- Video Thumbnails -->
-  {% if history %}
-  <div class="section-header" style="margin-bottom:14px">
-    <div class="section-title">Recent Videos</div>
-    <div class="section-count">{{ history|length }} total</div>
-  </div>
-  <div class="thumb-grid" style="margin-bottom:28px">
-    {% for h in history[:8] %}
-    {% set op = h.operation or 'other' %}
-    {% set bg_map = {
-      'shorten': 'linear-gradient(135deg,#3d0a00,#7a1500)',
-      'trim': 'linear-gradient(135deg,#001a3d,#003080)',
-      'compress': 'linear-gradient(135deg,#1a0030,#3d0060)',
-      'convert': 'linear-gradient(135deg,#003020,#006040)',
-      'speed': 'linear-gradient(135deg,#2a1500,#5a3000)',
-      'merge': 'linear-gradient(135deg,#002030,#004060)',
-      'transcribe': 'linear-gradient(135deg,#001a30,#00305a)',
-      'smart_clip': 'linear-gradient(135deg,#300030,#600060)',
-      'resize': 'linear-gradient(135deg,#002020,#004040)',
-      'gif': 'linear-gradient(135deg,#1a2000,#304000)',
-      'noise': 'linear-gradient(135deg,#001830,#003060)',
-      'denoise': 'linear-gradient(135deg,#001830,#003060)',
-      'volume': 'linear-gradient(135deg,#001a20,#003040)',
-      'rotate': 'linear-gradient(135deg,#201a00,#403500)',
-      'split': 'linear-gradient(135deg,#200010,#400030)',
-      'watermark': 'linear-gradient(135deg,#202000,#404000)',
-      'blur': 'linear-gradient(135deg,#001020,#002040)',
-      'text': 'linear-gradient(135deg,#101020,#202040)'
-    } %}
-    {% set icon_map = {
-      'shorten': '✂️', 'trim': '✂️', 'compress': '🗜️', 'convert': '🔄',
-      'speed': '⚡', 'merge': '🔗', 'transcribe': '📝', 'smart_clip': '🎯',
-      'resize': '📐', 'gif': '🎞', 'noise': '🎙️', 'denoise': '🎙️',
-      'volume': '🔊', 'rotate': '🔄', 'split': '✂️', 'watermark': '🏷️',
-      'blur': '🫥', 'text': '✍️', 'thumbnail': '🖼', 'colorgrade': '🎨',
-      'mute': '🔇', 'music': '🎵', 'extract': '🎵'
-    } %}
-    {% set has_file = h.result_path %}
-    <div class="thumb-item" onclick="openVideoModal('{{ h.id }}','{{ (h.filename or 'Video')|e }}','{{ op }}','{{ has_file }}')" style="cursor:pointer">
-      <div class="thumb-preview" style="background:{{ bg_map.get(op, 'linear-gradient(135deg,#16161c,#1e1e27)') }}">
-        <span style="font-size:2rem">{{ icon_map.get(op, '🎬') }}</span>
-        {% if has_file %}
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;background:rgba(0,0,0,.4)" class="thumb-play-overlay">
-          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="18" fill="rgba(255,255,255,.2)"/><path d="M14 11l14 7-14 7V11z" fill="#fff"/></svg>
-        </div>
-        {% endif %}
-        {% set dur = h.new_dur or h.orig_dur %}
-        {% if dur %}
-        <div class="thumb-badge">{{ '%d:%02d'|format((dur/60)|int, dur%60|int) }}</div>
-        {% endif %}
-        <div class="thumb-op-badge op-{{ op }}">{{ op.replace('_',' ') }}</div>
-      </div>
-      <div class="thumb-info">
-        <div class="thumb-name" title="{{ h.filename or 'Unknown' }}">{{ h.filename or 'Unknown' }}</div>
-        <div class="thumb-sub" style="display:flex;align-items:center;justify-content:space-between">
-          <span>{{ h.created_at[:10] if h.created_at else '—' }}</span>
-          {% if has_file %}<span style="color:var(--accent);font-size:.6rem;font-weight:600">▶ Play</span>{% else %}<span style="color:var(--muted);font-size:.6rem">expired</span>{% endif %}
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-<!-- Video Preview Modal -->
-<div id="video-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px">
-  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:820px;overflow:hidden;position:relative">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)">
-      <div>
-        <div id="modal-title" style="font-weight:700;font-size:1rem;color:var(--text)"></div>
-        <div id="modal-op" style="font-size:.72rem;color:var(--muted);margin-top:2px"></div>
-      </div>
-      <button onclick="closeVideoModal()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);width:32px;height:32px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">✕</button>
-    </div>
-    <div style="background:#000;position:relative">
-      <video id="modal-video" controls style="width:100%;max-height:460px;display:block"></video>
-      <div id="modal-no-file" style="display:none;padding:60px;text-align:center;background:var(--bg3)">
-        <div style="font-size:2.5rem;margin-bottom:12px">⏰</div>
-        <div style="font-weight:700;margin-bottom:6px;color:var(--text)">File no longer available</div>
-        <div style="font-size:.85rem;color:var(--muted)">This file was processed before persistent storage was enabled, or the server was restarted.</div>
-      </div>
-    </div>
-    <div id="modal-footer" style="display:none;padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
-      <a id="modal-dl" href="#" class="dl-link">⬇ Download</a>
-    </div>
-  </div>
-</div>
-
-<style>
-.thumb-item:hover .thumb-play-overlay{opacity:1 !important}
-</style>
-<script>
-function openVideoModal(hid, filename, op, hasFile){
-  const modal = document.getElementById('video-modal');
-  const video = document.getElementById('modal-video');
-  const noFile = document.getElementById('modal-no-file');
-  const footer = document.getElementById('modal-footer');
-  const dlBtn = document.getElementById('modal-dl');
-  document.getElementById('modal-title').textContent = filename;
-  document.getElementById('modal-op').textContent = op.replace(/_/g,' ').toUpperCase();
-  if(hasFile && hasFile !== 'None' && hasFile !== ''){
-    const dlSrc = `/api/history/${hid}/download`;
-    const streamSrc = `/api/history/${hid}/download?stream=1`;
-    video.src = streamSrc;
-    video.style.display = 'block';
-    noFile.style.display = 'none';
-    dlBtn.href = dlSrc;
-    footer.style.display = 'flex';
-  } else {
-    video.src = '';
-    video.style.display = 'none';
-    noFile.style.display = 'block';
-    footer.style.display = 'none';
-  }
-  modal.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-}
-function closeVideoModal(){
-  const modal = document.getElementById('video-modal');
-  const video = document.getElementById('modal-video');
-  video.pause();
-  video.src = '';
-  modal.style.display = 'none';
-  document.body.style.overflow = '';
-}
-document.getElementById('video-modal').addEventListener('click', function(e){
-  if(e.target === this) closeVideoModal();
-});
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeVideoModal(); });
-</script>
 
   <!-- History table -->
   <div class="section-header">
