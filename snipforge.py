@@ -3052,20 +3052,76 @@ def download_history_file(hid):
     row = dict(row)
     result_path = row.get('result_path')
     if not result_path or not os.path.exists(result_path):
-        return jsonify({"error": "File no longer available. Files are kept as long as your account exists, but may be removed if the server was restarted."}), 404
+        return jsonify({"error": "File no longer available."}), 404
+
+    suffix = Path(result_path).suffix.lower()
     orig = row.get('filename', 'video')
-    suffix = Path(result_path).suffix
     dl_name = Path(orig).stem + '_snipforge' + suffix if orig else Path(result_path).name
-    # Stream mode for video player (no Content-Disposition attachment)
+
+    # Detect stream vs download mode
     stream = request.args.get('stream', '0') == '1'
-    mime = 'video/mp4' if suffix.lower() in ('.mp4','.mov') else 'application/octet-stream'
-    if stream:
-        resp = send_file(result_path, mimetype=mime, conditional=True)
-    else:
-        resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype='application/octet-stream')
-    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+
+    mime_map = {'.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm',
+                '.avi':'video/x-msvideo','.mkv':'video/x-matroska',
+                '.mp3':'audio/mpeg','.wav':'audio/wav','.gif':'image/gif'}
+    mime = mime_map.get(suffix, 'application/octet-stream')
+
+    if not stream:
+        resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype=mime)
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
+
+    # ── Range-request streaming (required for HTML5 video player) ──
+    file_size = os.path.getsize(result_path)
+    range_header = request.headers.get('Range', None)
+
+    if not range_header:
+        # No range — send full file
+        from flask import Response
+        def generate_full():
+            with open(result_path, 'rb') as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    yield chunk
+        resp = app.response_class(generate_full(), mimetype=mime)
+        resp.headers['Content-Length'] = file_size
+        resp.headers['Accept-Ranges'] = 'bytes'
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
+
+    # Parse Range: bytes=start-end
+    try:
+        range_val = range_header.strip().replace('bytes=', '')
+        parts = range_val.split('-')
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if parts[1] else file_size - 1
+    except Exception:
+        return jsonify({"error": "Invalid range"}), 416
+
+    end = min(end, file_size - 1)
+    length = end - start + 1
+
+    from flask import Response
+    def generate_range():
+        with open(result_path, 'rb') as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(65536, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    resp = Response(generate_range(), 206, mimetype=mime, direct_passthrough=True)
+    resp.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+    resp.headers['Content-Length'] = length
     resp.headers['Accept-Ranges'] = 'bytes'
+    resp.headers['Cache-Control'] = 'no-cache'
     return resp
+
 
 
 SHARE_HTML = r"""<!DOCTYPE html>
@@ -3424,10 +3480,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
         <div id="modal-title" style="font-weight:700;font-size:1rem;color:var(--text)"></div>
         <div id="modal-op" style="font-size:.72rem;color:var(--muted);margin-top:2px"></div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <a id="modal-dl" href="#" class="dl-link" style="padding:6px 14px">⬇ Download</a>
-        <button onclick="closeVideoModal()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);width:32px;height:32px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">✕</button>
-      </div>
+      <button onclick="closeVideoModal()" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);width:32px;height:32px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
     <div style="background:#000;position:relative">
       <video id="modal-video" controls style="width:100%;max-height:460px;display:block"></video>
@@ -3436,6 +3489,9 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
         <div style="font-weight:700;margin-bottom:6px;color:var(--text)">File no longer available</div>
         <div style="font-size:.85rem;color:var(--muted)">This file was processed before persistent storage was enabled, or the server was restarted.</div>
       </div>
+    </div>
+    <div id="modal-footer" style="display:none;padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+      <a id="modal-dl" href="#" class="dl-link">⬇ Download</a>
     </div>
   </div>
 </div>
@@ -3448,9 +3504,10 @@ function openVideoModal(hid, filename, op, hasFile){
   const modal = document.getElementById('video-modal');
   const video = document.getElementById('modal-video');
   const noFile = document.getElementById('modal-no-file');
+  const footer = document.getElementById('modal-footer');
   const dlBtn = document.getElementById('modal-dl');
   document.getElementById('modal-title').textContent = filename;
-  document.getElementById('modal-op').textContent = op.replace('_',' ').toUpperCase();
+  document.getElementById('modal-op').textContent = op.replace(/_/g,' ').toUpperCase();
   if(hasFile && hasFile !== 'None' && hasFile !== ''){
     const dlSrc = `/api/history/${hid}/download`;
     const streamSrc = `/api/history/${hid}/download?stream=1`;
@@ -3458,12 +3515,12 @@ function openVideoModal(hid, filename, op, hasFile){
     video.style.display = 'block';
     noFile.style.display = 'none';
     dlBtn.href = dlSrc;
-    dlBtn.style.display = '';
+    footer.style.display = 'flex';
   } else {
     video.src = '';
     video.style.display = 'none';
     noFile.style.display = 'block';
-    dlBtn.style.display = 'none';
+    footer.style.display = 'none';
   }
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
