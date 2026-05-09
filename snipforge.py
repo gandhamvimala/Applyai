@@ -1197,9 +1197,9 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 # Plan limits
 PLANS = {
-    'free':  {'name':'Free',  'price':0,  'videos_per_month':3,  'max_duration':300,  'max_file_mb':100, 'team_seats':1},
-    'pro':   {'name':'Pro',   'price':8,  'videos_per_month':999,'max_duration':9999, 'max_file_mb':500, 'team_seats':1},
-    'team':  {'name':'Team',  'price':20, 'videos_per_month':999,'max_duration':9999, 'max_file_mb':500, 'team_seats':5},
+    'free':  {'name':'Free',  'price':0,  'videos_per_month':3,  'max_duration':300,  'max_file_mb':500,  'team_seats':1},
+    'pro':   {'name':'Pro',   'price':8,  'videos_per_month':999,'max_duration':9999, 'max_file_mb':2000, 'team_seats':1},
+    'team':  {'name':'Team',  'price':20, 'videos_per_month':999,'max_duration':9999, 'max_file_mb':2000, 'team_seats':5},
 }
 
 # ─── Database ─────────────────────────────────────────────────────────────────
@@ -1484,7 +1484,7 @@ def save_history(user_id, job_id, filename, operation, orig_dur=0, new_dur=0, or
         )
 
 # ─── Security config ──────────────────────────────────────────────────────────
-MAX_FILE_MB       = 500                          # max upload size
+MAX_FILE_MB       = 2000                         # max upload size (2GB)
 MAX_FILE_BYTES    = MAX_FILE_MB * 1024 * 1024
 FILE_TTL_SECONDS  = 7200                         # delete files after 2 hours (gives time for large video processing)
 RATE_LIMIT        = 10                           # max jobs per IP per hour
@@ -1622,6 +1622,21 @@ def api_token():
     if 'token' not in session:
         session['token'] = str(uuid.uuid4())
     return jsonify({"token": session['token']})
+
+@app.route("/api/upload-test", methods=["GET","POST"])
+def api_upload_test():
+    """Diagnostic endpoint — returns upload config and auth status."""
+    user = get_current_user()
+    return jsonify({
+        "auth": bool(user),
+        "user": user['email'] if user else None,
+        "plan": user['plan'] if user else None,
+        "max_file_mb": MAX_FILE_MB,
+        "upload_dir": str(UPLOAD_DIR),
+        "upload_dir_exists": UPLOAD_DIR.exists(),
+        "method": request.method,
+        "content_length": request.content_length,
+    })
 
 @app.route("/api/test-mode-check")
 def api_test_mode_check():
@@ -5794,7 +5809,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
 <div class="panel active" id="panel-shorten">
   <div class="panel-header"><div class="panel-title"><span class="panel-title-icon">✂️</span>AI Shorten</div><div class="panel-sub">Remove silences, filler words and speed up your video automatically</div></div>
   <div class="upload-zone" id="sz-dropzone"><input type="file" id="sz-file" accept="video/*">
-    <div class="upload-zone-icon">🎬</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p><span class="size-hint">Max 500MB · Drag & drop or click</span>
+    <div class="upload-zone-icon">🎬</div><h3>Drop your video here</h3><p>MP4 · MOV · WebM · AVI</p><span class="size-hint">Max 2GB · Drag & drop or click</span>
   </div>
   <div class="recent-files-list"></div>
   <div class="file-card" id="sz-filecard">
@@ -6940,9 +6955,22 @@ async function handleFile(prefix, file) {
   if (thumb) { thumb.src = URL.createObjectURL(file); }
 
   // Hard limit check
-  const MAX_BYTES = 500 * 1024 * 1024;
+  const MAX_BYTES = 2000 * 1024 * 1024; // 2GB
   if (file.size > MAX_BYTES) {
-    log(prefix, `File too large (${(file.size/1024/1024).toFixed(0)}MB). Max is 500MB.`, 'err');
+    log(prefix, `File too large (${(file.size/1024/1024).toFixed(0)}MB). Max is 2GB.`, 'err');
+    run.textContent = 'Upload failed'; return;
+  }
+
+  // Quick auth/config check before uploading
+  try {
+    const testResp = await fetch('/api/upload-test');
+    const testData = await testResp.json();
+    if (!testData.auth) {
+      log(prefix, 'Session expired — please refresh and log in again.', 'err');
+      run.textContent = 'Upload failed'; return;
+    }
+  } catch(e) {
+    log(prefix, 'Cannot reach server. Check your connection.', 'err');
     run.textContent = 'Upload failed'; return;
   }
 
@@ -8564,10 +8592,10 @@ if __name__ == "__main__":
         print(f"   Server: Waitress (production) · {args.workers} workers")
         print(f"   Ready!\n")
         serve(app, host=args.host, port=args.port, threads=args.workers,
-              channel_timeout=600,        # 10 min: time to receive full request body
+              channel_timeout=600,
               connection_limit=100,
               cleanup_interval=30,
-              max_request_body_size=MAX_FILE_BYTES + 1024*1024)  # match Flask limit
+              max_request_body_size=2000 * 1024 * 1024)
     except ImportError:
         try:
             import gunicorn
