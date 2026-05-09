@@ -3226,8 +3226,8 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--body);min-hei
 
 /* video thumbnails grid */
 .thumb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:28px}
-.thumb-item{background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px;overflow:hidden;transition:all .15s}
-.thumb-item:hover{border-color:rgba(232,66,10,.4);transform:translateY(-2px)}
+.thumb-item{background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px;overflow:hidden;transition:all .15s;display:block;text-decoration:none;color:inherit}
+.thumb-item:hover{border-color:rgba(232,66,10,.4);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.4)}
 .thumb-preview{aspect-ratio:16/9;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:2rem;position:relative}
 .thumb-badge{position:absolute;bottom:5px;right:5px;background:rgba(0,0,0,.75);color:#fff;font-size:.58rem;padding:2px 5px;border-radius:3px;font-family:var(--mono);font-weight:600}
 .thumb-op-badge{position:absolute;top:5px;left:5px;font-family:var(--mono);font-size:.55rem;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.06em}
@@ -3302,31 +3302,49 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   </div>
   <div class="thumb-grid" style="margin-bottom:28px">
     {% for h in history[:8] %}
-    <div class="thumb-item">
-      <div class="thumb-preview">
-        {% if h.operation == 'shorten' or h.operation == 'trim' %}✂️
-        {% elif h.operation == 'transcribe' %}📝
-        {% elif h.operation == 'smart_clip' %}🎯
-        {% elif h.operation == 'speed' %}⚡
-        {% elif h.operation == 'compress' %}🗜️
-        {% elif h.operation == 'convert' %}🔄
-        {% elif h.operation == 'merge' %}🔗
-        {% elif h.operation == 'resize' %}📐
-        {% elif h.operation == 'gif' %}🎞
-        {% elif h.operation == 'captions' %}CC
-        {% else %}🎬{% endif %}
-        {% if h.new_dur %}
-        <div class="thumb-badge">{{ '%d:%02d'|format((h.new_dur/60)|int, h.new_dur%60|int) }}</div>
-        {% elif h.orig_dur %}
-        <div class="thumb-badge">{{ '%d:%02d'|format((h.orig_dur/60)|int, h.orig_dur%60|int) }}</div>
+    {% set op = h.operation or 'other' %}
+    {% set bg_map = {
+      'shorten': 'linear-gradient(135deg,#3d0a00,#7a1500)',
+      'trim': 'linear-gradient(135deg,#001a3d,#003080)',
+      'compress': 'linear-gradient(135deg,#1a0030,#3d0060)',
+      'convert': 'linear-gradient(135deg,#003020,#006040)',
+      'speed': 'linear-gradient(135deg,#2a1500,#5a3000)',
+      'merge': 'linear-gradient(135deg,#002030,#004060)',
+      'transcribe': 'linear-gradient(135deg,#001a30,#00305a)',
+      'smart_clip': 'linear-gradient(135deg,#300030,#600060)',
+      'resize': 'linear-gradient(135deg,#002020,#004040)',
+      'gif': 'linear-gradient(135deg,#1a2000,#304000)',
+      'noise': 'linear-gradient(135deg,#001830,#003060)',
+      'denoise': 'linear-gradient(135deg,#001830,#003060)',
+      'volume': 'linear-gradient(135deg,#001a20,#003040)',
+      'rotate': 'linear-gradient(135deg,#201a00,#403500)',
+      'split': 'linear-gradient(135deg,#200010,#400030)',
+      'watermark': 'linear-gradient(135deg,#202000,#404000)',
+      'blur': 'linear-gradient(135deg,#001020,#002040)',
+      'text': 'linear-gradient(135deg,#101020,#202040)'
+    } %}
+    {% set icon_map = {
+      'shorten': '✂️', 'trim': '✂️', 'compress': '🗜️', 'convert': '🔄',
+      'speed': '⚡', 'merge': '🔗', 'transcribe': '📝', 'smart_clip': '🎯',
+      'resize': '📐', 'gif': '🎞', 'noise': '🎙️', 'denoise': '🎙️',
+      'volume': '🔊', 'rotate': '🔄', 'split': '✂️', 'watermark': '🏷️',
+      'blur': '🫥', 'text': '✍️', 'thumbnail': '🖼', 'colorgrade': '🎨',
+      'mute': '🔇', 'music': '🎵', 'extract': '🎵'
+    } %}
+    <a href="/?tool={{ op }}" class="thumb-item" style="text-decoration:none">
+      <div class="thumb-preview" style="background:{{ bg_map.get(op, 'linear-gradient(135deg,#16161c,#1e1e27)') }}">
+        <span style="font-size:2rem">{{ icon_map.get(op, '🎬') }}</span>
+        {% set dur = h.new_dur or h.orig_dur %}
+        {% if dur %}
+        <div class="thumb-badge">{{ '%d:%02d'|format((dur/60)|int, dur%60|int) }}</div>
         {% endif %}
-        <div class="thumb-op-badge op-{{ h.operation or 'other' }}">{{ (h.operation or 'edit').replace('_',' ') }}</div>
+        <div class="thumb-op-badge op-{{ op }}">{{ op.replace('_',' ') }}</div>
       </div>
       <div class="thumb-info">
         <div class="thumb-name" title="{{ h.filename or 'Unknown' }}">{{ h.filename or 'Unknown' }}</div>
         <div class="thumb-sub">{{ h.created_at[:10] if h.created_at else '—' }}</div>
       </div>
-    </div>
+    </a>
     {% endfor %}
   </div>
   {% endif %}
@@ -3389,7 +3407,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
           <th>Duration</th>
           <th>Size</th>
           <th>Date</th>
-          <th>Download</th>
+          <th>Action</th>
           <th></th>
         </tr>
       </thead>
@@ -3431,9 +3449,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
           </td>
           <td><span class="time-ago" data-ts="{{ h.created_at }}">{{ h.created_at[:10] if h.created_at else '—' }}</span></td>
           <td>
-            {% if h.job_id %}
-              <a href="/api/download/{{ h.job_id }}" class="dl-link">⬇ Download</a>
-            {% else %}—{% endif %}
+            <a href="/?tool={{ h.operation or 'shorten' }}" class="dl-link" style="background:rgba(232,66,10,.12);color:var(--accent);border-color:rgba(232,66,10,.2)">↩ Redo</a>
           </td>
           <td>
             <button class="del-btn" onclick="deleteHistory('{{ h.id }}')" title="Remove from history">✕</button>
@@ -7762,23 +7778,27 @@ fetch('/api/me').then(r=>r.json()).then(u=>{
     const d = await r.json();
     const container = document.getElementById('sidebar-recent-thumbs');
     if(!container || !d.history || !d.history.length) return;
-    const emojiMap = {shorten:'✂️',trim:'✂️',compress:'🗜️',convert:'🔄',speed:'⚡',merge:'🔗',transcribe:'📝',smart_clip:'🎯',resize:'📐',gif:'🎞',captions:'CC',blur:'🫥',watermark:'🏷️',rotate:'🔄',split:'✂️',volume:'🔊',noise:'🎙️',mute:'🔇',music:'🎵',text:'✍️',colorgrade:'🎨',thumbnail:'🖼'};
+    const emojiMap = {shorten:'✂️',trim:'✂️',compress:'🗜️',convert:'🔄',speed:'⚡',merge:'🔗',transcribe:'📝',smart_clip:'🎯',resize:'📐',gif:'🎞',blur:'🫥',watermark:'🏷️',rotate:'🔄',split:'✂️',volume:'🔊',noise:'🎙️',denoise:'🎙️',mute:'🔇',music:'🎵',text:'✍️',colorgrade:'🎨',thumbnail:'🖼'};
+    const bgMap = {shorten:'linear-gradient(135deg,#3d0a00,#7a1500)',trim:'linear-gradient(135deg,#001a3d,#003080)',compress:'linear-gradient(135deg,#1a0030,#3d0060)',convert:'linear-gradient(135deg,#003020,#006040)',speed:'linear-gradient(135deg,#2a1500,#5a3000)',transcribe:'linear-gradient(135deg,#001a30,#00305a)',smart_clip:'linear-gradient(135deg,#300030,#600060)',denoise:'linear-gradient(135deg,#001830,#003060)',noise:'linear-gradient(135deg,#001830,#003060)'};
     container.innerHTML = d.history.slice(0,5).map(h=>{
-      const emoji = emojiMap[h.operation] || '🎬';
+      const op = h.operation || 'shorten';
+      const emoji = emojiMap[op] || '🎬';
       const dur = h.new_dur || h.orig_dur;
       const timeStr = dur ? `${Math.floor(dur/60)}:${String(Math.floor(dur%60)).padStart(2,'0')}` : '';
       const name = (h.filename || 'Unknown').replace(/\.[^.]+$/,'');
-      const op = (h.operation||'edit').replace('_',' ');
-      return `<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:7px;overflow:hidden;cursor:pointer" onclick="document.querySelector('.nav-item[data-panel=${JSON.stringify(h.operation||'shorten')}]')?.click()">
-        <div style="aspect-ratio:16/9;background:rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;font-size:1.4rem;position:relative">
+      const opLabel = op.replace('_',' ');
+      const bg = bgMap[op] || 'linear-gradient(135deg,#16161c,#1e1e27)';
+      return `<a href="/?tool=${op}" style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:7px;overflow:hidden;cursor:pointer;text-decoration:none;display:block">
+        <div style="aspect-ratio:16/9;background:${bg};display:flex;align-items:center;justify-content:center;font-size:1.4rem;position:relative">
           ${emoji}
           ${timeStr?`<span style="position:absolute;bottom:3px;right:4px;background:rgba(0,0,0,.75);color:#fff;font-size:.55rem;padding:1px 4px;border-radius:3px;font-family:var(--mono)">${timeStr}</span>`:''}
-          <span style="position:absolute;top:3px;left:4px;background:rgba(232,66,10,.85);color:#fff;font-size:.5rem;padding:1px 5px;border-radius:3px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em">${op}</span>
+          <span style="position:absolute;top:3px;left:4px;background:rgba(232,66,10,.85);color:#fff;font-size:.5rem;padding:1px 5px;border-radius:3px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em">${opLabel}</span>
         </div>
         <div style="padding:5px 7px">
           <div style="font-size:.68rem;font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
         </div>
-      </div>`;
+      </a>`;
+    }).join('');
     }).join('');
   } catch(e){}
 })();
