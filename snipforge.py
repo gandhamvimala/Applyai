@@ -3048,7 +3048,7 @@ def rename_history(hid):
 @app.route("/api/history/<hid>/download")
 @login_required
 def download_history_file(hid):
-    """Stream or download a processed file from history."""
+    """Download a processed file from history."""
     user = get_current_user()
     with get_db() as db:
         row = db.execute(
@@ -3058,19 +3058,36 @@ def download_history_file(hid):
     if not row:
         return jsonify({"error": "Not found"}), 404
     row = dict(row)
+
+    result_path = None
     stored = row.get('result_path')
-    if not stored:
-        return jsonify({"error": "File not available"}), 404
 
-    # stored may be a filename only OR a full path (legacy). Resolve to full path.
-    if os.path.isabs(stored) and os.path.exists(stored):
-        result_path = stored
-    else:
-        # Try OUTPUT_DIR / filename
-        result_path = str(OUTPUT_DIR / os.path.basename(stored))
+    # 1. Try result_path from DB
+    if stored:
+        if os.path.isabs(stored) and os.path.exists(stored):
+            result_path = stored
+        else:
+            candidate = str(OUTPUT_DIR / os.path.basename(stored))
+            if os.path.exists(candidate):
+                result_path = candidate
 
-    if not os.path.exists(result_path):
-        return jsonify({"error": "File no longer on disk. Please re-process."}), 404
+    # 2. Fall back: search OUTPUT_DIR for any file matching job_id prefix
+    if not result_path:
+        job_id = row.get('job_id')
+        if job_id:
+            # In-memory job still alive?
+            job = jobs.get(job_id)
+            if job and job.get('result') and os.path.exists(str(job['result'])):
+                result_path = str(job['result'])
+            else:
+                # Search OUTPUT_DIR for files starting with job_id
+                for f in OUTPUT_DIR.iterdir():
+                    if f.name.startswith(job_id) and f.suffix.lower() in ('.mp4','.mov','.webm','.avi','.mkv','.mp3','.wav','.gif'):
+                        result_path = str(f)
+                        break
+
+    if not result_path or not os.path.exists(result_path):
+        return jsonify({"error": "File no longer available. Please re-process the video."}), 404
 
     suffix = Path(result_path).suffix.lower()
     orig = row.get('filename', 'video')
@@ -3079,60 +3096,10 @@ def download_history_file(hid):
     mime_map = {'.mp4':'video/mp4', '.mov':'video/mp4', '.webm':'video/webm',
                 '.avi':'video/x-msvideo', '.mkv':'video/x-matroska',
                 '.mp3':'audio/mpeg', '.wav':'audio/wav', '.gif':'image/gif'}
-    mime = mime_map.get(suffix, 'video/mp4')
+    mime = mime_map.get(suffix, 'application/octet-stream')
 
-    stream = request.args.get('stream', '0') == '1'
-
-    if not stream:
-        resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype=mime)
-        resp.headers['Cache-Control'] = 'no-cache'
-        return resp
-
-    # ── Proper HTTP range-request streaming for HTML5 video player ──
-    file_size = os.path.getsize(result_path)
-    range_header = request.headers.get('Range')
-
-    if not range_header:
-        def full_gen():
-            with open(result_path, 'rb') as f:
-                while True:
-                    chunk = f.read(65536)
-                    if not chunk: break
-                    yield chunk
-        from flask import Response
-        resp = Response(full_gen(), 200, mimetype=mime)
-        resp.headers['Content-Length'] = file_size
-        resp.headers['Accept-Ranges'] = 'bytes'
-        return resp
-
-    # Parse Range header
-    try:
-        byte_range = range_header.replace('bytes=', '').strip()
-        parts = byte_range.split('-')
-        start = int(parts[0]) if parts[0] else 0
-        end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
-    except Exception:
-        return jsonify({"error": "Bad range"}), 416
-
-    start = max(0, start)
-    end = min(end, file_size - 1)
-    length = end - start + 1
-
-    def range_gen():
-        with open(result_path, 'rb') as f:
-            f.seek(start)
-            remaining = length
-            while remaining > 0:
-                chunk = f.read(min(65536, remaining))
-                if not chunk: break
-                remaining -= len(chunk)
-                yield chunk
-
-    from flask import Response
-    resp = Response(range_gen(), 206, mimetype=mime, direct_passthrough=True)
-    resp.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
-    resp.headers['Content-Length'] = length
-    resp.headers['Accept-Ranges'] = 'bytes'
+    resp = send_file(result_path, as_attachment=True, download_name=dl_name, mimetype=mime)
+    resp.headers['Cache-Control'] = 'no-cache'
     return resp
 
 
