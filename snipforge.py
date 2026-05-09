@@ -1492,7 +1492,8 @@ TEST_MODE         = os.environ.get('SNIPFORGE_TEST_MODE','') == '1'  # bypass ra
 ALLOWED_EXTS      = {'.mp4','.mov','.avi','.webm','.mkv','.flv','.wmv','.m4v','.mp3','.wav','.aac'}
 ALLOWED_MIMES     = {'video/','audio/'}
 
-app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_BYTES
+# Note: MAX_CONTENT_LENGTH not set here — we check size after save to give better error messages
+# Railway proxy limit: set RAILWAY_MAX_BODY_SIZE env var or use chunked upload for >100MB
 
 # ─── Rate limiter ─────────────────────────────────────────────────────────────
 _rate_store = {}   # ip -> [timestamps]
@@ -1555,14 +1556,9 @@ def validate_file(f):
         return None, "No file provided"
     ext = Path(f.filename).suffix.lower()
     if ext not in ALLOWED_EXTS:
-        return None, f"File type '{ext}' not allowed. Allowed: {', '.join(ALLOWED_EXTS)}"
-    mime = f.content_type or ''
-    if not any(mime.startswith(m) for m in ALLOWED_MIMES):
-        return None, f"Invalid file type (mime: {mime})"
-    # Check size by reading content length header
-    content_length = request.content_length
-    if content_length and content_length > MAX_FILE_BYTES:
-        return None, f"File too large. Max size: {MAX_FILE_MB}MB"
+        return None, f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTS))}"
+    # Trust the file extension — browsers send inconsistent MIME types
+    # especially for large files (often sent as application/octet-stream)
     safe_name = secure_filename(f.filename)
     if not safe_name:
         safe_name = "upload" + ext
@@ -6862,10 +6858,14 @@ async function handleFile(prefix, file) {
       }
     };
     xhr.onload = () => {
-      try { resolve(JSON.parse(xhr.responseText)); }
-      catch { resolve({error: 'Server error. Try a smaller file or check your connection.'}); }
+      try {
+        const parsed = JSON.parse(xhr.responseText);
+        resolve(parsed);
+      } catch {
+        resolve({error: `Server error (${xhr.status}). Try again.`});
+      }
     };
-    xhr.onerror = () => resolve({error: 'Upload failed. Check your connection.'});
+    xhr.onerror = () => resolve({error: 'Upload failed — check your internet connection.'});
     xhr.ontimeout = () => resolve({error: 'Upload timed out. Try a smaller file.'});
     xhr.send(fd);
   });
