@@ -6862,11 +6862,11 @@ async function handleFile(prefix, file) {
         const parsed = JSON.parse(xhr.responseText);
         resolve(parsed);
       } catch {
-        resolve({error: `Server error (${xhr.status}). Try again.`});
+        resolve({error: `Server error ${xhr.status}. Try again.`});
       }
     };
-    xhr.onerror = () => resolve({error: 'Upload failed — check your internet connection.'});
-    xhr.ontimeout = () => resolve({error: 'Upload timed out. Try a smaller file.'});
+    xhr.onerror = () => resolve({error: `Upload failed (network error). Your file may be too large for the server. Try files under 200MB.`});
+    xhr.ontimeout = () => resolve({error: 'Upload timed out.'});
     xhr.send(fd);
   });
   if (d.error) { log(prefix, d.error, 'err'); run.textContent='Upload failed'; return; }
