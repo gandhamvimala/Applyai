@@ -1647,10 +1647,12 @@ _chunk_registry = {}  # upload_id -> {chunks: set, total: int, ext: str, user_id
 _chunk_lock = threading.Lock()
 
 @app.route("/api/upload-chunk", methods=["POST"])
-@login_required
 def api_upload_chunk():
-    """Receive one chunk of a large file upload."""
-    user = get_current_user()
+    """Receive one chunk of a large file upload. Auth via session only (no DB hit)."""
+    # Light auth check — just verify session exists, no DB query needed per chunk
+    if 'auth_token' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
     upload_id = request.form.get('upload_id', '')
     chunk_index = int(request.form.get('chunk_index', 0))
     total_chunks = int(request.form.get('total_chunks', 1))
@@ -1669,7 +1671,7 @@ def api_upload_chunk():
 
     with _chunk_lock:
         if upload_id not in _chunk_registry:
-            _chunk_registry[upload_id] = {'chunks': set(), 'total': total_chunks, 'ext': ext, 'user_id': user['id']}
+            _chunk_registry[upload_id] = {'chunks': set(), 'total': total_chunks, 'ext': ext}
         _chunk_registry[upload_id]['chunks'].add(chunk_index)
         received = len(_chunk_registry[upload_id]['chunks'])
         total = _chunk_registry[upload_id]['total']
@@ -7006,38 +7008,62 @@ async function handleFile(prefix, file) {
       xhr.send(fd);
     });
   } else {
-    // Large file — chunked upload
+    // Large file — chunked upload with retries and parallel sending
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     const uploadId = Math.random().toString(36).slice(2) + Date.now();
-    run.textContent = `Uploading 0/${totalChunks} chunks…`;
+    let uploaded = 0;
+    run.textContent = `Uploading 0/${totalChunks} parts…`;
 
-    for (let i = 0; i < totalChunks; i++) {
+    // Upload a single chunk with up to 3 retries
+    async function uploadChunk(i) {
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, file.size);
       const chunk = file.slice(start, end);
-      const fd = new FormData();
-      fd.append('chunk', chunk, file.name);
-      fd.append('upload_id', uploadId);
-      fd.append('chunk_index', i);
-      fd.append('total_chunks', totalChunks);
-      fd.append('filename', file.name);
 
-      const ok = await new Promise((resolve) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/upload-chunk');
-        xhr.timeout = 0;
-        xhr.onreadystatechange = () => {
-          if (xhr.readyState !== 4) return;
-          resolve(xhr.status >= 200 && xhr.status < 300);
-        };
-        xhr.send(fd);
-      });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const fd = new FormData();
+        fd.append('chunk', chunk, file.name);
+        fd.append('upload_id', uploadId);
+        fd.append('chunk_index', i);
+        fd.append('total_chunks', totalChunks);
+        fd.append('filename', file.name);
 
-      if (!ok) {
-        log(prefix, `Chunk ${i+1} failed. Please try again.`, 'err');
+        const ok = await new Promise((resolve) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/upload-chunk');
+          xhr.timeout = 120000; // 2 min per chunk
+          xhr.onreadystatechange = () => {
+            if (xhr.readyState !== 4) return;
+            resolve(xhr.status >= 200 && xhr.status < 300);
+          };
+          xhr.ontimeout = () => resolve(false);
+          xhr.onerror = () => resolve(false);
+          xhr.send(fd);
+        });
+
+        if (ok) {
+          uploaded++;
+          run.textContent = `Uploading ${uploaded}/${totalChunks} parts…`;
+          return true;
+        }
+        // Wait before retry
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+      }
+      return false; // all retries failed
+    }
+
+    // Upload chunks in parallel batches of 3
+    const PARALLEL = 3;
+    for (let i = 0; i < totalChunks; i += PARALLEL) {
+      const batch = [];
+      for (let j = i; j < Math.min(i + PARALLEL, totalChunks); j++) {
+        batch.push(uploadChunk(j));
+      }
+      const results = await Promise.all(batch);
+      if (results.includes(false)) {
+        log(prefix, `Upload failed at part ${i+1}. Please try again.`, 'err');
         run.textContent = 'Upload failed'; return;
       }
-      run.textContent = `Uploading ${i+1}/${totalChunks} chunks…`;
     }
 
     // Finalize
