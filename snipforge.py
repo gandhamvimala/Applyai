@@ -7785,22 +7785,95 @@ async function runWatermarkImage() {
 
 async function handleMusicUpload(file) {
   if (!file) return;
-  const label = document.getElementById('music-label');
+  const label  = document.getElementById('music-label');
   const nameEl = document.getElementById('music-name');
-  label.textContent = file.name;
-  nameEl.style.display = 'block';
-  nameEl.textContent = 'Uploading…';
-  const fd = new FormData();
-  fd.append('file', file);
-  const r = await fetch('/api/upload-asset', {method:'POST', body:fd});
-  const d = await r.json();
-  if (d.file_id) {
-    musicFileId = d.file_id;
-    nameEl.textContent = '✓ ' + d.filename + ' ready';
-    nameEl.style.color = 'var(--green)';
+  label.textContent      = file.name;
+  nameEl.style.display   = 'block';
+  nameEl.style.color     = 'var(--muted)';
+  nameEl.textContent     = 'Uploading…';
+
+  const CHUNK_SIZE = 40 * 1024 * 1024; // 40MB per chunk
+
+  async function finishWithId(d) {
+    if (d && d.file_id) {
+      musicFileId            = d.file_id;
+      nameEl.textContent     = '✓ ' + (d.filename || file.name) + ' ready';
+      nameEl.style.color     = 'var(--green)';
+    } else {
+      nameEl.textContent     = (d && d.error) || 'Upload failed';
+      nameEl.style.color     = 'red';
+    }
+  }
+
+  if (file.size <= CHUNK_SIZE) {
+    // ── Small file: direct upload ──────────────────────────────
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch('/api/upload-asset', {method:'POST', body:fd});
+      await finishWithId(await r.json());
+    } catch(e) {
+      nameEl.textContent = 'Upload failed — check connection';
+      nameEl.style.color = 'red';
+    }
   } else {
-    nameEl.textContent = d.error || 'Upload failed';
-    nameEl.style.color = 'red';
+    // ── Large file: chunked upload ─────────────────────────────
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const uploadId    = Math.random().toString(36).slice(2) + Date.now();
+    let   uploaded    = 0;
+    nameEl.textContent = `Uploading 0/${totalChunks} parts…`;
+
+    async function uploadMusicChunk(i) {
+      const start = i * CHUNK_SIZE;
+      const end   = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const fd = new FormData();
+        fd.append('chunk',        chunk, file.name);
+        fd.append('upload_id',    uploadId);
+        fd.append('chunk_index',  i);
+        fd.append('total_chunks', totalChunks);
+        fd.append('filename',     file.name);
+        const ok = await new Promise(resolve => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/upload-chunk');
+          xhr.timeout = 120000;
+          xhr.onreadystatechange = () => { if (xhr.readyState === 4) resolve(xhr.status >= 200 && xhr.status < 300); };
+          xhr.ontimeout = () => resolve(false);
+          xhr.onerror   = () => resolve(false);
+          xhr.send(fd);
+        });
+        if (ok) { uploaded++; nameEl.textContent = `Uploading ${uploaded}/${totalChunks} parts…`; return true; }
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+      }
+      return false;
+    }
+
+    const PARALLEL = 3;
+    for (let i = 0; i < totalChunks; i += PARALLEL) {
+      const batch = [];
+      for (let j = i; j < Math.min(i + PARALLEL, totalChunks); j++) batch.push(uploadMusicChunk(j));
+      const results = await Promise.all(batch);
+      if (results.includes(false)) {
+        nameEl.textContent = 'Upload failed — please try again';
+        nameEl.style.color = 'red';
+        return;
+      }
+    }
+
+    // Finalize
+    nameEl.textContent = 'Processing…';
+    try {
+      const resp = await fetch('/api/upload-finalize', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({upload_id: uploadId, filename: file.name})
+      });
+      await finishWithId(await resp.json());
+    } catch(e) {
+      nameEl.textContent = 'Finalize failed — please try again';
+      nameEl.style.color = 'red';
+    }
   }
 }
 
