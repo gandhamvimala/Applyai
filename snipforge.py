@@ -4117,6 +4117,14 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
 @media(max-width:600px){
   .tools-grid{grid-template-columns:repeat(2,1fr)}
   .app-cards-grid{grid-template-columns:1fr}
+  /* Mobile nav: compact layout */
+  nav{padding:0 16px;height:52px}
+  .nav-right{gap:4px}
+  .nav-link{padding:5px 8px;font-size:.78rem}
+  .nav-btn{padding:6px 12px;font-size:.78rem;white-space:nowrap}
+  /* Hero buttons: stack on mobile */
+  .hero-btns{flex-direction:column;align-items:stretch}
+  .btn-primary,.btn-secondary{text-align:center;justify-content:center;width:100%;box-sizing:border-box}
 }
 </style>
 </head>
@@ -5935,6 +5943,8 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <div class="mob-tool-icon ai">🎯</div><div><div class="mob-tool-name">AI Smart Clip</div><div class="mob-tool-desc">Find the best highlight automatically</div></div><span class="mob-tool-badge ai">AI</span></div>
   <div class="mob-tool-row" onclick="mobSelectTool('aianalyze','📋','Chapters &amp; Metadata','Generate YouTube chapters &amp; titles')">
     <div class="mob-tool-icon ai">📋</div><div><div class="mob-tool-name">Chapters &amp; Metadata</div><div class="mob-tool-desc">Generate YouTube chapters &amp; titles</div></div><span class="mob-tool-badge ai">AI</span></div>
+  <div class="mob-tool-row" onclick="mobSelectTool('autocaptions','🎬','Auto Captions','Burn subtitles into your video with Whisper AI')">
+    <div class="mob-tool-icon ai">🎬</div><div><div class="mob-tool-name">Auto Captions</div><div class="mob-tool-desc">Burn subtitles into your video with Whisper AI</div></div><span class="mob-tool-badge new">NEW</span></div>
 
   <div class="mob-sheet-section">✏️ Edit</div>
   <div class="mob-tool-row" onclick="mobSelectTool('trim','🔪','Trim','Cut start and end of your video')">
