@@ -919,7 +919,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,{st["fontsize"]},{_to_ass_colour(font_color)},&H000000FF,{_to_ass_colour(outline_color)},{back_colour},{st["bold"]},0,0,0,100,100,0,0,{border_style},2,1,{align_num},10,10,{margin_v},1
+Style: Default,Arial,{st["fontsize"] * 4},{_to_ass_colour(font_color)},&H000000FF,{_to_ass_colour(outline_color)},{back_colour},{st["bold"]},0,0,0,100,100,0,0,{border_style},2,1,{align_num},10,10,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -6936,7 +6936,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
     <div>
       <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Font Size</div>
-      <input type="number" id="cap-fontsize" value="18" min="10" max="48" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+      <input type="number" id="cap-fontsize" value="18" min="8" max="72" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
     </div>
     <div>
       <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Text Color</div>
