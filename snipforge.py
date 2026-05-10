@@ -182,7 +182,7 @@ def op_brightness(jid, src, dst, brightness=0.0, contrast=1.0, saturation=1.0):
         if rc != 0:
             raise RuntimeError(f"Color correction failed: {err[-200:]}")
         prog(jid, "Done! Color correction applied.", 100)
-        done(jid, dst, {"brightness": brightness, "contrast": contrast, "saturation": saturation})
+        done(jid, dst, {"brightness": brightness, "contrast": contrast, "saturation": saturation, "original": round(get_duration(src),2), "new": round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -278,7 +278,7 @@ def op_rotate(jid, src, dst, angle):
                           "-c:a","copy", str(dst)])
         if rc!=0: raise RuntimeError(f"Rotate failed: {err[-300:]}")
         prog(jid,"Done!",100)
-        done(jid,dst,{"angle":angle})
+        done(jid,dst,{"angle":angle,"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e: fail(jid,e)
 
 def op_volume(jid, src, dst, volume):
@@ -289,7 +289,7 @@ def op_volume(jid, src, dst, volume):
                           "-c:v","copy","-c:a","aac","-b:a","192k", str(dst)])
         if rc!=0: raise RuntimeError(f"Volume failed: {err[-300:]}")
         prog(jid,"Done!",100)
-        done(jid,dst,{"volume":volume})
+        done(jid,dst,{"volume":volume,"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e: fail(jid,e)
 
 
@@ -310,7 +310,7 @@ def op_crop(jid, src, dst, preset):
                           "-c:a","copy", str(dst)])
         if rc!=0: raise RuntimeError(f"Resize failed: {err[-300:]}")
         prog(jid,f"Done! Resized for {preset}",100)
-        done(jid,dst,{"preset":preset})
+        done(jid,dst,{"preset":preset,"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e: fail(jid,e)
 
 def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
@@ -403,7 +403,7 @@ def op_watermark_image(jid, src, dst, text, position, opacity, fontsize):
 
         shutil.move(tmp_out, str(dst))
         prog(jid, "Done! Watermark applied.", 100)
-        done(jid, dst, {})
+        done(jid, dst, {"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -440,7 +440,7 @@ def op_gif(jid, src, dst, fps=10, width=480):
             raise RuntimeError(f"GIF failed: {err[-200:]}")
         size_mb = os.path.getsize(str(dst)) / 1024 / 1024
         prog(jid, f"Done! GIF created ({size_mb:.1f} MB)", 100)
-        done(jid, dst, {"size_mb": round(size_mb, 2)})
+        done(jid, dst, {"size_mb": round(size_mb, 2), "original":round(get_duration(src),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -493,7 +493,7 @@ def op_bgmusic(jid, src, dst, music_file_id, music_vol=0.5, video_vol=1.0):
         if rc != 0:
             raise RuntimeError(f"Music mix failed: {err[-200:]}")
         prog(jid, "Done! Background music added.", 100)
-        done(jid, dst, {})
+        done(jid, dst, {"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -559,7 +559,7 @@ def op_textoverlay(jid, src, dst, text, x_pct, y_pct, fontsize, color, opacity):
             raise RuntimeError(f"Text overlay failed: {err[-200:]}")
         shutil.move(tmp_out, str(dst))
         prog(jid, "Done! Text overlay applied.", 100)
-        done(jid, dst, {})
+        done(jid, dst, {"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -696,7 +696,7 @@ def op_text_overlay(jid, src, dst, text, x_pct, y_pct, fontsize_pct, color, star
         if rc != 0:
             raise RuntimeError(f"Text overlay failed: {err[-300:]}")
         prog(jid, "Done! Text overlay applied.", 100)
-        done(jid, dst, {})
+        done(jid, dst, {"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -755,7 +755,7 @@ def op_blur(jid, src, dst, x_pct, y_pct, w_pct, h_pct, shape="rectangle", style=
         if rc != 0:
             raise RuntimeError(f"Blur failed: {err[-300:]}")
         prog(jid, "Done! Region effect applied.", 100)
-        done(jid, dst, {})
+        done(jid, dst, {"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid, e)
 
@@ -776,7 +776,7 @@ def op_stabilize(jid, src, dst):
         except: pass
         if rc!=0: raise RuntimeError(f"Stabilize transform failed: {err[-300:]}")
         prog(jid,"Done! Video stabilized.",100)
-        done(jid,dst,{})
+        done(jid,dst,{"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e: fail(jid,e)
 
 # ─── Auto Captions (Whisper → SRT → burned subtitles) ────────────────────────
@@ -1329,7 +1329,7 @@ def op_convert(jid, src, dst, fmt):
         _, err, rc = run(args)
         if rc!=0: raise RuntimeError(f"Convert failed: {err[-300:]}")
         prog(jid,f"Done! Converted to {fmt}",100)
-        done(jid,dst,{"format":fmt})
+        done(jid,dst,{"format":fmt,"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid,e)
 
@@ -1386,7 +1386,7 @@ def op_extract_audio(jid, src, dst):
             else:
                 raise RuntimeError(f"Extract failed: {err[-300:]}")
         prog(jid,"Done! Audio extracted.",100)
-        done(jid,dst,{})
+        done(jid,dst,{"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid,e)
 
@@ -1397,7 +1397,7 @@ def op_mute(jid, src, dst):
                           "-c:v","copy", str(dst)])
         if rc!=0: raise RuntimeError(f"Mute failed: {err[-300:]}")
         prog(jid,"Done! Audio removed.",100)
-        done(jid,dst,{})
+        done(jid,dst,{"original":round(get_duration(src),2),"new":round(get_duration(str(dst)),2)})
     except Exception as e:
         fail(jid,e)
 
@@ -7785,95 +7785,22 @@ async function runWatermarkImage() {
 
 async function handleMusicUpload(file) {
   if (!file) return;
-  const label  = document.getElementById('music-label');
+  const label = document.getElementById('music-label');
   const nameEl = document.getElementById('music-name');
-  label.textContent      = file.name;
-  nameEl.style.display   = 'block';
-  nameEl.style.color     = 'var(--muted)';
-  nameEl.textContent     = 'Uploading…';
-
-  const CHUNK_SIZE = 40 * 1024 * 1024; // 40MB per chunk
-
-  async function finishWithId(d) {
-    if (d && d.file_id) {
-      musicFileId            = d.file_id;
-      nameEl.textContent     = '✓ ' + (d.filename || file.name) + ' ready';
-      nameEl.style.color     = 'var(--green)';
-    } else {
-      nameEl.textContent     = (d && d.error) || 'Upload failed';
-      nameEl.style.color     = 'red';
-    }
-  }
-
-  if (file.size <= CHUNK_SIZE) {
-    // ── Small file: direct upload ──────────────────────────────
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const r = await fetch('/api/upload-asset', {method:'POST', body:fd});
-      await finishWithId(await r.json());
-    } catch(e) {
-      nameEl.textContent = 'Upload failed — check connection';
-      nameEl.style.color = 'red';
-    }
+  label.textContent = file.name;
+  nameEl.style.display = 'block';
+  nameEl.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch('/api/upload-asset', {method:'POST', body:fd});
+  const d = await r.json();
+  if (d.file_id) {
+    musicFileId = d.file_id;
+    nameEl.textContent = '✓ ' + d.filename + ' ready';
+    nameEl.style.color = 'var(--green)';
   } else {
-    // ── Large file: chunked upload ─────────────────────────────
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const uploadId    = Math.random().toString(36).slice(2) + Date.now();
-    let   uploaded    = 0;
-    nameEl.textContent = `Uploading 0/${totalChunks} parts…`;
-
-    async function uploadMusicChunk(i) {
-      const start = i * CHUNK_SIZE;
-      const end   = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const fd = new FormData();
-        fd.append('chunk',        chunk, file.name);
-        fd.append('upload_id',    uploadId);
-        fd.append('chunk_index',  i);
-        fd.append('total_chunks', totalChunks);
-        fd.append('filename',     file.name);
-        const ok = await new Promise(resolve => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', '/api/upload-chunk');
-          xhr.timeout = 120000;
-          xhr.onreadystatechange = () => { if (xhr.readyState === 4) resolve(xhr.status >= 200 && xhr.status < 300); };
-          xhr.ontimeout = () => resolve(false);
-          xhr.onerror   = () => resolve(false);
-          xhr.send(fd);
-        });
-        if (ok) { uploaded++; nameEl.textContent = `Uploading ${uploaded}/${totalChunks} parts…`; return true; }
-        if (attempt < 2) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
-      }
-      return false;
-    }
-
-    const PARALLEL = 3;
-    for (let i = 0; i < totalChunks; i += PARALLEL) {
-      const batch = [];
-      for (let j = i; j < Math.min(i + PARALLEL, totalChunks); j++) batch.push(uploadMusicChunk(j));
-      const results = await Promise.all(batch);
-      if (results.includes(false)) {
-        nameEl.textContent = 'Upload failed — please try again';
-        nameEl.style.color = 'red';
-        return;
-      }
-    }
-
-    // Finalize
-    nameEl.textContent = 'Processing…';
-    try {
-      const resp = await fetch('/api/upload-finalize', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({upload_id: uploadId, filename: file.name})
-      });
-      await finishWithId(await resp.json());
-    } catch(e) {
-      nameEl.textContent = 'Finalize failed — please try again';
-      nameEl.style.color = 'red';
-    }
+    nameEl.textContent = d.error || 'Upload failed';
+    nameEl.style.color = 'red';
   }
 }
 
