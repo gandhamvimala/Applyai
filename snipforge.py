@@ -8896,9 +8896,9 @@ async function runAutoCaptions(){
 
   const params={
     op:"autocaptions",
-    file_id: s.fileId,
-    filename: s.fileName,
-    size_mb: s.sizeMb,
+    file_id: s.file_id,
+    filename: s.filename,
+    size_mb: s.size_mb,
     out_ext:"mp4",
     language: document.getElementById("cap-language").value,
     style:    document.getElementById("cap-style").value,
@@ -8923,7 +8923,7 @@ async function runAutoCaptions(){
         (st.stats&&st.stats.caption_count)?`✅ ${st.stats.caption_count} captions burned in`:"✅ Done!";
       const dlA=document.getElementById("cap-dl");
       dlA.href="/api/download/"+job_id;
-      const baseName=(s.fileName||"video").replace(/\.[^.]+$/,"");
+      const baseName=(s.filename||"video").replace(/\.[^.]+$/,"");
       dlA.download=baseName+"_captions.mp4";
       const dlSrt=document.getElementById("cap-dl-srt");
       dlSrt.href="/api/download/"+job_id+"?ext=srt";
