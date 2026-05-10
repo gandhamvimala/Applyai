@@ -779,6 +779,202 @@ def op_stabilize(jid, src, dst):
         done(jid,dst,{})
     except Exception as e: fail(jid,e)
 
+# ─── Auto Captions (Whisper → SRT → burned subtitles) ────────────────────────
+def op_autocaptions(jid, src, dst, language="auto", style="default", position="bottom",
+                    font_size=18, font_color="white", outline_color="black"):
+    """Transcribe with Whisper, build SRT, burn subtitles with FFmpeg drawtext/subtitles filter."""
+    import urllib.request as _ureq, tempfile as _tmp
+    try:
+        prog(jid, "Extracting audio for Whisper…", 8)
+        tmpdir = _tmp.mkdtemp()
+        audio  = os.path.join(tmpdir, "audio.mp3")
+        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
+                          "-vn", "-c:a", "libmp3lame", "-b:a", "64k",
+                          "-ar", "16000", "-ac", "1", audio])
+        if rc != 0:
+            audio = os.path.join(tmpdir, "audio.m4a")
+            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
+                              "-vn", "-c:a", "aac", "-b:a", "64k",
+                              "-ar", "16000", "-ac", "1", audio])
+        if rc != 0:
+            raise RuntimeError(f"Audio extraction failed: {err[-200:]}")
+
+        prog(jid, "Transcribing with Whisper…", 25)
+        if not OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY not set — captions require an OpenAI API key")
+
+        with open(audio, "rb") as af:
+            audio_data = af.read()
+        boundary = "----FormBoundary" + uuid.uuid4().hex
+        nl = "\r\n"
+        _lang_to_iso = {
+            "english":"en","spanish":"es","french":"fr","german":"de","italian":"it",
+            "portuguese":"pt","dutch":"nl","russian":"ru","japanese":"ja","korean":"ko",
+            "chinese":"zh","arabic":"ar","hindi":"hi","turkish":"tr","vietnamese":"vi",
+            "thai":"th","indonesian":"id","swedish":"sv","ukrainian":"uk","polish":"pl",
+        }
+        lang_iso = _lang_to_iso.get((language or "").lower(), language) \
+                   if language and language != "auto" else ""
+        lang_part = (
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="language"{nl}{nl}{lang_iso}{nl}'
+        ) if lang_iso else ""
+        body = (
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="model"{nl}{nl}whisper-1{nl}'
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="response_format"{nl}{nl}verbose_json{nl}'
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="timestamp_granularities[]"{nl}{nl}segment{nl}'
+            + lang_part +
+            f"--{boundary}{nl}"
+            f'Content-Disposition: form-data; name="file"; filename="audio.mp3"{nl}'
+            f"Content-Type: audio/mpeg{nl}{nl}"
+        ).encode() + audio_data + f"{nl}--{boundary}--{nl}".encode()
+
+        req = _ureq.Request(
+            "https://api.openai.com/v1/audio/transcriptions",
+            data=body,
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}",
+                     "Content-Type": f"multipart/form-data; boundary={boundary}"}
+        )
+        resp = json.loads(_ureq.urlopen(req, timeout=120).read())
+        segments = resp.get("segments", [])
+        if not segments:
+            raise RuntimeError("No speech detected in video — cannot generate captions")
+
+        prog(jid, f"Building SRT ({len(segments)} segments)…", 60)
+
+        def _fmt_srt_time(s):
+            h = int(s // 3600); m = int((s % 3600) // 60); sec = s % 60
+            return f"{h:02d}:{m:02d}:{sec:06.3f}".replace(".", ",")
+
+        # Split long segments into shorter caption lines (max ~42 chars / ~7 words)
+        def _split_segment(seg, max_words=7):
+            words = seg["text"].strip().split()
+            if len(words) <= max_words:
+                return [seg]
+            dur = seg["end"] - seg["start"]
+            chunks = [words[i:i+max_words] for i in range(0, len(words), max_words)]
+            chunk_dur = dur / len(chunks)
+            out = []
+            for i, chunk in enumerate(chunks):
+                out.append({
+                    "start": seg["start"] + i * chunk_dur,
+                    "end":   seg["start"] + (i+1) * chunk_dur,
+                    "text":  " ".join(chunk)
+                })
+            return out
+
+        subs = []
+        for seg in segments:
+            subs.extend(_split_segment(seg))
+
+        srt_lines = []
+        for i, sub in enumerate(subs, 1):
+            srt_lines.append(str(i))
+            srt_lines.append(f"{_fmt_srt_time(sub['start'])} --> {_fmt_srt_time(sub['end'])}")
+            srt_lines.append(sub["text"].strip())
+            srt_lines.append("")
+        srt_path = os.path.join(tmpdir, "captions.srt")
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(srt_lines))
+
+        prog(jid, "Burning captions into video…", 75)
+
+        # Position mapping
+        _pos_map = {
+            "bottom":  "x=(w-text_w)/2:y=h-th-40",
+            "top":     "x=(w-text_w)/2:y=40",
+            "center":  "x=(w-text_w)/2:y=(h-th)/2",
+        }
+
+        # Style presets — affect font size multiplier and box
+        _style_map = {
+            "default":  {"fontsize": font_size, "box": 0, "bold": 0},
+            "bold":     {"fontsize": font_size + 4, "box": 0, "bold": 1},
+            "box":      {"fontsize": font_size, "box": 1, "bold": 0},
+            "tiktok":   {"fontsize": font_size + 6, "box": 1, "bold": 1},
+        }
+        st = _style_map.get(style, _style_map["default"])
+
+        # Try the subtitles filter first (renders SRT natively, best quality)
+        escaped_srt = srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+        # Build force_style
+        force_style_parts = [
+            f"FontSize={st['fontsize']}",
+            f"PrimaryColour=&H00{''.join(f'{int(c):02X}' for c in _hex_to_rgb(font_color))}",
+            f"OutlineColour=&H00{''.join(f'{int(c):02X}' for c in _hex_to_rgb(outline_color))}",
+            f"Bold={st['bold']}",
+            "Outline=2",
+            "Shadow=1",
+        ]
+        if st["box"]:
+            force_style_parts += ["BorderStyle=4", "BackColour=&H80000000"]
+        if position == "top":
+            force_style_parts.append("Alignment=8")
+        elif position == "center":
+            force_style_parts.append("Alignment=5")
+        else:
+            force_style_parts.append("Alignment=2")
+
+        force_style = ",".join(force_style_parts)
+        vf_sub = f"subtitles='{escaped_srt}':force_style='{force_style}'"
+
+        _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
+                          "-vf", vf_sub,
+                          "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                          "-c:a", "copy", str(dst)])
+        if rc != 0:
+            # subtitles filter failed (libass missing?) — fall back to drawtext per segment
+            prog(jid, "Falling back to drawtext filter…", 78)
+            pos_expr = _pos_map.get(position, _pos_map["bottom"])
+            box_args = ":box=1:boxcolor=black@0.5:boxborderw=6" if st["box"] else ""
+            draw_filters = []
+            for sub in subs:
+                safe_text = sub["text"].strip().replace("'", "\\'").replace(":", "\\:")
+                draw_filters.append(
+                    f"drawtext=text='{safe_text}':fontsize={st['fontsize']}:"
+                    f"fontcolor={font_color}:bordercolor={outline_color}:borderw=2:"
+                    f"{pos_expr}:enable='between(t,{sub['start']:.3f},{sub['end']:.3f})'"
+                    + box_args
+                )
+            vf_draw = ",".join(draw_filters)
+            _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
+                              "-vf", vf_draw,
+                              "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                              "-c:a", "copy", str(dst)])
+            if rc != 0:
+                raise RuntimeError(f"Caption burn failed: {err[-300:]}")
+
+        # Also save SRT alongside the output
+        srt_out = str(dst).rsplit(".", 1)[0] + ".srt"
+        import shutil as _sh; _sh.copy(srt_path, srt_out)
+        try: _sh.rmtree(tmpdir)
+        except: pass
+
+        prog(jid, f"Done! {len(subs)} captions burned in.", 100)
+        done(jid, dst, {"caption_count": len(subs), "srt_path": srt_out})
+    except Exception as e:
+        fail(jid, e)
+
+
+def _hex_to_rgb(color_name_or_hex):
+    """Return (R, G, B) tuple for common color names and hex strings."""
+    _named = {
+        "white": (255, 255, 255), "black": (0, 0, 0), "yellow": (255, 255, 0),
+        "red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255),
+        "cyan": (0, 255, 255), "magenta": (255, 0, 255), "orange": (255, 165, 0),
+    }
+    c = (color_name_or_hex or "white").lower().strip()
+    if c in _named:
+        return _named[c]
+    c = c.lstrip("#")
+    if len(c) == 6:
+        return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16))
+    return (255, 255, 255)
+
+
 # ─── Job store ────────────────────────────────────────────────────────────────
 UPLOAD_DIR = Path(_SCRIPT_DIR) / "uploads"; UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR = Path(_SCRIPT_DIR) / "outputs"; OUTPUT_DIR.mkdir(exist_ok=True)
@@ -2016,6 +2212,14 @@ def api_process():
             threading.Thread(target=op_thumbnail, args=(jid,src,str(dst2),
                 int(data.get("count",5)))).start()
             return jsonify({"job_id":jid})
+        elif op=="autocaptions":
+            threading.Thread(target=op_autocaptions, args=(jid,src,str(dst),
+                data.get("language","auto"),
+                data.get("style","default"),
+                data.get("position","bottom"),
+                int(data.get("font_size",18)),
+                data.get("font_color","white"),
+                data.get("outline_color","black"))).start()
         else:
             fail(jid, f"Unknown operation: {op}")
 
@@ -4077,7 +4281,7 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
 <!-- TOOLS -->
 <section style="background:rgba(255,255,255,.015);border-top:1px solid var(--border)">
 <div class="tools-section">
-  <div class="section-tag">All 24 Tools</div>
+  <div class="section-tag">All 25 Tools</div>
   <div class="section-title">Everything you need<br>in one place</div>
   <div class="section-sub">No switching between apps. No subscriptions per tool. Just upload and process.</div>
 
@@ -4172,7 +4376,7 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
       <div class="feature-card">
         <div class="feature-icon">💰</div>
         <div class="feature-title">More tools for less</div>
-        <div class="feature-desc">Pro plan starts at $5/month. Unlimited videos, any duration, all 24 tools.</div>
+        <div class="feature-desc">Pro plan starts at $5/month. Unlimited videos, any duration, all 25 tools.</div>
       </div>
     </div>
   </div>
@@ -4192,7 +4396,7 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
     <div class="step">
       <div class="step-num">2</div>
       <h3>Upload & choose your tool</h3>
-      <p>Drop your video, pick from 24 tools and adjust the settings. Preview your changes live.</p>
+      <p>Drop your video, pick from 25 tools and adjust the settings. Preview your changes live.</p>
       <div class="step-arrow">→</div>
     </div>
     <div class="step">
@@ -4216,7 +4420,7 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
       <ul class="plan-features">
         <li>3 videos per month</li>
         <li>Max 5 min per video</li>
-        <li>All 24 tools</li>
+        <li>All 25 tools</li>
         <li class="no">Priority processing</li>
         <li class="no">Unlimited duration</li>
       </ul>
@@ -4231,7 +4435,7 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
       <ul class="plan-features">
         <li>Unlimited videos</li>
         <li>Any duration</li>
-        <li>All 24 tools</li>
+        <li>All 25 tools</li>
         <li>AI transcription</li>
         <li>Priority processing</li>
       </ul>
@@ -6637,6 +6841,97 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   </div>
 </div>
 
+<!-- ── AUTO CAPTIONS ── -->
+<div class="panel" id="panel-autocaptions">
+  <div class="panel-header">
+    <div class="panel-title"><span class="panel-title-icon">🎬</span>Auto Captions</div>
+    <div class="panel-sub">Transcribe with Whisper AI and burn subtitles directly into your video</div>
+  </div>
+  <div class="upload-zone" id="cap-dropzone"><input type="file" id="cap-file" accept="video/*">
+    <div class="upload-zone-icon">🎬</div><h3>Drop your video here</h3><p>MP4 · MOV · MKV · AVI</p>
+  </div>
+  <div class="file-card" id="cap-filecard">
+    <div class="file-card-top">
+      <div class="file-thumb"><video id="cap-thumb" muted></video></div>
+      <div class="file-meta"><div class="file-name" id="cap-fname">—</div>
+        <div class="file-stats"><div class="file-stat">Duration <span id="cap-dur">—</span></div><div class="file-stat">Size <span id="cap-size">—</span></div></div>
+      </div>
+      <button class="file-change" onclick="resetUpload('cap')">Change</button>
+    </div>
+  </div>
+
+  <div style="margin-bottom:12px">
+    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Language</div>
+    <select id="cap-language" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+      <option value="auto">🌐 Auto-detect</option>
+      <option value="en">🇺🇸 English</option>
+      <option value="es">🇪🇸 Spanish</option>
+      <option value="fr">🇫🇷 French</option>
+      <option value="de">🇩🇪 German</option>
+      <option value="it">🇮🇹 Italian</option>
+      <option value="pt">🇧🇷 Portuguese</option>
+      <option value="ja">🇯🇵 Japanese</option>
+      <option value="ko">🇰🇷 Korean</option>
+      <option value="zh">🇨🇳 Chinese</option>
+      <option value="ar">🇸🇦 Arabic</option>
+      <option value="hi">🇮🇳 Hindi</option>
+    </select>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div>
+      <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Style</div>
+      <select id="cap-style" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+        <option value="default">Default</option>
+        <option value="bold">Bold</option>
+        <option value="box">Box Background</option>
+        <option value="tiktok">TikTok Style</option>
+      </select>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Position</div>
+      <select id="cap-position" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+        <option value="bottom">Bottom</option>
+        <option value="top">Top</option>
+        <option value="center">Center</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+    <div>
+      <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Font Size</div>
+      <input type="number" id="cap-fontsize" value="18" min="10" max="48" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Text Color</div>
+      <select id="cap-fontcolor" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+        <option value="white">White</option>
+        <option value="yellow">Yellow</option>
+        <option value="cyan">Cyan</option>
+        <option value="black">Black</option>
+      </select>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Outline</div>
+      <select id="cap-outlinecolor" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
+        <option value="black">Black</option>
+        <option value="white">White</option>
+        <option value="red">Red</option>
+        <option value="blue">Blue</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="run-btn" id="cap-run" disabled onclick="runAutoCaptions()">Upload a video first</button>
+  <div class="progress-box" id="cap-progress"><div class="progress-track"><div class="progress-fill" id="cap-pfill"></div></div><div class="log" id="cap-log"></div></div>
+  <div class="result-box" id="cap-result">
+    <div class="result-stats" id="cap-rstats"></div>
+    <a class="dl-btn" id="cap-dl" href="#" download="captions.mp4">⬇ Download Video with Captions (.mp4)</a>
+    <a class="dl-btn" id="cap-dl-srt" href="#" download="captions.srt" style="margin-top:8px;background:var(--bg3);color:var(--text);border:1px solid var(--border)">⬇ Download SRT subtitle file</a>
+  </div>
+</div>
+
 <!-- ── SPLIT VIDEO ── -->
 <div class="panel" id="panel-split">
   <div class="panel-header">
@@ -7148,7 +7443,8 @@ function getRunLabel(p) {
              mu:'Mute Video',dn:'Remove Noise',tc:'Transcribe Speech',gif:'Convert to GIF',
              bgmusic:'Add Music',textoverlay:'Apply Text',blur:'Blur Region',
              sc:'🎯 Find Smart Clip',aa:'✨ Generate',sp2:'✂️ Split Video',
-             bg:'🎨 Apply Color',th:'🖼 Extract Thumbnails'};
+             bg:'🎨 Apply Color',th:'🖼 Extract Thumbnails',
+             cap:'🎬 Generate Captions'};
   return m[p] || 'Process';
 }
 
@@ -8251,7 +8547,7 @@ window.pollJob = function(prefix, jobId, videoId, dlId, dlName){
   },1200);
 };
 
-['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blur','sc','aa','sp2','bg','th'].forEach(p=>setupUpload(p));
+['sz','tr','mt','sp','ro','cr','wm','vl','cm','cv','au','mu','dn','tc','gif','bgmusic','textoverlay','blur','sc','aa','sp2','bg','th','cap'].forEach(p=>setupUpload(p));
 
 // ── AI Smart Clip ──
 async function runSmartClip(){
@@ -8581,6 +8877,59 @@ async function runThumbnail(){
       run.disabled=false; run.textContent=getRunLabel('th'); run.classList.remove('working');
     }
   },1200);
+}
+
+
+// ── AUTO CAPTIONS ──────────────────────────────────────────
+async function runAutoCaptions(){
+  const s=state["cap"]; if(!s){alert("Upload a video first");return;}
+  const btn=document.getElementById("cap-run");
+  btn.disabled=true; btn.textContent="Processing…"; btn.classList.add("working");
+  document.getElementById("cap-progress").classList.add("show");
+  document.getElementById("cap-result").classList.remove("show");
+  log("cap","Starting auto-caption generation…","info");
+
+  const params={
+    op:"autocaptions",
+    file_id: s.fileId,
+    filename: s.fileName,
+    size_mb: s.sizeMb,
+    out_ext:"mp4",
+    language: document.getElementById("cap-language").value,
+    style:    document.getElementById("cap-style").value,
+    position: document.getElementById("cap-position").value,
+    font_size: parseInt(document.getElementById("cap-fontsize").value)||18,
+    font_color:    document.getElementById("cap-fontcolor").value,
+    outline_color: document.getElementById("cap-outlinecolor").value,
+  };
+
+  const res=await fetch("/api/process",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(params)});
+  if(!res.ok){const e=await res.json();log("cap",e.error||"Request failed","error");btn.disabled=false;btn.textContent="Generate Captions";btn.classList.remove("working");return;}
+  const {job_id}=await res.json();
+
+  const iv=setInterval(async()=>{
+    const st=await (await fetch("/api/status/"+job_id)).json();
+    if(st.log&&st.log.length)log("cap",st.log[st.log.length-1]);
+    if(st.progress)document.getElementById("cap-pfill").style.width=st.progress+"%";
+    if(st.status==="done"){
+      clearInterval(iv);
+      document.getElementById("cap-result").classList.add("show");
+      document.getElementById("cap-rstats").textContent=
+        (st.stats&&st.stats.caption_count)?`✅ ${st.stats.caption_count} captions burned in`:"✅ Done!";
+      const dlA=document.getElementById("cap-dl");
+      dlA.href="/api/download/"+job_id;
+      const baseName=(s.fileName||"video").replace(/\.[^.]+$/,"");
+      dlA.download=baseName+"_captions.mp4";
+      const dlSrt=document.getElementById("cap-dl-srt");
+      dlSrt.href="/api/download/"+job_id+"?ext=srt";
+      dlSrt.download=baseName+".srt";
+      btn.classList.remove("working"); btn.textContent="Generate Captions"; btn.disabled=false;
+    } else if(st.status==="error"){
+      clearInterval(iv);
+      log("cap","Error: "+st.error,"error");
+      btn.disabled=false; btn.textContent="Generate Captions"; btn.classList.remove("working");
+    }
+  },1500);
 }
 
 // Auto-open panel from URL param e.g. /?tool=compress
