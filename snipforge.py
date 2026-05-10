@@ -898,58 +898,71 @@ def op_autocaptions(jid, src, dst, language="auto", style="default", position="b
         }
         st = _style_map.get(style, _style_map["default"])
 
-        # Build ASS colour strings (ASS uses BGR order, not RGB)
+        # Build a proper ASS subtitle file for full style control
+        # ASS uses BGR colour order and numpad alignment
         def _to_ass_colour(name_or_hex, alpha="00"):
             r, g, b = _hex_to_rgb(name_or_hex)
             return f"&H{alpha}{b:02X}{g:02X}{r:02X}"
 
-        # Alignment: ASS numpad layout — 2=bottom-center, 5=middle-center, 8=top-center
         _align_map = {"bottom": 2, "center": 5, "top": 8}
-        align_num = _align_map.get(position, 2)
+        align_num  = _align_map.get(position, 2)
+        margin_v   = 40  # pixels from edge
 
-        # MarginV controls distance from edge
-        margin_v = 30
+        back_colour = "&H80000000" if st["box"] else "&H00000000"
+        border_style = 4 if st["box"] else 1  # 4=opaque box, 1=outline+shadow
 
-        force_style_parts = [
-            f"FontSize={st['fontsize']}",
-            f"PrimaryColour={_to_ass_colour(font_color)}",
-            f"OutlineColour={_to_ass_colour(outline_color)}",
-            f"Bold={st['bold']}",
-            "Outline=2",
-            "Shadow=1",
-            f"Alignment={align_num}",
-            f"MarginV={margin_v}",
-        ]
-        if st["box"]:
-            force_style_parts += ["BorderStyle=4", "BackColour=&H80000000"]
+        ass_header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
 
-        force_style = ",".join(force_style_parts)
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,{st["fontsize"]},{_to_ass_colour(font_color)},&H000000FF,{_to_ass_colour(outline_color)},{back_colour},{st["bold"]},0,0,0,100,100,0,0,{border_style},2,1,{align_num},10,10,{margin_v},1
 
-        # Escape SRT path for FFmpeg filter (Windows backslashes need special handling)
-        escaped_srt = srt_path.replace("\\", "/").replace(":", "\\:")
-        vf_sub = f"subtitles='{escaped_srt}':force_style='{force_style}'"
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+        def _ass_time(s):
+            h = int(s // 3600); m = int((s % 3600) // 60); sec = s % 60
+            return f"{h}:{m:02d}:{sec:05.2f}"
+
+        ass_lines = [ass_header]
+        for sub in subs:
+            text = sub["text"].strip().replace("\n", " ")
+            ass_lines.append(
+                f"Dialogue: 0,{_ass_time(sub['start'])},{_ass_time(sub['end'])},Default,,0,0,0,,{text}"
+            )
+
+        ass_path = os.path.join(tmpdir, "captions.ass")
+        with open(ass_path, "w", encoding="utf-8") as af:
+            af.write("\n".join(ass_lines))
+
+        # Use ass filter (more reliable than subtitles filter on Windows)
+        escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
+        vf_ass = f"ass='{escaped_ass}'"
 
         _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
-                          "-vf", vf_sub,
+                          "-vf", vf_ass,
                           "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                           "-c:a", "copy", str(dst)])
         if rc != 0:
-            # subtitles filter failed — fall back to drawtext per segment
+            # ass filter failed — fall back to drawtext per segment
             prog(jid, "Falling back to drawtext filter…", 78)
-            # drawtext position expressions
             _dt_pos = {
-                "bottom": "x=(w-text_w)/2:y=h-text_h-40",
-                "top":    "x=(w-text_w)/2:y=40",
+                "bottom": "x=(w-text_w)/2:y=h-text_h-60",
+                "top":    "x=(w-text_w)/2:y=60",
                 "center": "x=(w-text_w)/2:y=(h-text_h)/2",
             }
             pos_expr = _dt_pos.get(position, _dt_pos["bottom"])
-            box_args = ":box=1:boxcolor=black@0.5:boxborderw=8" if st["box"] else ""
+            box_args = ":box=1:boxcolor=black@0.6:boxborderw=8" if st["box"] else ""
             draw_filters = []
             for sub in subs:
                 safe_text = sub["text"].strip().replace("'", "\\'").replace(":", "\\:")
                 draw_filters.append(
                     f"drawtext=text='{safe_text}':fontsize={st['fontsize']}:"
-                    f"fontcolor={font_color}:bordercolor={outline_color}:borderw=2:"
+                    f"fontcolor={font_color}:bordercolor={outline_color}:borderw=3:"
                     f"{pos_expr}:enable='between(t,{sub['start']:.3f},{sub['end']:.3f})'"
                     + box_args
                 )
