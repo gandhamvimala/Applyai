@@ -5835,6 +5835,11 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
     <span class="nav-full">Chapters & Meta</span><span class="nav-short">Meta</span>
     <span class="nav-badge new">AI</span>
   </div>
+  <div class="nav-item" data-panel="autocaptions" onclick="switchPanel(this)">
+    <span class="nav-icon"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14"><rect x="1" y="10" width="14" height="4" rx="1"/><path d="M3 12h3M7.5 12h1M10 12h3M5 10V7a3 3 0 016 0v3"/></svg></span>
+    <span class="nav-full">Auto Captions</span><span class="nav-short">Captions</span>
+    <span class="nav-badge new">AI</span>
+  </div>
 
   <div class="nav-section">Edit</div>
   <div class="nav-item" data-panel="split" onclick="switchPanel(this)">
