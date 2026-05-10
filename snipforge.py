@@ -898,27 +898,35 @@ def op_autocaptions(jid, src, dst, language="auto", style="default", position="b
         }
         st = _style_map.get(style, _style_map["default"])
 
-        # Try the subtitles filter first (renders SRT natively, best quality)
-        escaped_srt = srt_path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-        # Build force_style
+        # Build ASS colour strings (ASS uses BGR order, not RGB)
+        def _to_ass_colour(name_or_hex, alpha="00"):
+            r, g, b = _hex_to_rgb(name_or_hex)
+            return f"&H{alpha}{b:02X}{g:02X}{r:02X}"
+
+        # Alignment: ASS numpad layout — 2=bottom-center, 5=middle-center, 8=top-center
+        _align_map = {"bottom": 2, "center": 5, "top": 8}
+        align_num = _align_map.get(position, 2)
+
+        # MarginV controls distance from edge
+        margin_v = 30
+
         force_style_parts = [
             f"FontSize={st['fontsize']}",
-            f"PrimaryColour=&H00{''.join(f'{int(c):02X}' for c in _hex_to_rgb(font_color))}",
-            f"OutlineColour=&H00{''.join(f'{int(c):02X}' for c in _hex_to_rgb(outline_color))}",
+            f"PrimaryColour={_to_ass_colour(font_color)}",
+            f"OutlineColour={_to_ass_colour(outline_color)}",
             f"Bold={st['bold']}",
             "Outline=2",
             "Shadow=1",
+            f"Alignment={align_num}",
+            f"MarginV={margin_v}",
         ]
         if st["box"]:
             force_style_parts += ["BorderStyle=4", "BackColour=&H80000000"]
-        if position == "top":
-            force_style_parts.append("Alignment=8")
-        elif position == "center":
-            force_style_parts.append("Alignment=5")
-        else:
-            force_style_parts.append("Alignment=2")
 
         force_style = ",".join(force_style_parts)
+
+        # Escape SRT path for FFmpeg filter (Windows backslashes need special handling)
+        escaped_srt = srt_path.replace("\\", "/").replace(":", "\\:")
         vf_sub = f"subtitles='{escaped_srt}':force_style='{force_style}'"
 
         _, err, rc = run([_FFMPEG_EXE, "-y", "-i", src,
@@ -926,10 +934,16 @@ def op_autocaptions(jid, src, dst, language="auto", style="default", position="b
                           "-c:v", "libx264", "-preset", "fast", "-crf", "20",
                           "-c:a", "copy", str(dst)])
         if rc != 0:
-            # subtitles filter failed (libass missing?) — fall back to drawtext per segment
+            # subtitles filter failed — fall back to drawtext per segment
             prog(jid, "Falling back to drawtext filter…", 78)
-            pos_expr = _pos_map.get(position, _pos_map["bottom"])
-            box_args = ":box=1:boxcolor=black@0.5:boxborderw=6" if st["box"] else ""
+            # drawtext position expressions
+            _dt_pos = {
+                "bottom": "x=(w-text_w)/2:y=h-text_h-40",
+                "top":    "x=(w-text_w)/2:y=40",
+                "center": "x=(w-text_w)/2:y=(h-text_h)/2",
+            }
+            pos_expr = _dt_pos.get(position, _dt_pos["bottom"])
+            box_args = ":box=1:boxcolor=black@0.5:boxborderw=8" if st["box"] else ""
             draw_filters = []
             for sub in subs:
                 safe_text = sub["text"].strip().replace("'", "\\'").replace(":", "\\:")
@@ -6869,7 +6883,7 @@ window.CRISP_WEBSITE_ID="f33aa82a-1a91-4972-8278-7e2c714cfad6";
   </div>
 
   <div style="margin-bottom:12px">
-    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Language</div>
+    <div style="font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px"><span>Language</span><span id="cap-lang-detected" style="display:none;font-size:.62rem;color:var(--green);padding:2px 8px;background:var(--green-bg);border-radius:4px;font-weight:600"></span></div>
     <select id="cap-language" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);color:var(--text);font-size:.88rem">
       <option value="auto">🌐 Auto-detect</option>
       <option value="en">🇺🇸 English</option>
@@ -7397,9 +7411,11 @@ async function handleFile(prefix, file) {
   if (prefix === 'textoverlay') setTimeout(() => setupTextPreview(prefix), 100);
   if (prefix === 'wm') setTimeout(() => setupWmPreview(prefix), 100);
   if (prefix === 'blur') setTimeout(() => setupBlurPreview(prefix), 100);
-  // For transcribe panel: detect language immediately after upload
-  if (prefix === 'tc' && d.file_id) {
-    const badge = document.getElementById('tc-lang-detected');
+  // For transcribe and autocaptions panels: detect language immediately after upload
+  if ((prefix === 'tc' || prefix === 'cap') && d.file_id) {
+    const badgeId = prefix === 'cap' ? 'cap-lang-detected' : 'tc-lang-detected';
+    const langSelId = prefix === 'cap' ? 'cap-language' : 'tc-language';
+    const badge = document.getElementById(badgeId);
     if (badge) { badge.textContent = '⏳ Detecting…'; badge.style.display = 'inline'; }
     fetch('/api/detect-language', {
       method: 'POST',
@@ -7411,11 +7427,10 @@ async function handleFile(prefix, file) {
         ar:'Arabic',hi:'Hindi',tr:'Turkish',vi:'Vietnamese',th:'Thai',id:'Indonesian',
         sv:'Swedish',uk:'Ukrainian',pl:'Polish',cs:'Czech',da:'Danish',fi:'Finnish',
         el:'Greek',he:'Hebrew',hu:'Hungarian',no:'Norwegian',ro:'Romanian'};
-      const lang = ld.language || '';          // ISO code e.g. "en"
-      const langRaw = ld.language_name || lang; // readable e.g. "english"
+      const lang = ld.language || '';
+      const langRaw = ld.language_name || lang;
       if (lang) {
-        // Update dropdown — try existing option first, then add detected option
-        const langSel = document.getElementById('tc-language');
+        const langSel = document.getElementById(langSelId);
         if (langSel) {
           const prev = langSel.querySelector('option[data-detected]');
           if (prev) prev.remove();
@@ -7432,7 +7447,6 @@ async function handleFile(prefix, file) {
             langSel.value = lang;
           }
         }
-        // Show badge with readable name
         const displayName = langNames[lang] || (langRaw.charAt(0).toUpperCase()+langRaw.slice(1));
         if (badge) { badge.textContent = '✓ ' + displayName + ' detected'; badge.style.display = 'inline'; }
       } else {
