@@ -953,8 +953,11 @@ def op_autocaptions(jid, src, dst, language="auto", style="default", position="b
         try: _sh.rmtree(tmpdir)
         except: pass
 
+        orig_dur = get_duration(src)
+        new_dur  = get_duration(str(dst))
         prog(jid, f"Done! {len(subs)} captions burned in.", 100)
-        done(jid, dst, {"caption_count": len(subs), "srt_path": srt_out})
+        done(jid, dst, {"caption_count": len(subs), "srt_path": srt_out,
+                        "original": round(orig_dur, 2), "new": round(new_dur, 2)})
     except Exception as e:
         fail(jid, e)
 
