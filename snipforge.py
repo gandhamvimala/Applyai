@@ -3926,15 +3926,15 @@ LANDING_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Snipforge — AI Video Toolkit</title>
-<meta name="description" content="24 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur, AI smart clip and more. Free to start.">
-<meta property="og:title" content="Snipforge. AI Video Toolkit. 24 Tools, Free to Start.">
-<meta property="og:description" content="24 AI-powered video tools in your browser. Trim, transcribe, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
+<meta name="description" content="25 professional video tools in your browser. Trim, transcribe, translate, watermark, GIF, blur, AI smart clip and more. Free to start.">
+<meta property="og:title" content="Snipforge. AI Video Toolkit. 25 Tools, Free to Start.">
+<meta property="og:description" content="25 AI-powered video tools in your browser. Trim, transcribe, auto captions, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
 <meta property="og:image" content="https://snipforge.video/og-image.png">
 <meta property="og:url" content="https://snipforge.video">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Snipforge. AI Video Toolkit. 24 Tools, Free to Start.">
-<meta name="twitter:description" content="24 AI-powered video tools in your browser. Trim, transcribe, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
+<meta name="twitter:title" content="Snipforge. AI Video Toolkit. 25 Tools, Free to Start.">
+<meta name="twitter:description" content="25 AI-powered video tools in your browser. Trim, transcribe, auto captions, smart clip, chapters, thumbnails, blur and more. No installs. Free to start.">
 <meta name="twitter:image" content="https://snipforge.video/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Inter+Tight:wght@700;800;900&display=swap" rel="stylesheet">
@@ -4173,6 +4173,13 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
           <p>Speech to text in 20 languages</p>
         </div>
       </div>
+      <div class="feature-row">
+        <div class="feature-row-icon" style="background:rgba(232,66,10,.15)">🎬</div>
+        <div class="feature-row-text">
+          <h4>Auto Captions <span style="font-size:.6rem;font-weight:700;background:rgba(232,66,10,.15);color:var(--accent);padding:2px 7px;border-radius:20px;letter-spacing:.05em;vertical-align:middle">NEW</span></h4>
+          <p>Burn subtitles into your video with Whisper AI</p>
+        </div>
+      </div>
     </div>
 
     <div class="hero-btns">
@@ -4227,7 +4234,7 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
           My Videos
         </div>
         <div class="app-sidebar-promo">
-          <h5>⚡ 24 AI Tools</h5>
+          <h5>⚡ 25 AI Tools</h5>
           <p>Everything you need,<br>all in one place.</p>
         </div>
       </div>
@@ -4347,6 +4354,12 @@ footer{padding:40px 64px;border-top:1px solid var(--border);display:flex;align-i
         <div class="tool-name">AI Chapters &amp; Meta</div>
         <div class="tool-desc">Generate YouTube chapters, titles, descriptions &amp; tags</div>
         <div class="tool-tag" style="background:#2563eb">AI</div>
+      </div>
+      <div class="tool-card" style="border-color:rgba(232,66,10,.3)">
+        <div class="tool-icon" style="background:rgba(232,66,10,.15)">🎬</div>
+        <div class="tool-name">Auto Captions</div>
+        <div class="tool-desc">Transcribe with Whisper AI and burn subtitles directly into your video</div>
+        <div class="tool-tag" style="background:var(--accent)">NEW</div>
       </div>
     </div>
   </div>
