@@ -1,0 +1,25 @@
+{
+  "name": "applyai-backend",
+  "version": "1.0.0",
+  "description": "ApplyAI auto-apply backend with Playwright",
+  "main": "backend.js",
+  "scripts": {
+    "start": "node backend.js",
+    "dev": "nodemon backend.js",
+    "install-browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "firebase-admin": "^11.11.0",
+    "nodemailer": "^6.9.7",
+    "playwright": "^1.40.0",
+    "twilio": "^4.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
