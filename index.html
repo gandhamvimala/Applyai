@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ApplyAI — Your Job Application Agent</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/tabler-icons.min.css">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+<!-- mammoth.js for DOCX parsing -->
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#08080f;--surface:#111120;--surface2:#181830;--surface3:#1e1e38;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--border3:rgba(255,255,255,0.22);
+  --accent:#6c5ce7;--accent-h:#7d70ee;--accent-light:#a29bfe;--accent-dim:rgba(108,92,231,0.15);
+  --green:#00c47a;--green-dim:rgba(0,196,122,0.12);
+  --amber:#f5c842;--amber-dim:rgba(245,200,66,0.12);
+  --red:#e05c5c;--red-dim:rgba(224,92,92,0.12);
+  --blue:#5ba8f5;--blue-dim:rgba(91,168,245,0.12);
+  --text:#eeeeff;--text2:#9e9cbf;--text3:#5c5a7a;
+  --r:8px;--r2:12px;--sidebar:230px;
+}
+html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;overflow:hidden}
+.page{display:none;width:100%;height:100vh;overflow:hidden}.page.active{display:flex}.page.scroll{overflow-y:auto}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:.5rem 1.1rem;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);transition:all .15s;font-family:'DM Sans',sans-serif}
+.btn:hover{background:var(--surface2);color:var(--text);border-color:var(--border3)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-h);color:#fff}
+.btn-ghost{border:none;background:transparent;color:var(--text2)}.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-danger{border-color:var(--red);color:var(--red)}.btn-danger:hover{background:var(--red-dim)}
+.btn-success{border-color:var(--green);color:var(--green)}.btn-success:hover{background:var(--green-dim)}
+.btn-block{width:100%;justify-content:center;padding:.7rem}.btn-lg{padding:.75rem 1.5rem;font-size:15px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:var(--green-dim);color:var(--green)}.badge-amber{background:var(--amber-dim);color:var(--amber)}
+.badge-red{background:var(--red-dim);color:var(--red)}.badge-blue{background:var(--blue-dim);color:var(--blue)}
+.badge-purple{background:var(--accent-dim);color:var(--accent-light)}.badge-gray{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.field{margin-bottom:1rem}.field label{display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem}
+.field input,.field select,.field textarea{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:.6rem .85rem;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.1rem 1.25rem}
+.toggle{width:40px;height:22px;background:var(--surface2);border:1px solid var(--border2);border-radius:11px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--accent);border-color:var(--accent)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text2);transition:transform .2s,background .2s}
+.toggle.on::after{transform:translateX(18px);background:#fff}
+.stat-card{background:var(--surface2);border-radius:var(--r);padding:.9rem 1rem}
+.stat-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem}
+.stat-val{font-size:22px;font-weight:600}.stat-sub{font-size:11px;color:var(--text2);margin-top:.2rem}
+.spinner{width:32px;height:32px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.progress{background:var(--surface2);border-radius:4px;height:5px;overflow:hidden}
+.progress-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .4s}
+.avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
+.avatar-sm{width:28px;height:28px;font-size:11px}.avatar-md{width:36px;height:36px;font-size:13px}.avatar-lg{width:48px;height:48px;font-size:16px}
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--surface);border:1px solid var(--green);color:var(--green);padding:.65rem 1rem;border-radius:var(--r);font-size:13px;display:none;z-index:9999;animation:fadeup .25s ease;max-width:320px}
+#toast.error{border-color:var(--red);color:var(--red)}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.divider{border:none;border-top:1px solid var(--border);margin:1rem 0}
+.chip{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.45rem .75rem;font-size:13px;color:var(--text2);cursor:pointer;text-align:center;transition:all .15s;user-select:none}
+.chip.on{background:var(--accent-dim);border-color:var(--accent);color:var(--accent-light);font-weight:500}
+.chip-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:.75rem 0;border-top:1px solid var(--border)}
+.pill{padding:.3rem .75rem;border-radius:20px;font-size:12px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.pill:hover{border-color:var(--border2);color:var(--text)}.pill.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent-light)}
+.skill-chip{background:var(--accent-dim);border:1px solid rgba(108,92,231,.25);border-radius:4px;padding:2px 10px;font-size:12px;color:var(--accent-light)}
+
+/* ── LANDING ── */
+#pg-landing{flex-direction:column;overflow-y:auto}
+.land-nav{display:flex;align-items:center;justify-content:space-between;padding:1rem 2.5rem;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(8,8,15,.92);backdrop-filter:blur(12px);z-index:10}
+.logo-text{font-family:'Instrument Serif',serif;font-size:22px;color:var(--accent-light);font-style:italic;cursor:pointer}
+.logo-text b{color:var(--text);font-style:normal}
+.hero{padding:5rem 2rem 3.5rem;text-align:center;max-width:820px;margin:0 auto}
+.hero-badge{display:inline-flex;align-items:center;gap:.5rem;background:var(--accent-dim);border:1px solid rgba(108,92,231,.3);border-radius:20px;padding:.3rem .9rem;font-size:12px;color:var(--accent-light);margin-bottom:1.5rem}
+.hero h1{font-family:'Instrument Serif',serif;font-size:56px;line-height:1.1;font-weight:400;margin-bottom:1.25rem}
+.hero h1 em{color:var(--accent-light);font-style:italic}
+.hero p{font-size:17px;color:var(--text2);max-width:520px;margin:0 auto 2rem;line-height:1.6}
+.hero-btns{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+.hero-stats{display:flex;gap:2.5rem;justify-content:center;margin-top:3rem;padding-top:2rem;border-top:1px solid var(--border)}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:2rem}
+.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem}
+.feature-icon{width:40px;height:40px;border-radius:var(--r);background:var(--accent-dim);border:1px solid rgba(108,92,231,.25);display:flex;align-items:center;justify-content:center;margin-bottom:1rem;color:var(--accent-light);font-size:20px}
+.pricing-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-top:2rem;text-align:left;max-width:640px;margin-left:auto;margin-right:auto}
+.pricing-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem}
+.pricing-card.featured{border-color:var(--accent);border-width:1.5px}
+.pricing-features{list-style:none;margin:1rem 0 1.5rem;display:flex;flex-direction:column;gap:.5rem}
+.pricing-features li{font-size:13px;color:var(--text2);display:flex;align-items:center;gap:.5rem}
+.pricing-features li i{color:var(--green);font-size:15px}
+
+/* ── AUTH ── */
+#pg-signin,#pg-signup{align-items:center;justify-content:center;background:var(--bg)}
+.auth-box{width:100%;max-width:400px;padding:1rem}
+.auth-logo{font-family:'Instrument Serif',serif;font-size:26px;color:var(--accent-light);font-style:italic;margin-bottom:.25rem;cursor:pointer}
+.auth-logo b{color:var(--text);font-style:normal}
+.auth-divider{display:flex;align-items:center;gap:.75rem;margin:1.25rem 0;color:var(--text3);font-size:12px}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.social-btn{display:flex;align-items:center;justify-content:center;gap:.6rem;width:100%;padding:.6rem;border:1px solid var(--border2);border-radius:var(--r);background:transparent;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .15s;margin-bottom:.5rem}
+.social-btn:hover{background:var(--surface2)}
+
+/* ── ONBOARDING ── */
+#pg-upload,#pg-prefs{align-items:center;justify-content:center;background:var(--bg);padding:2rem}
+.onboard-wrap{width:100%;max-width:500px}
+.steps{display:flex;align-items:center;gap:.5rem;margin-bottom:2rem}
+.step-item{display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--text3)}
+.step-item.active{color:var(--accent-light)}.step-item.done{color:var(--green)}
+.step-num{width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
+.step-sep{color:var(--border2);font-size:16px}
+.upload-zone{border:1.5px dashed var(--border2);border-radius:var(--r2);padding:2.5rem 2rem;text-align:center;cursor:pointer;transition:all .2s}
+.upload-zone:hover{border-color:var(--accent);background:var(--accent-dim)}
+
+/* ── API KEY SETUP ── */
+#pg-apikey{align-items:center;justify-content:center;background:var(--bg);padding:2rem}
+.apikey-wrap{width:100%;max-width:520px}
+.source-row{display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--surface2);border-radius:var(--r);margin-bottom:.5rem;border:1px solid var(--border)}
+.source-icon{width:32px;height:32px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.source-info{flex:1}.source-name{font-size:13px;font-weight:600}.source-desc{font-size:11px;color:var(--text2)}
+
+/* ── APP SHELL ── */
+#pg-app{flex-direction:row}
+.sidebar{width:var(--sidebar);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;height:100vh;overflow-y:auto}
+.sidebar-logo{padding:1.1rem 1.1rem .9rem;border-bottom:1px solid var(--border)}
+.nav-section{padding:.75rem .75rem .25rem}
+.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);padding:.25rem .5rem .5rem;display:block}
+.nav-item{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border-radius:var(--r);cursor:pointer;color:var(--text2);font-size:13px;font-weight:500;transition:all .15s;margin-bottom:1px}
+.nav-item:hover{background:var(--surface2);color:var(--text)}.nav-item.active{background:var(--accent-dim);color:var(--accent-light)}
+.nav-item i{font-size:16px;flex-shrink:0}
+.nav-item .nav-count{margin-left:auto;font-size:10px;background:var(--accent);color:#fff;border-radius:10px;padding:1px 6px;font-weight:600}
+.sidebar-bottom{margin-top:auto;padding:.75rem;border-top:1px solid var(--border)}
+.agent-dot{display:flex;align-items:center;gap:.4rem;padding:.4rem .6rem;background:var(--green-dim);border-radius:var(--r);font-size:12px;color:var(--green);margin-bottom:.5rem;border:1px solid rgba(0,196,122,.2)}
+.agent-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.user-row{display:flex;align-items:center;gap:.6rem;padding:.5rem .4rem;border-radius:var(--r);cursor:pointer}
+.user-row:hover{background:var(--surface2)}
+.main-content{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.5rem;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.topbar-title{font-size:15px;font-weight:600}
+.topbar-right{display:flex;align-items:center;gap:.6rem}
+.page-body{flex:1;overflow-y:auto;padding:1.25rem 1.5rem}
+.sub-page{display:none}.sub-page.active{display:block}
+
+/* ── DASHBOARD ── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem}
+.dash-grid{display:grid;grid-template-columns:1fr 300px;gap:1.25rem}
+.dash-section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem}
+.activity-item{display:flex;gap:.75rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--border)}
+.activity-item:last-child{border-bottom:none}
+.act-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.mini-chart{height:64px;display:flex;align-items:flex-end;gap:4px;margin-top:.5rem}
+.chart-bar{flex:1;border-radius:3px 3px 0 0;background:var(--surface3);border:1px solid rgba(108,92,231,.2);cursor:pointer;transition:background .15s}
+.chart-bar:hover,.chart-bar.today{background:var(--accent)}
+.upcoming-item{display:flex;gap:.75rem;align-items:center;padding:.6rem 0;border-bottom:1px solid var(--border)}
+.upcoming-item:last-child{border-bottom:none}
+.cal-date-box{text-align:center;min-width:38px}
+.cal-day{font-size:20px;font-weight:600;color:var(--accent-light);line-height:1}
+.cal-mon{font-size:10px;color:var(--text3);text-transform:uppercase}
+
+/* ── JOB FEED ── */
+.feed-toolbar{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;flex-wrap:wrap}
+.search-box{display:flex;align-items:center;gap:.5rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.45rem .75rem;flex:1;min-width:200px}
+.search-box input{background:transparent;border:none;outline:none;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;width:100%}
+.job-card-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1rem 1.1rem;margin-bottom:.65rem;cursor:pointer;transition:border-color .15s}
+.job-card-item:hover{border-color:var(--border2)}
+.job-card-item.applied{border-left:3px solid var(--green)}
+.job-top-row{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.6rem}
+.company-logo-box{width:38px;height:38px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.job-title-main{font-size:14px;font-weight:600;line-height:1.3}
+.job-company-name{font-size:12px;color:var(--text2);margin-top:2px}
+.job-tags{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
+.match-pct{margin-left:auto;font-size:12px;font-weight:600;color:var(--green)}
+.job-desc{font-size:12px;color:var(--text2);margin-top:.5rem;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.job-actions-row{display:flex;gap:.4rem;margin-top:.75rem}
+.source-badge{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.src-linkedin{background:#0a66c220;color:#5ba8f5;border:1px solid #0a66c230}
+.src-indeed{background:#2d4a2220;color:#7dc95e;border:1px solid #2d4a2230}
+.src-glassdoor{background:#0caa4120;color:#00c47a;border:1px solid #0caa4130}
+.src-remoteok{background:#da552f20;color:#f5a842;border:1px solid #da552f30}
+.src-other{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+
+/* ── APPLICATIONS ── */
+.app-table{width:100%;border-collapse:collapse}
+.app-table th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);padding:.5rem .75rem;border-bottom:1px solid var(--border);text-align:left;font-weight:500}
+.app-table td{padding:.75rem;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.app-table tr:last-child td{border-bottom:none}
+.app-table tr:hover td{background:var(--surface2)}
+
+/* ── INTERVIEWS ── */
+.interview-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.1rem 1.25rem;margin-bottom:.75rem;display:flex;gap:1rem;align-items:flex-start}
+.interview-date-block{text-align:center;min-width:52px;background:var(--surface2);border-radius:var(--r);padding:.5rem .25rem}
+.int-day{font-size:24px;font-weight:600;line-height:1}
+.int-mon{font-size:10px;color:var(--text3);text-transform:uppercase;margin-top:2px}
+.interview-meta{display:flex;gap:.75rem;font-size:12px;color:var(--text2);flex-wrap:wrap;margin-top:.35rem}
+.interview-meta span{display:flex;align-items:center;gap:.3rem}
+
+/* ── RESUME ── */
+.resume-main{display:grid;grid-template-columns:1fr 280px;gap:1.25rem}
+.resume-preview{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem}
+.resume-section{margin-bottom:1.25rem}
+.resume-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:.4rem;margin-bottom:.75rem}
+.skill-chips{display:flex;gap:.4rem;flex-wrap:wrap}
+.versions-list .version-item{display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;border-radius:var(--r);border:1px solid var(--border);margin-bottom:.4rem;background:var(--surface2)}
+
+/* ── SETTINGS ── */
+.settings-grid{display:grid;grid-template-columns:200px 1fr;gap:1.25rem}
+.s-nav-item{padding:.5rem .75rem;border-radius:var(--r);cursor:pointer;font-size:13px;color:var(--text2);margin-bottom:2px;display:flex;align-items:center;gap:.5rem}
+.s-nav-item:hover{background:var(--surface2);color:var(--text)}.s-nav-item.active{background:var(--accent-dim);color:var(--accent-light)}
+.settings-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.5rem}
+.pref-row-setting{display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--border)}
+.pref-row-setting:last-child{border-bottom:none}
+.danger-zone{border:1px solid var(--red-dim);border-radius:var(--r2);padding:1.25rem;margin-top:1.5rem}
+
+/* ── LOADING STATE ── */
+.job-skeleton{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1rem 1.1rem;margin-bottom:.65rem}
+.skel{background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:4px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--text2)}
+.empty-state i{font-size:40px;color:var(--text3);margin-bottom:.75rem}
+.empty-state h3{font-size:16px;font-weight:600;margin-bottom:.35rem;color:var(--text)}
+
+/* ── API STATUS BAR ── */
+.api-status-bar{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.api-src-pill{display:flex;align-items:center;gap:.35rem;padding:.25rem .65rem;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border)}
+.api-src-pill.loading{color:var(--amber);border-color:var(--amber-dim);background:var(--amber-dim)}
+.api-src-pill.done{color:var(--green);border-color:var(--green-dim);background:var(--green-dim)}
+.api-src-pill.error{color:var(--red);border-color:var(--red-dim);background:var(--red-dim)}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LANDING PAGE
+══════════════════════════════════════ -->
+<div id="pg-landing" class="page active scroll">
+  <nav class="land-nav">
+    <div class="logo-text" onclick="goTo('pg-landing')">Apply<b>AI</b></div>
+    <div style="display:flex;gap:1.75rem;font-size:13px;color:var(--text2)">
+      <span onclick="scrollToSection('section-features')" style="cursor:pointer">Features</span>
+      <span onclick="scrollToSection('section-pricing')" style="cursor:pointer">Pricing</span>
+      <span onclick="scrollToSection('section-how')" style="cursor:pointer">How it works</span>
+    </div>
+    <div style="display:flex;gap:.6rem">
+      <button class="btn" onclick="goTo('pg-signin')">Sign in</button>
+      <button class="btn btn-primary" onclick="goTo('pg-signup')">Get started free</button>
+    </div>
+  </nav>
+  <section class="hero">
+    <div class="hero-badge"><i class="ti ti-robot" aria-hidden="true"></i> Pulls real jobs from LinkedIn · Indeed · Glassdoor</div>
+    <h1>Apply to 100+ jobs<br>while you <em>sleep</em></h1>
+    <p>Upload your resume once. Our AI tailors it per job and auto-submits applications — then texts you when an interview lands.</p>
+    <div class="hero-btns">
+      <button class="btn btn-primary btn-lg" onclick="goTo('pg-signup')"><i class="ti ti-rocket" aria-hidden="true"></i> Start applying free</button>
+      <button class="btn btn-lg" onclick="showDemoModal()">Watch demo <i class="ti ti-player-play" aria-hidden="true"></i></button>
+    </div>
+    <div class="hero-stats">
+      <div style="text-align:center"><div style="font-size:28px;font-weight:600">LinkedIn</div><div style="font-size:12px;color:var(--text2);margin-top:.2rem">Jobs included</div></div>
+      <div style="text-align:center"><div style="font-size:28px;font-weight:600">Indeed</div><div style="font-size:12px;color:var(--text2);margin-top:.2rem">Jobs included</div></div>
+      <div style="text-align:center"><div style="font-size:28px;font-weight:600">Glassdoor</div><div style="font-size:12px;color:var(--text2);margin-top:.2rem">Jobs included</div></div>
+      <div style="text-align:center"><div style="font-size:28px;font-weight:600">20+</div><div style="font-size:12px;color:var(--text2);margin-top:.2rem">More sources</div></div>
+    </div>
+  </section>
+  <!-- HOW IT WORKS -->
+  <section id="section-how" style="padding:2rem 2rem 2.5rem;max-width:960px;margin:0 auto;width:100%">
+    <div style="text-align:center;margin-bottom:2rem">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:.5rem">How it works</div>
+      <h2 style="font-size:26px;font-weight:600">4 steps to your next job</h2>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:var(--accent-light);margin-bottom:.5rem">01</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:.35rem">Upload resume</div>
+        <div style="font-size:12px;color:var(--text2)">Upload once. Saved to cloud forever.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:var(--accent-light);margin-bottom:.5rem">02</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:.35rem">AI tailors it</div>
+        <div style="font-size:12px;color:var(--text2)">AI rewrites your resume for each job.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:var(--accent-light);margin-bottom:.5rem">03</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:.35rem">Auto-applies</div>
+        <div style="font-size:12px;color:var(--text2)">Submits to LinkedIn, Indeed & Glassdoor.</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:1.25rem;text-align:center">
+        <div style="font-size:28px;font-weight:700;color:var(--accent-light);margin-bottom:.5rem">04</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:.35rem">Get alerted</div>
+        <div style="font-size:12px;color:var(--text2)">Text + email when interviews are booked.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="section-features" style="padding:2rem 2rem 3rem;max-width:960px;margin:0 auto;width:100%">
+    <div style="text-align:center;margin-bottom:2rem">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:.5rem">Features</div>
+      <h2 style="font-size:26px;font-weight:600">Everything you need to get hired</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card"><div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div><h3 style="font-size:15px;font-weight:600;margin-bottom:.5rem">Upload once</h3><p style="font-size:13px;color:var(--text2);line-height:1.6">Drop your resume in PDF or DOCX. We parse your skills, experience, and keywords automatically.</p></div>
+      <div class="feature-card"><div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 4-9 9 2 2 9-9z"/><path d="m3 21 3-3"/><path d="M19 2l3 3"/><path d="M19 8l3-3"/><path d="M13 2l3 3"/></svg></div><h3 style="font-size:15px;font-weight:600;margin-bottom:.5rem">AI tailoring</h3><p style="font-size:13px;color:var(--text2);line-height:1.6">For every job, AI rewrites your bullets to match — pulling from LinkedIn, Indeed, Glassdoor & more.</p></div>
+      <div class="feature-card"><div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div><h3 style="font-size:15px;font-weight:600;margin-bottom:.5rem">Auto-submit</h3><p style="font-size:13px;color:var(--text2);line-height:1.6">We fill out application forms across Greenhouse, Lever, Ashby, and direct company sites.</p></div>
+      <div class="feature-card"><div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div><h3 style="font-size:15px;font-weight:600;margin-bottom:.5rem">Instant alerts</h3><p style="font-size:13px;color:var(--text2);line-height:1.6">Get a text or email the moment a recruiter opens your resume or requests an interview.</p></div>
+      <div class="feature-card"><div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg></div><h3 style="font-size:15px;font-weight:600;margin-bottom:.5rem">Interview tracker</h3><p style="font-size:13px;color:var(--text2);line-height:1.6">All your interviews in one place — with prep materials, company notes, and calendar sync.</p></div>
+      <div class="feature-card"><div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><h3 style="font-size:15px;font-weight:600;margin-bottom:.5rem">Analytics</h3><p style="font-size:13px;color:var(--text2);line-height:1.6">Track response rates by source — see which platform gets you the most interviews.</p></div>
+    </div>
+  </section>
+  <section id="section-pricing" style="padding:2rem 2rem 4rem;max-width:860px;margin:0 auto;width:100%;text-align:center">
+    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:.5rem">Pricing</div>
+    <h2 style="font-size:26px;font-weight:600;margin-bottom:1.5rem">Simple, transparent pricing</h2>
+    <div class="pricing-grid">
+      <div class="pricing-card"><div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Starter</div><div style="font-size:32px;font-weight:600;margin:.5rem 0">$0<span style="font-size:14px;font-weight:400;color:var(--text2)">/mo</span></div><ul class="pricing-features"><li><i class="ti ti-check" aria-hidden="true"></i>20 applications/month</li><li><i class="ti ti-check" aria-hidden="true"></i>LinkedIn + Indeed jobs</li><li><i class="ti ti-check" aria-hidden="true"></i>Basic AI tailoring</li><li><i class="ti ti-check" aria-hidden="true"></i>Email notifications</li></ul><button class="btn btn-block" onclick="goTo('pg-signup')">Get started free</button></div>
+      <div class="pricing-card featured"><div style="margin-bottom:.75rem"><span class="badge badge-purple">Most popular</span></div><div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Pro</div><div style="font-size:32px;font-weight:600;margin:.5rem 0">$5<span style="font-size:14px;font-weight:400;color:var(--text2)">/mo</span></div><ul class="pricing-features"><li><i class="ti ti-check" aria-hidden="true"></i>Unlimited applications</li><li><i class="ti ti-check" aria-hidden="true"></i>LinkedIn, Indeed & Glassdoor</li><li><i class="ti ti-check" aria-hidden="true"></i>Advanced AI tailoring</li><li><i class="ti ti-check" aria-hidden="true"></i>SMS + email alerts</li><li><i class="ti ti-check" aria-hidden="true"></i>Interview tracker</li><li><i class="ti ti-check" aria-hidden="true"></i>Resume saved to cloud</li></ul><button class="btn btn-primary btn-block" onclick="goTo('pg-signup')">Start for $5/mo</button></div>
+    </div>
+  </section>
+  <footer style="border-top:1px solid var(--border);padding:1.5rem 2.5rem;display:flex;align-items:center;justify-content:space-between;color:var(--text3);font-size:12px">
+    <div class="logo-text" style="font-size:16px">Apply<b>AI</b></div>
+    <div>© 2026 ApplyAI · Powered by JSearch API</div>
+    <div style="display:flex;gap:1.5rem;cursor:pointer"><span>Privacy</span><span>Terms</span><span>Contact</span></div>
+  </footer>
+</div>
+
+<!-- ══════════════════════════════════════
+     SIGN IN
+══════════════════════════════════════ -->
+<div id="pg-signin" class="page">
+  <div class="auth-box">
+    <div class="auth-logo" onclick="goTo('pg-landing')">Apply<b>AI</b></div>
+    <div style="color:var(--text2);font-size:13px;margin-bottom:1.5rem">Your job application agent</div>
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:1.25rem">Welcome back</h2>
+    <button class="social-btn" onclick="signInWithGoogle()"><i class="ti ti-brand-google" aria-hidden="true"></i> Continue with Google</button>
+    <button class="social-btn" onclick="signInWithGitHub()"><i class="ti ti-brand-github" aria-hidden="true"></i> Continue with GitHub</button>
+    <div class="auth-divider">or email</div>
+    <div class="field"><label>Email</label><input type="email" placeholder="you@email.com" id="si-email"></div>
+    <div class="field"><label>Password</label><input type="password" placeholder="••••••••" id="si-password"></div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:.75rem"><span style="font-size:12px;color:var(--accent-light);cursor:pointer" onclick="forgotPassword()">Forgot password?</span></div>
+    <div id="si-error" style="font-size:12px;color:var(--red);margin-bottom:.5rem;display:none"></div>
+    <button class="btn btn-primary btn-block" onclick="doSignIn()" id="si-btn">Sign in</button>
+    <div style="font-size:13px;color:var(--text2);text-align:center;margin-top:1.25rem">Don't have an account? <span style="color:var(--accent-light);cursor:pointer" onclick="goTo('pg-signup')">Create one</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SIGN UP
+══════════════════════════════════════ -->
+<div id="pg-signup" class="page">
+  <div class="auth-box">
+    <div class="auth-logo" onclick="goTo('pg-landing')">Apply<b>AI</b></div>
+    <div style="color:var(--text2);font-size:13px;margin-bottom:1.5rem">Start applying smarter today</div>
+    <h2 style="font-size:20px;font-weight:600;margin-bottom:1.25rem">Create your account</h2>
+    <button class="social-btn" onclick="signInWithGoogle()"><i class="ti ti-brand-google" aria-hidden="true"></i> Continue with Google</button>
+    <button class="social-btn" onclick="signInWithGitHub()"><i class="ti ti-brand-github" aria-hidden="true"></i> Continue with GitHub</button>
+    <div class="auth-divider">or</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="field"><label>First name</label><input type="text" placeholder="Jane" id="su-fname"></div>
+      <div class="field"><label>Last name</label><input type="text" placeholder="Smith"></div>
+    </div>
+    <div class="field"><label>Email</label><input type="email" placeholder="you@email.com" id="su-email"></div>
+    <div class="field"><label>Password</label><input type="password" placeholder="Min. 6 characters" id="su-password"></div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:.75rem">By signing up you agree to our <span style="color:var(--accent-light);cursor:pointer">Terms</span> and <span style="color:var(--accent-light);cursor:pointer">Privacy Policy</span>.</div>
+    <div id="su-error" style="font-size:12px;color:var(--red);margin-bottom:.5rem;display:none"></div>
+    <button class="btn btn-primary btn-block" onclick="doSignUp()" id="su-btn">Create account →</button>
+    <div style="font-size:13px;color:var(--text2);text-align:center;margin-top:1.25rem">Already have an account? <span style="color:var(--accent-light);cursor:pointer" onclick="goTo('pg-signin')">Sign in</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     API KEY SETUP (JSearch)
+══════════════════════════════════════ -->
+<div id="pg-apikey" class="page">
+  <div class="apikey-wrap">
+    <div class="auth-logo" style="margin-bottom:1.5rem">Apply<b>AI</b></div>
+    <div class="steps">
+      <div class="step-item done"><div class="step-num">✓</div> Account</div>
+      <div class="step-sep">›</div>
+      <div class="step-item active"><div class="step-num">2</div> Resume</div>
+      <div class="step-sep">›</div>
+      <div class="step-item"><div class="step-num">3</div> Preferences</div>
+      <div class="step-sep">›</div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div style="font-size:15px;font-weight:600;margin-bottom:.25rem">Connect job sources</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">We use JSearch API to pull real jobs from LinkedIn, Indeed, Glassdoor & 20+ more. Free account gives 200 requests/month.</div>
+      <div class="source-row"><div class="source-icon" style="background:#0a66c220;color:#5ba8f5">in</div><div class="source-info"><div class="source-name">LinkedIn Jobs</div><div class="source-desc">Millions of jobs updated daily</div></div><span class="badge badge-blue">via JSearch</span></div>
+      <div class="source-row"><div class="source-icon" style="background:#2164f320;color:#4a9ff5">in</div><div class="source-info"><div class="source-name">Indeed</div><div class="source-desc">Largest job aggregator worldwide</div></div><span class="badge badge-blue">via JSearch</span></div>
+      <div class="source-row"><div class="source-icon" style="background:#0caa4120;color:#00c47a">Gd</div><div class="source-info"><div class="source-name">Glassdoor</div><div class="source-desc">Jobs + company reviews & salaries</div></div><span class="badge badge-blue">via JSearch</span></div>
+      <div class="source-row"><div class="source-icon" style="background:#da552f20;color:#f5a842">RO</div><div class="source-info"><div class="source-name">RemoteOK · ZipRecruiter · 20+ more</div><div class="source-desc">All aggregated through one API key</div></div><span class="badge badge-green">Free tier</span></div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div style="font-size:13px;font-weight:600;margin-bottom:.75rem">Your RapidAPI Key (JSearch)</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.75rem">
+        Get your free key at <a href="https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch" target="_blank" style="color:var(--accent-light)">rapidapi.com → JSearch</a> (takes 2 min, free 200 calls/month)
+      </div>
+      <div class="field" style="margin-bottom:.5rem">
+        <label>RapidAPI Key</label>
+        <input type="password" id="api-key-input" placeholder="Paste your key here..." autocomplete="off">
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn" onclick="testApiKey()" id="test-btn"><i class="ti ti-plug" aria-hidden="true"></i> Test connection</button>
+        <div id="api-test-result" style="font-size:12px;display:flex;align-items:center;gap:.35rem"></div>
+      </div>
+      <div style="margin-top:.75rem;padding:.65rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--amber-dim)">
+        <div style="font-size:12px;color:var(--amber);display:flex;align-items:flex-start;gap:.5rem"><i class="ti ti-info-circle" aria-hidden="true" style="margin-top:1px;flex-shrink:0"></i><span>Your key is stored only in your browser's local storage — never sent to our servers. You can also skip this and browse demo jobs.</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:.75rem">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="saveApiKey()">Save & continue →</button>
+      <button class="btn" onclick="skipApiKey()">Skip (use demo data)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     UPLOAD RESUME
+══════════════════════════════════════ -->
+<div id="pg-upload" class="page">
+  <div class="onboard-wrap">
+    <div class="auth-logo" style="margin-bottom:1.25rem">Apply<b>AI</b></div>
+    <div class="steps">
+      <div class="step-item done"><div class="step-num">&#10003;</div> Account</div>
+      <div class="step-sep">›</div>
+      <div class="step-item done"><div class="step-num">&#10003;</div> Resume</div>
+      <div class="step-sep">›</div>
+      <div class="step-item active"><div class="step-num">3</div> Preferences</div>
+      <div class="step-sep">›</div>
+    </div>
+    <input type="file" id="resume-file" accept=".pdf,.doc,.docx" style="display:none" onchange="handleResume(this)">
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('resume-file').click()">
+      <div style="font-size:40px;color:var(--accent-light);margin-bottom:.75rem"><i class="ti ti-file-upload" aria-hidden="true"></i></div>
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:.4rem">Upload your resume</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">PDF, DOC or DOCX · AI tailors it per job automatically</p>
+      <button class="btn btn-primary" onclick="event.stopPropagation();document.getElementById('resume-file').click()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Choose file</button>
+    </div>
+    <div id="upload-progress" style="display:none;padding:2rem;text-align:center">
+      <div class="spinner" style="margin:0 auto 1rem"></div>
+      <div style="font-size:14px;color:var(--text2);margin-bottom:.75rem" id="upload-msg">Uploading resume...</div>
+      <div class="progress" style="max-width:260px;margin:0 auto"><div class="progress-fill" id="upload-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PREFERENCES
+══════════════════════════════════════ -->
+<div id="pg-prefs" class="page scroll">
+  <div class="onboard-wrap" style="margin:2rem auto;padding-bottom:2rem">
+    <div class="auth-logo" style="margin-bottom:1.25rem">Apply<b>AI</b></div>
+    <div class="steps">
+      <div class="step-item done"><div class="step-num">✓</div> Account</div>
+      <div class="step-sep">›</div>
+      <div class="step-item done"><div class="step-num">2</div> Resume</div>
+      <div class="step-sep">›</div>
+      <div class="step-item done"><div class="step-num">✓</div> Resume</div>
+      <div class="step-sep">›</div>
+      <div class="step-item active"><div class="step-num">4</div> Preferences</div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div style="font-size:15px;font-weight:600;margin-bottom:1rem">Job search preferences</div>
+      <div class="field"><label>Job title / role</label><input type="text" id="pref-title" placeholder="e.g. Frontend Engineer, Product Manager" value="Quality Engineer"></div>
+      <div class="field"><label>Location</label><input type="text" id="pref-location" placeholder="e.g. San Francisco, Remote, New York" value="Remote"></div>
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem">Job type</div>
+      <div class="chip-grid">
+        <div class="chip on" onclick="this.classList.toggle('on')">Full-time</div>
+        <div class="chip" onclick="this.classList.toggle('on')">Part-time</div>
+        <div class="chip" onclick="this.classList.toggle('on')">Contract</div>
+        <div class="chip" onclick="this.classList.toggle('on')">Internship</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem;margin-top:.75rem">Work mode</div>
+      <div class="chip-grid">
+        <div class="chip on" onclick="this.classList.toggle('on')">Remote</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">Hybrid</div>
+        <div class="chip" onclick="this.classList.toggle('on')">On-site</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem;margin-top:.75rem">Job sources</div>
+      <div class="chip-grid">
+        <div class="chip on" onclick="this.classList.toggle('on')">LinkedIn</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">Indeed</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">Glassdoor</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">ZipRecruiter</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div style="font-size:15px;font-weight:600;margin-bottom:.5rem">Notifications</div>
+      <div class="toggle-row"><div><div style="font-size:13px;font-weight:500">Auto-apply to 80%+ matches</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Submit resume automatically when confidence is high</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="toggle-row"><div><div style="font-size:13px;font-weight:500">Email notifications</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Interview invites, application updates</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="toggle-row"><div><div style="font-size:13px;font-weight:500">SMS alerts</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Instant texts for interview requests</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+      <div class="field" style="margin-top:.75rem;margin-bottom:0"><label>Phone (for SMS)</label><input type="tel" placeholder="+1 (555) 000-0000"></div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="startApp()">Start applying — fetch real jobs <i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════ -->
+<div id="pg-app" class="page">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-text">Apply<b>AI</b></div></div>
+    <div class="nav-section">
+      <span class="nav-section-label">Overview</span>
+      <div class="nav-item active" onclick="navTo(this,'sp-dashboard')"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</div>
+      <div class="nav-item" onclick="navTo(this,'sp-feed')"><i class="ti ti-briefcase" aria-hidden="true"></i> Job feed <span class="nav-count" id="feed-count">...</span></div>
+    </div>
+    <div class="nav-section">
+      <span class="nav-section-label">Tracking</span>
+      <div class="nav-item" onclick="navTo(this,'sp-applications')"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Applications <span class="nav-count" id="app-count">0</span></div>
+      <div class="nav-item" onclick="navTo(this,'sp-interviews')"><i class="ti ti-calendar-event" aria-hidden="true"></i> Interviews <span class="nav-count" id="int-count">0</span></div>
+    </div>
+    <div class="nav-section">
+      <span class="nav-section-label">Account</span>
+      <div class="nav-item" onclick="navTo(this,'sp-resume')"><i class="ti ti-file-text" aria-hidden="true"></i> My resume</div>
+      <div class="nav-item" onclick="navTo(this,'sp-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications <span class="nav-count" id="notif-count" style="display:none">0</span></div>
+      <div class="nav-item" onclick="navTo(this,'sp-settings')"><i class="ti ti-settings" aria-hidden="true"></i> Settings</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="agent-dot" id="agent-status">Agent active · <span id="agent-applied">0</span> applied today</div>
+      <div class="user-row">
+        <div class="avatar avatar-sm" style="background:var(--accent);color:#fff" id="user-avatar">JS</div>
+        <div><div style="font-size:13px;font-weight:500" id="user-name"></div><div style="font-size:11px;color:var(--text3)" id="user-email"></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <div id="api-mode-badge" style="font-size:11px;padding:.2rem .6rem;border-radius:20px;background:var(--green-dim);color:var(--green);border:1px solid rgba(0,196,122,.2)">● Live API</div>
+        <button class="btn" style="font-size:12px" onclick="refreshJobs()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh jobs</button>
+        <button class="btn btn-primary" style="font-size:12px" id="agent-btn" onclick="toggleAgent()"><i class="ti ti-player-pause" aria-hidden="true"></i> Pause agent</button>
+        <div class="avatar avatar-sm" style="background:var(--accent);color:#fff;cursor:pointer">JS</div>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- DASHBOARD -->
+      <div class="sub-page active" id="sp-dashboard">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">Applied today</div><div class="stat-val" id="dash-today">0</div><div class="stat-sub" id="dash-today-sub">Agent running...</div></div>
+          <div class="stat-card"><div class="stat-label">Jobs found</div><div class="stat-val" id="dash-found">...</div><div class="stat-sub">From LinkedIn, Indeed & more</div></div>
+          <div class="stat-card"><div class="stat-label">Response rate</div><div class="stat-val">–</div><div class="stat-sub">Tracked after first applies</div></div>
+          <div class="stat-card"><div class="stat-label">Interviews</div><div class="stat-val" id="dash-interviews">0</div><div class="stat-sub" id="dash-int-sub">None scheduled yet</div></div>
+        </div>
+        <div class="dash-grid">
+          <div>
+            <div class="card" style="margin-bottom:1rem">
+              <div class="dash-section-title">Applications this week</div>
+              <div class="mini-chart" id="mini-chart"></div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:4px"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+            </div>
+            <div class="card">
+              <div class="dash-section-title">Recent activity</div>
+              <div id="activity-feed">
+                <div class="activity-item"><div class="act-dot" style="background:var(--accent-light)"></div><div><div style="font-size:13px">Searching LinkedIn, Indeed, Glassdoor for matched jobs...</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Just now</div></div></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:1rem">
+              <div class="dash-section-title">Upcoming interviews</div>
+              <div id="dash-interviews-list" style="font-size:13px;color:var(--text2);text-align:center;padding:.75rem 0">No interviews scheduled yet</div>
+            </div>
+            <div class="card">
+              <div class="dash-section-title">Data sources</div>
+              <div id="source-stats" style="display:flex;flex-direction:column;gap:.4rem">
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">LinkedIn</span><span class="badge badge-blue" id="src-linkedin">–</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">Indeed</span><span class="badge badge-green" id="src-indeed">–</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">Glassdoor</span><span class="badge badge-green" id="src-glassdoor">–</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">Other sources</span><span class="badge badge-gray" id="src-other">–</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JOB FEED -->
+      <div class="sub-page" id="sp-feed">
+        <div class="feed-toolbar">
+          <div class="search-box"><i class="ti ti-search" aria-hidden="true" style="color:var(--text3);font-size:16px"></i><input type="text" placeholder="Search jobs, companies, skills..." id="job-search" oninput="filterJobs()"></div>
+          <div class="pill active" onclick="filterSource(this,'all')">All</div>
+          <div class="pill" onclick="filterSource(this,'linkedin')">LinkedIn</div>
+          <div class="pill" onclick="filterSource(this,'indeed')">Indeed</div>
+          <div class="pill" onclick="filterSource(this,'glassdoor')">Glassdoor</div>
+          <div class="pill" onclick="filterSource(this,'remote')">Remote only</div>
+        </div>
+        <div class="api-status-bar" id="api-status-bar"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+          <div style="font-size:13px;color:var(--text2)"><span id="job-count">0</span> jobs found</div>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <select id="sort-select" onchange="sortJobs()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.35rem .65rem;color:var(--text2);font-size:12px;outline:none;cursor:pointer">
+              <option value="match">Sort: Match score</option>
+              <option value="date">Sort: Newest</option>
+              <option value="salary">Sort: Salary</option>
+            </select>
+            <button class="btn" style="font-size:12px" onclick="refreshJobs()"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        <div id="job-list">
+          <div style="text-align:center;padding:3rem;color:var(--text2)"><div class="spinner" style="margin:0 auto 1rem"></div><div>Fetching jobs from LinkedIn, Indeed, Glassdoor...</div></div>
+        </div>
+      </div>
+
+      <!-- APPLICATIONS -->
+      <div class="sub-page" id="sp-applications">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <div class="pill active" onclick="filterPill(this)">All</div>
+            <div class="pill" onclick="filterPill(this)">Applied</div>
+            <div class="pill" onclick="filterPill(this)">Reviewing</div>
+            <div class="pill" onclick="filterPill(this)">Interview</div>
+            <div class="pill" onclick="filterPill(this)">Declined</div>
+          </div>
+          <button class="btn" style="font-size:12px"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="app-table">
+            <thead><tr><th>Company</th><th>Role</th><th>Source</th><th>Applied</th><th>Status</th><th>Match</th></tr></thead>
+            <tbody id="app-table-body">
+              <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text2)">No applications yet — apply to jobs in the Job feed</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- INTERVIEWS -->
+      <div class="sub-page" id="sp-interviews">
+        <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
+          <div style="display:flex;gap:.5rem">
+            <div class="pill active" onclick="filterPill(this)">Upcoming (3)</div>
+            <div class="pill" onclick="filterPill(this)">Completed (0)</div>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px"><i class="ti ti-calendar-plus" aria-hidden="true"></i> Add manually</button>
+        </div>
+        <div id="interviews-list"><div style="text-align:center;padding:2rem;color:var(--text2)"><div style="font-size:28px;margin-bottom:.5rem">📅</div><div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:.35rem">No interviews yet</div><div style="font-size:13px;margin-bottom:1rem">When recruiters schedule interviews they will appear here.</div><button class="btn btn-primary" style="font-size:12px" onclick="showAddInterview()">+ Add manually</button></div></div>
+      </div>
+
+      <!-- RESUME -->
+      <div class="sub-page" id="sp-resume">
+        <div class="resume-main">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+              <h2 style="font-size:16px;font-weight:600">Resume</h2>
+              <div style="display:flex;gap:.5rem">
+                <input type="file" id="resume-file-dash" accept=".pdf,.doc,.docx" style="display:none" onchange="handleResume(this)">
+                <button class="btn" style="font-size:12px" onclick="document.getElementById('resume-file-dash').click()">Upload resume</button>
+                <button class="btn btn-primary" style="font-size:12px" onclick="downloadResume()">Download</button>
+              </div>
+            </div>
+            <div class="resume-preview">
+              <div style="text-align:center;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
+                <div style="font-size:20px;font-weight:600" id="res-name" style="display:none"></div>
+                <div id="res-empty-msg" style="text-align:center;padding:1.5rem;color:var(--text2)">
+                  <div style="font-size:32px;margin-bottom:.5rem">📄</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:.35rem">No resume uploaded yet</div>
+                  <div style="font-size:12px;margin-bottom:1rem">Click "Upload resume" above to get started</div>
+                </div>
+                <div style="font-size:13px;color:var(--text2);margin-top:.25rem" id="res-title-loc"></div>
+                <div style="font-size:12px;color:var(--text3);margin-top:.2rem" id="res-contact"></div>
+              </div>
+                <div class="resume-section"><div class="resume-section-title">Skills</div><div class="skill-chips" id="res-skills-chips"><span style="font-size:13px;color:var(--text2)">Upload your resume to see detected skills</span></div></div>
+                <div class="resume-section"><div class="resume-section-title">Experience</div><div id="res-experience"><span style="font-size:13px;color:var(--text2)">Upload your resume to see experience</span></div></div>
+                <div class="resume-section"><div class="resume-section-title">Education</div><div id="res-education"><span style="font-size:13px;color:var(--text2)">Upload your resume to see education</span></div></div>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:.75rem">
+              <div class="dash-section-title">AI-tailored versions</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:.5rem">Pick a job from your feed to tailor your resume for it:</div>
+              <select id="tailor-job-picker" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.4rem .6rem;font-size:12px;color:var(--text);margin-bottom:.5rem;outline:none">
+                <option value="">— Select a job —</option>
+              </select>
+              <button class="btn btn-primary" style="width:100%;font-size:12px;margin-bottom:.75rem" onclick="tailorFromPicker()">&#10024; Tailor my resume</button>
+              <div id="tailor-picker-result" style="display:none;font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap;padding:.75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"></div>
+            </div>
+            <div class="card">
+              <div class="dash-section-title">Resume score</div>
+              <div style="font-size:36px;font-weight:600;color:var(--green);margin-bottom:.25rem" id="res-score-val">--<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span></div>
+              <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem" id="res-score-bars">
+                <div style="font-size:12px;color:var(--text2);text-align:center">Upload resume to see score</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTIFICATIONS -->
+      <div class="sub-page" id="sp-notifications">
+        <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
+          <div style="display:flex;gap:.5rem"><div class="pill active" onclick="filterPill(this)">All</div><div class="pill" onclick="filterPill(this)">Interviews</div><div class="pill" onclick="filterPill(this)">Applications</div></div>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="markAllRead()">Mark all read</button>
+        </div>
+        <div class="card" style="padding:.5rem 1rem" id="notif-list">
+          <div style="font-size:13px;color:var(--text2);padding:2rem;text-align:center">No notifications yet</div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="sub-page" id="sp-settings">
+        <div class="settings-grid">
+          <div class="card" style="padding:.5rem">
+            <div class="s-nav-item active" onclick="settingsTab(this,'st-profile')"><i class="ti ti-user" aria-hidden="true"></i> Profile</div>
+            <div class="s-nav-item" onclick="settingsTab(this,'st-preferences')"><i class="ti ti-sliders" aria-hidden="true"></i> Job preferences</div>
+            <div class="s-nav-item" onclick="settingsTab(this,'st-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications</div>
+            <div class="s-nav-item" onclick="settingsTab(this,'st-billing')"><i class="ti ti-credit-card" aria-hidden="true"></i> Billing</div>
+          </div>
+          <div>
+            <!-- PROFILE -->
+            <div class="settings-panel" id="st-profile">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Profile</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Your personal information</div>
+              <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
+                <div class="avatar avatar-lg" style="background:var(--accent);color:#fff">JS</div>
+                <button class="btn" style="font-size:12px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> Change photo</button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="field"><label>First name</label><input id="profile-fname" value=""></div>
+                <div class="field"><label>Last name</label><input id="profile-lname" value=""></div>
+              </div>
+              <div class="field"><label>Email</label><input type="email" id="profile-email" value=""></div>
+              <div class="field"><label>Phone (SMS alerts)</label><input type="tel" placeholder="+1 (555) 000-0000"></div>
+              <button class="btn btn-primary" onclick="showToast('Profile saved')">Save changes</button>
+            </div>
+            <!-- API SETTINGS -->
+            <div class="settings-panel" id="st-api" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">API & Job Sources</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Manage your JSearch API key and connected job boards</div>
+              <div style="margin-bottom:1.25rem;padding:1rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+                <div style="font-size:13px;font-weight:600;margin-bottom:.5rem">JSearch API (RapidAPI)</div>
+                <div style="font-size:12px;color:var(--text2);margin-bottom:.75rem">Powers LinkedIn, Indeed, Glassdoor, ZipRecruiter & 20+ sources</div>
+                <div class="field" style="margin-bottom:.5rem"><label>API Key</label><input type="password" id="settings-api-key" placeholder="Paste your RapidAPI key..." value=""></div>
+                <div style="font-size:13px;font-weight:600;margin:.75rem 0 .5rem">Claude AI (Resume Tailoring)</div>
+                <div class="field" style="margin-bottom:.5rem"><label>Anthropic API Key</label><input type="password" id="settings-anthropic-key" placeholder="sk-ant-..." autocomplete="off"></div>
+                <div style="font-size:11px;color:var(--text3);margin-bottom:.75rem;padding:.5rem .65rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">Get a free key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent-light)">console.anthropic.com</a> — used to tailor your resume per job. Key stays in your browser only.</div>
+                <div class="field" style="margin-bottom:.75rem"><label>Cloudflare Worker Proxy URL</label><input type="url" id="settings-proxy-url" placeholder="https://your-worker.your-subdomain.workers.dev" value=""></div>
+                <div style="font-size:11px;color:var(--text3);margin-bottom:.75rem;padding:.5rem .65rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--amber-dim)"><i class="ti ti-info-circle" style="color:var(--amber)"></i> Deploy <b>worker.js</b> to Cloudflare Workers (free), then paste the URL above. This fixes CORS so live jobs load on GitHub Pages.</div>
+                <div style="display:flex;gap:.5rem">
+                  <button class="btn btn-primary" style="font-size:12px" onclick="updateApiKey()">Save settings</button>
+                  <button class="btn" style="font-size:12px" onclick="testApiKey()">Test connection</button>
+                  <div id="settings-test-result" style="font-size:12px;display:flex;align-items:center;gap:.35rem"></div>
+                </div>
+              </div>
+              <div style="font-size:13px;font-weight:600;margin-bottom:.75rem">Active sources</div>
+              <div style="display:flex;flex-direction:column;gap:.5rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">LinkedIn</span><span class="source-badge src-linkedin">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">Indeed</span><span class="source-badge src-indeed">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">Glassdoor</span><span class="source-badge src-glassdoor">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">ZipRecruiter & others</span><span class="source-badge src-other">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+              </div>
+            </div>
+            <!-- PREFERENCES -->
+            <div class="settings-panel" id="st-preferences" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Job preferences</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Controls what jobs the agent searches for</div>
+              <div class="field"><label>Target role</label><input id="set-title" value="Quality Engineer"></div>
+              <div class="field"><label>Location</label><input id="set-location" value="Remote"></div>
+              <div class="field"><label>Min salary</label><input type="number" value="90000"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-top:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">Auto-apply to 80%+ matches</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Automatically submit tailored resume</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+              <button class="btn btn-primary" style="margin-top:1rem" onclick="savePrefsAndRefresh()">Save & refresh jobs</button>
+            </div>
+            <!-- NOTIFICATIONS SETTINGS -->
+            <div class="settings-panel" id="st-notifications" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Notifications</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Choose how you're alerted</div>
+              <div style="display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">Email notifications</div><div style="font-size:12px;color:var(--text2)">Application updates, interview alerts</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">SMS alerts</div><div style="font-size:12px;color:var(--text2)">Urgent alerts only</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0"><div><div style="font-size:13px;font-weight:500">Weekly summary</div><div style="font-size:12px;color:var(--text2)">Email every Monday morning</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+              </div>
+              <button class="btn btn-primary" style="margin-top:1rem" onclick="showToast('Saved')">Save</button>
+            </div>
+            <!-- BILLING -->
+            <div class="settings-panel" id="st-billing" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Billing</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Manage your subscription</div>
+              <div class="card" style="background:var(--accent-dim);border-color:rgba(108,92,231,.3);margin-bottom:1rem"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:15px;font-weight:600">Pro Plan</div><div style="font-size:13px;color:var(--text2);margin-top:2px">Unlimited applications · All sources</div></div><span class="badge badge-purple">Active</span></div><div style="font-size:28px;font-weight:600;margin-top:.75rem;color:var(--accent-light)">$5<span style="font-size:14px;font-weight:400;color:var(--text2)">/month</span></div><div style="font-size:12px;color:var(--text2);margin-top:.25rem">Next billing: June 10, 2026</div></div>
+              <div style="display:flex;gap:.5rem"><button class="btn" style="font-size:12px"><i class="ti ti-download" aria-hidden="true"></i> Invoice</button><button class="btn btn-danger" style="font-size:12px">Cancel plan</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- page-body -->
+  </div><!-- main-content -->
+</div><!-- pg-app -->
+
+<div id="toast"></div>
+
+<script>
+
+// ═══════════════════════════════════════
+// FIREBASE AUTH — Google & GitHub OAuth
+// ═══════════════════════════════════════
+// 🔧 SETUP REQUIRED (one-time, 5 min):
+// 1. Go to https://console.firebase.google.com
+// 2. Create project → Add web app → copy config below
+// 3. Authentication → Sign-in methods → Enable Google + GitHub
+// 4. For GitHub: create OAuth app at github.com/settings/developers
+//    Callback URL: https://YOUR-PROJECT.firebaseapp.com/__/auth/handler
+// 5. Replace the firebaseConfig below with your own values
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCTKQcpzjTOxYywF5-UKqqEv3ImrkgHwc8",
+  authDomain: "applyai-e64eb.firebaseapp.com",
+  projectId: "applyai-e64eb",
+  storageBucket: "applyai-e64eb.firebasestorage.app",
+  messagingSenderId: "177421444976",
+  appId: "1:177421444976:web:05fb4c551bb983d33451b5"
+};
+
+let firebaseApp = null;
+let firebaseAuth = null;
+let firebaseDB = null;
+let firebaseStorage = null;
+
+function initFirebase() {
+  if (firebaseApp) return true;
+  if (firebaseConfig.apiKey === 'YOUR_API_KEY') return false; // not configured yet
+  try {
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+    firebaseAuth = firebase.auth();
+    firebaseAuth.onAuthStateChanged(user => {
+      if (user) handleFirebaseUser(user);
+    });
+    return true;
+  } catch(e) { console.error('Firebase init error:', e); return false; }
+}
+
+// handleFirebaseUser is defined below (after STATE) with all fixes applied
+
+async function signInWithGoogle() {
+  if (!initFirebase()) {
+    // Firebase not configured — show setup modal
+    showFirebaseSetupNotice('Google');
+    return;
+  }
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('email');
+    provider.addScope('profile');
+    const result = await firebaseAuth.signInWithPopup(provider);
+    handleFirebaseUser(result.user);
+  } catch(e) {
+    if (e.code === 'auth/popup-closed-by-user') return;
+    showAuthError('si', 'Google sign-in failed: ' + (e.message || e.code));
+  }
+}
+
+async function signInWithGitHub() {
+  if (!initFirebase()) {
+    showFirebaseSetupNotice('GitHub');
+    return;
+  }
+  try {
+    const provider = new firebase.auth.GithubAuthProvider();
+    provider.addScope('user:email');
+    const result = await firebaseAuth.signInWithPopup(provider);
+    handleFirebaseUser(result.user);
+  } catch(e) {
+    if (e.code === 'auth/popup-closed-by-user') return;
+    showAuthError('si', 'GitHub sign-in failed: ' + (e.message || e.code));
+  }
+}
+
+function showFirebaseSetupNotice(provider) {
+  // Show a helpful modal explaining setup steps
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:1.5rem;max-width:460px;width:100%">
+      <div style="font-size:16px;font-weight:600;margin-bottom:.5rem">${provider} OAuth — Quick Setup Needed</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:1rem;line-height:1.6">
+        To enable real ${provider} login, connect Firebase Auth (free, 5 min):
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:1rem;margin-bottom:1rem;font-size:12px;color:var(--text2);line-height:1.8">
+        1. Go to <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent-light)">console.firebase.google.com</a><br>
+        2. Create project → Add web app → copy config<br>
+        3. Authentication → Sign-in methods → Enable <b style="color:var(--text)">${provider}</b><br>
+        4. Replace <code style="color:var(--accent-light)">firebaseConfig</code> in index.html with your values<br>
+        5. Redeploy to GitHub Pages
+      </div>
+      <div style="font-size:12px;color:var(--amber);margin-bottom:1rem;padding:.5rem .75rem;background:var(--amber-dim);border-radius:8px;border:1px solid rgba(245,200,66,.2)">
+        💡 For now, use email sign-in below — it works without any setup!
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button onclick="this.closest('div[style*=fixed]').remove()" class="btn btn-primary" style="flex:1;justify-content:center">Got it</button>
+        <button onclick="window.open('https://console.firebase.google.com','_blank');this.closest('div[style*=fixed]').remove()" class="btn" style="flex:1;justify-content:center">Open Firebase →</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+}
+
+function showAuthError(form, msg) {
+  const el = document.getElementById(form + '-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+  else showToast(msg, true);
+}
+
+async function doSignIn() {
+  const e = document.getElementById('si-email').value.trim();
+  const p = document.getElementById('si-password')?.value || '';
+  const btn = document.getElementById('si-btn');
+  const errEl = document.getElementById('si-error');
+  if (errEl) errEl.style.display = 'none';
+
+  if (!e) { showAuthError('si','Please enter your email'); return; }
+
+  // Try Firebase email/password if configured
+  if (initFirebase() && p) {
+    btn.textContent = 'Signing in...'; btn.disabled = true;
+    try {
+      const result = await firebaseAuth.signInWithEmailAndPassword(e, p);
+      handleFirebaseUser(result.user);
+    } catch(err) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        showAuthError('si','Invalid email or password');
+      } else {
+        // Fall through to local auth
+        localSignIn(e);
+      }
+    } finally { btn.textContent = 'Sign in'; btn.disabled = false; }
+    return;
+  }
+
+  // Local sign-in (no Firebase)
+  localSignIn(e);
+}
+
+function localSignIn(email) {
+  STATE.userEmail = email;
+  document.getElementById('user-email').textContent = email;
+  localStorage.setItem('jsearch_api_key', STATE.apiKey);
+  goTo('pg-app');
+  showToast('✓ Connected — LinkedIn, Indeed & Glassdoor ready!');
+}
+
+async function doSignUp() {
+  const e = document.getElementById('su-email').value.trim();
+  const n = document.getElementById('su-fname').value.trim();
+  const p = document.getElementById('su-password')?.value || '';
+  const btn = document.getElementById('su-btn');
+  const errEl = document.getElementById('su-error');
+  if (errEl) errEl.style.display = 'none';
+
+  if (!e) { showAuthError('su','Please enter your email'); return; }
+
+  // Try Firebase email/password if configured
+  if (initFirebase() && p) {
+    btn.textContent = 'Creating account...'; btn.disabled = true;
+    try {
+      const result = await firebaseAuth.createUserWithEmailAndPassword(e, p);
+      if (n) await result.user.updateProfile({ displayName: n + ' Smith' });
+      handleFirebaseUser(result.user);
+    } catch(err) {
+      if (err.code === 'auth/email-already-in-use') {
+        showAuthError('su','Email already in use — try signing in');
+      } else if (err.code === 'auth/weak-password') {
+        showAuthError('su','Password must be at least 6 characters');
+      } else {
+        localSignUp(e, n);
+      }
+    } finally { btn.textContent = 'Create account →'; btn.disabled = false; }
+    return;
+  }
+
+  localSignUp(e, n);
+}
+
+function localSignUp(email, fname) {
+  STATE.userEmail = email;
+  STATE.userName = (fname || 'Jane') + ' Smith';
+  const initials = (fname || 'J').charAt(0).toUpperCase() + 'S';
+  document.getElementById('user-email').textContent = email;
+  document.getElementById('user-name').textContent = STATE.userName;
+  document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS') a.textContent=initials; });
+  document.getElementById('res-name').textContent = STATE.userName;
+  localStorage.setItem('jsearch_api_key', STATE.apiKey);
+  goTo('pg-app');
+  showToast('✓ Account created — welcome to ApplyAI!');
+}
+
+async function forgotPassword() {
+  const e = document.getElementById('si-email').value.trim();
+  if (!e) { showAuthError('si','Enter your email first, then click Forgot password'); return; }
+  if (!initFirebase()) { showToast('Enter your email — password reset requires Firebase setup', true); return; }
+  try {
+    await firebaseAuth.sendPasswordResetEmail(e);
+    showToast('Password reset email sent to ' + e);
+  } catch(err) {
+    showAuthError('si', 'Could not send reset email: ' + err.message);
+  }
+}
+
+
+function initFirebase() {
+  if (firebaseApp) return true;
+  if (typeof firebase === 'undefined') { setTimeout(initFirebase, 300); return false; }
+  try {
+    firebaseApp = firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(firebaseConfig);
+    firebaseAuth = firebase.auth();
+    firebaseDB = firebase.firestore();
+    firebaseStorage = firebase.storage();
+    firebaseAuth.onAuthStateChanged(user => {
+      if (user) handleFirebaseUser(user);
+    });
+    return true;
+  } catch(e) { console.error('Firebase error:', e); return false; }
+}
+
+function handleFirebaseUser(user) {
+  const name = user.displayName || user.email.split('@')[0];
+  STATE.userEmail = user.email;
+  STATE.userName = name;
+  const initials = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  ['user-email','user-name','user-avatar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = id === 'user-email' ? user.email : id === 'user-name' ? name : initials;
+  });
+  document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS') a.textContent=initials; });
+
+  // Fix 4: Populate settings profile fields
+  const nameParts = name.split(' ');
+  const fnEl = document.getElementById('profile-fname');
+  const lnEl = document.getElementById('profile-lname');
+  const emEl = document.getElementById('profile-email');
+  if (fnEl) fnEl.value = nameParts[0] || '';
+  if (lnEl) lnEl.value = nameParts.slice(1).join(' ') || '';
+  if (emEl) emEl.value = user.email || '';
+
+  localStorage.setItem('jsearch_api_key', STATE.apiKey);
+
+  // Load cloud data after auth
+  loadUserData(user.uid);
+
+  goTo('pg-app');
+  buildChart();
+  // Auto-fetch jobs on login so dashboard/feed is populated immediately
+  if (STATE.jobs.length === 0) fetchJobs();
+  showToast('Welcome back ' + name);
+}
+
+async function signInWithGoogle() {
+  if (!initFirebase()) { setTimeout(signInWithGoogle, 500); return; }
+  try {
+    const result = await firebaseAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    handleFirebaseUser(result.user);
+  } catch(e) { if (e.code !== 'auth/popup-closed-by-user') showToast('Sign in failed: ' + e.message, true); }
+}
+
+async function signInWithGitHub() {
+  if (!initFirebase()) { setTimeout(signInWithGitHub, 500); return; }
+  try {
+    const result = await firebaseAuth.signInWithPopup(new firebase.auth.GithubAuthProvider());
+    handleFirebaseUser(result.user);
+  } catch(e) { if (e.code !== 'auth/popup-closed-by-user') showToast('Sign in failed: ' + e.message, true); }
+}
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const STATE = {
+  apiKey: localStorage.getItem('jsearch_api_key') || '8a85c9ed3bmshb465717d10fa749p1b9438jsn52b1147d7149',
+  anthropicKey: localStorage.getItem('anthropic_api_key') || '',
+  proxyUrl: localStorage.getItem('proxy_url') || 'https://applyai-production-7152.up.railway.app',
+  demoMode: false,
+  jobs: [],
+  applications: (() => { try { return JSON.parse(localStorage.getItem('applications') || '[]'); } catch(e) { return []; } })(),
+  appliedCount: (function(){ var apps=JSON.parse(localStorage.getItem('applications')||'[]'); return apps.filter(function(a){return a.appStatus==='applied';}).length; })(),
+  agentRunning: true,
+  prefs: { title: 'Quality Engineer', location: 'Remote' },
+  userName: '',
+  userEmail: '',
+  resumeName: localStorage.getItem('resume_name') || '',
+  resumeText: localStorage.getItem('resume_text') || '',
+  resumeURL: localStorage.getItem('resume_url') || '',
+  parsedResume: null,
+  interviews: JSON.parse(localStorage.getItem('interviews') || '[]')
+};
+
+
+// ═══════════════════════════════════════
+// RESUME PARSING
+// ═══════════════════════════════════════
+function parseResumeText(text) {
+  if (!text || text.length < 10) return { name: STATE.userName, skills: [], expSections: [], education: '', summary: '', title: '', email: STATE.userEmail };
+  const lines = text.split('\n').map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 1; });
+  const name = lines[0] && lines[0].length < 60 ? lines[0] : (STATE.userName || '');
+  const emailMatch = text.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
+  const email = emailMatch ? emailMatch[0] : STATE.userEmail;
+  const phoneMatch = text.match(/(\+?1?[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
+  const phone = phoneMatch ? phoneMatch[0] : '';
+  const skillKeywords = ['Python','Java','JavaScript','TypeScript','React','Angular','Vue','Node','SQL','AWS','Azure','GCP',
+    'Docker','Kubernetes','Git','Linux','HTML','CSS','REST','API','Agile','Scrum','JIRA','Selenium','Playwright',
+    'Automation','Testing','QA','Quality','Cypress','TestNG','JUnit','Jenkins','CI/CD','DevOps','Postman',
+    'Performance','Load Testing','Security','Manual Testing','Test Cases','ISTQB','SDLC','STLC',
+    'C#','Ruby','Swift','Kotlin','MongoDB','PostgreSQL','MySQL','Redis','GraphQL','Figma','Excel','Tableau'];
+  const tl = text.toLowerCase();
+  const skills = skillKeywords.filter(function(s){ return tl.indexOf(s.toLowerCase()) !== -1; }).slice(0,12);
+  const titlePatterns = ['QA Engineer','Quality Engineer','Test Engineer','Software Engineer','Developer',
+    'Manager','Analyst','Designer','Architect','Consultant','Specialist','Lead','Director','DevOps','Data'];
+  var title = 'Quality Engineer';
+  for (var ti = 0; ti < titlePatterns.length; ti++) {
+    if (tl.indexOf(titlePatterns[ti].toLowerCase()) !== -1) { title = titlePatterns[ti]; break; }
+  }
+  var education = '';
+  var eduMatch = text.match(/(Bachelor|Master|B\.S\.|M\.S\.|MBA|PhD|B\.Tech|M\.Tech|Bachelor of|Master of)[^\n]{0,100}/i);
+  if (eduMatch) education = eduMatch[0].trim().slice(0, 100);
+  var summary = '';
+  for (var si = 1; si < Math.min(lines.length, 15); si++) {
+    if (lines[si].length > 60 && lines[si].length < 300) { summary = lines[si]; break; }
+  }
+  var expSections = [];
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  for (var ei = 1; ei < lines.length && expSections.length < 4; ei++) {
+    var hasDate = months.some(function(m){ return lines[ei].indexOf(m) !== -1; }) || /\d{4}/.test(lines[ei]);
+    if (hasDate && lines[ei-1] && lines[ei-1].length > 3 && lines[ei-1].length < 80) {
+      expSections.push(lines[ei-1] + ' | ' + lines[ei]);
+    }
+  }
+  return { name: name, email: email, phone: phone, title: title, skills: skills, expSections: expSections, education: education, summary: summary };
+}
+
+function renderParsedResume(parsed) {
+  if (!parsed) return;
+  var setEl = function(id, v) { var e = document.getElementById(id); if (e) e.textContent = v; };
+  setEl('res-name', parsed.name || STATE.userName);
+
+  // Show name, hide empty msg
+  var resName = document.getElementById('res-name');
+  var resEmpty = document.getElementById('res-empty-msg');
+  if (resName) resName.style.display = 'block';
+  if (resEmpty) resEmpty.style.display = 'none';
+
+  // Title/location
+  var titleLoc = document.getElementById('res-title-loc');
+  if (titleLoc) titleLoc.textContent = parsed.title || '';
+
+  // Contact
+  var contact = document.getElementById('res-contact');
+  if (contact) {
+    var parts = [parsed.email, parsed.phone].filter(Boolean);
+    contact.textContent = parts.join(' | ');
+  }
+
+  // Skills chips
+  var skillsEl = document.getElementById('res-skills-chips');
+  if (skillsEl) {
+    if (parsed.skills && parsed.skills.length > 0) {
+      skillsEl.innerHTML = parsed.skills.map(function(s){ return '<span class="skill-chip">'+s+'</span>'; }).join('');
+    } else {
+      skillsEl.innerHTML = '<span style="font-size:13px;color:var(--text2)">No skills detected</span>';
+    }
+  }
+
+  // Experience
+  var expEl = document.getElementById('res-experience');
+  if (expEl) {
+    if (parsed.expSections && parsed.expSections.length > 0) {
+      expEl.innerHTML = parsed.expSections.map(function(e){ return '<div style="margin-bottom:.5rem;font-size:13px;font-weight:500">'+e+'</div>'; }).join('');
+    } else if (parsed.summary) {
+      expEl.innerHTML = '<div style="font-size:13px;color:var(--text2)">'+parsed.summary.slice(0,250)+'</div>';
+    } else {
+      expEl.innerHTML = '<span style="font-size:13px;color:var(--text2)">Upload resume to see experience</span>';
+    }
+  }
+
+  // Education
+  var eduEl = document.getElementById('res-education');
+  if (eduEl) eduEl.innerHTML = parsed.education ? '<div style="font-size:13px;font-weight:500">'+parsed.education+'</div>' : '<span style="font-size:13px;color:var(--text2)">Not detected</span>';
+
+  // Score
+  var scoreVal = document.getElementById('res-score-val');
+  var scoreBars = document.getElementById('res-score-bars');
+  if (scoreVal) {
+    var skillScore = Math.min(95, 60 + parsed.skills.length * 3);
+    var formatScore = Math.min(95, 70 + (parsed.education?8:0) + (parsed.summary?8:0) + (parsed.expSections.length>0?8:0));
+    var impactScore = Math.min(95, 60 + (parsed.summary?15:0) + (parsed.expSections.length>0?10:0));
+    var total = Math.round((skillScore + formatScore + impactScore) / 3);
+    scoreVal.innerHTML = total + '<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span>';
+    if (scoreBars) scoreBars.innerHTML =
+      '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Skills</span><span style="color:var(--green)">'+skillScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+skillScore+'%;background:var(--green)"></div></div></div>'+
+      '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Formatting</span><span style="color:var(--green)">'+formatScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+formatScore+'%"></div></div></div>'+
+      '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Impact</span><span style="color:var(--amber)">'+impactScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+impactScore+'%;background:var(--amber)"></div></div></div>';
+  }
+
+  // Update job prefs title from resume
+  STATE.prefs.title = parsed.title || STATE.prefs.title;
+  var prefTitle = document.getElementById('pref-title');
+  if (prefTitle && parsed.title) prefTitle.value = parsed.title;
+}
+
+
+// ═══════════════════════════════════════
+// FIRESTORE — Save & Load User Data (no CORS issues)
+// ═══════════════════════════════════════
+const BACKEND = 'https://applyai-production-7152.up.railway.app';
+
+async function saveUserData(uid, data) {
+  // Save to localStorage immediately as fast local backup
+  try { localStorage.setItem('user_data_' + uid, JSON.stringify(data)); } catch(e) {}
+  // Wait up to 3s for firebaseDB to initialize, then save to Firestore
+  let tries = 0;
+  while (!firebaseDB && tries++ < 30) await new Promise(r => setTimeout(r, 100));
+  try {
+    if (!firebaseDB) { console.warn('Firestore not ready, saved to localStorage only'); return; }
+    await firebaseDB.collection('users').doc(uid).set(data, { merge: true });
+  } catch(e) {
+    console.warn('Firestore save error:', e.message);
+  }
+}
+
+async function loadUserData(uid) {
+  let tries = 0;
+  while (!firebaseDB && tries++ < 30) await new Promise(r => setTimeout(r, 100));
+  try {
+    if (!firebaseDB) return;
+    const doc = await firebaseDB.collection('users').doc(uid).get();
+    const data = doc.exists ? doc.data() : null;
+    // Fall back to localStorage if Firestore empty
+    const local = (() => { try { return JSON.parse(localStorage.getItem('user_data_' + uid) || 'null'); } catch(e) { return null; } })();
+    const d = data || local;
+    if (!d) return;
+    if (d.resumeText && d.resumeText.length > 50) {
+      STATE.resumeText = d.resumeText;
+      STATE.resumeName = d.resumeName || '';
+      localStorage.setItem('resume_text', d.resumeText);
+      localStorage.setItem('resume_name', STATE.resumeName);
+      const parsed = parseResumeText(d.resumeText);
+      if (parsed) { STATE.parsedResume = parsed; renderParsedResume(parsed); }
+    }
+    if (d.applications && d.applications.length > 0) {
+      STATE.applications = d.applications;
+      STATE.appliedCount = d.appliedCount || d.applications.length;
+      const ac = document.getElementById('app-count'); if(ac) ac.textContent = STATE.applications.length;
+      const dt = document.getElementById('dash-today'); if(dt) dt.textContent = STATE.appliedCount;
+      renderAppTable();
+    }
+    if (d.interviews && d.interviews.length > 0) STATE.interviews = d.interviews;
+    if (d.prefs && Object.keys(d.prefs).length > 0) STATE.prefs = Object.assign(STATE.prefs, d.prefs);
+  } catch(e) {
+    console.warn('Firestore load error:', e.message);
+  }
+}
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function goTo(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function navTo(el, subId) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.sub-page').forEach(s => s.classList.remove('active'));
+  document.getElementById(subId).classList.add('active');
+  const titles = { 'sp-dashboard':'Dashboard','sp-feed':'Job feed','sp-applications':'Applications','sp-interviews':'Interviews','sp-resume':'My resume','sp-notifications':'Notifications','sp-settings':'Settings' };
+  document.getElementById('topbar-title').textContent = titles[subId] || '';
+  if (subId === 'sp-feed' && STATE.jobs.length === 0) fetchJobs();
+}
+
+
+// ═══════════════════════════════════════
+// API KEY
+// ═══════════════════════════════════════
+async function testApiKey() {
+  const key = document.getElementById('api-key-input')?.value || document.getElementById('settings-api-key')?.value || '';
+  const resultEl = document.getElementById('api-test-result') || document.getElementById('settings-test-result');
+  if (!key) { showToast('Paste your API key first', true); return; }
+  resultEl.innerHTML = '<span style="color:var(--amber)">Testing...</span>';
+  try {
+    const res = await fetch('https://jsearch.p.rapidapi.com/search?query=software+engineer&page=1&num_pages=1', {
+      headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' }
+    });
+    if (res.ok) {
+      resultEl.innerHTML = '<i class="ti ti-check" style="color:var(--green)"></i><span style="color:var(--green)">Connected!</span>';
+      showToast('API key works! Connected to JSearch.');
+    } else {
+      resultEl.innerHTML = '<i class="ti ti-x" style="color:var(--red)"></i><span style="color:var(--red)">Invalid key</span>';
+    }
+  } catch {
+    resultEl.innerHTML = '<i class="ti ti-x" style="color:var(--red)"></i><span style="color:var(--red)">Connection failed</span>';
+  }
+}
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (key) {
+    STATE.apiKey = key;
+    localStorage.setItem('jsearch_api_key', key);
+    STATE.demoMode = false;
+  } else {
+    STATE.demoMode = true;
+  }
+  goTo('pg-app');
+}
+
+function skipApiKey() {
+  STATE.demoMode = true;
+  showToast('Using demo data — add your API key in Settings anytime');
+  goTo('pg-app');
+}
+
+function updateApiKey() {
+  const key = document.getElementById('settings-api-key').value.trim();
+  const proxy = (document.getElementById('settings-proxy-url')?.value || '').trim().replace(/\/$/, '');
+  const antKey = (document.getElementById('settings-anthropic-key')?.value || '').trim();
+  if (antKey) { STATE.anthropicKey = antKey; localStorage.setItem('anthropic_api_key', antKey); }
+  if (!key) { showToast('Paste your API key first', true); return; }
+  STATE.apiKey = key;
+  localStorage.setItem('jsearch_api_key', key);
+  if (proxy) {
+    STATE.proxyUrl = proxy;
+    localStorage.setItem('proxy_url', proxy);
+  }
+  STATE.demoMode = false;
+  showToast('Settings saved! Refreshing jobs...');
+  setTimeout(() => { STATE.jobs = []; fetchJobs(); }, 500);
+}
+
+// ═══════════════════════════════════════
+// RESUME UPLOAD
+// ═══════════════════════════════════════
+function handleResume(input) {
+  if (!input || !input.files || !input.files[0]) {
+    showToast('No file selected', true);
+    return;
+  }
+  const file = input.files[0];
+  showToast('Reading ' + file.name + '...');
+  STATE.resumeName = file.name;
+  localStorage.setItem('resume_name', file.name);
+
+  const isDocx = file.name.toLowerCase().endsWith('.docx');
+
+  // Fix 2: Use mammoth.js for DOCX, fallback raw text for PDF/txt
+  if (isDocx && typeof mammoth !== 'undefined') {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      mammoth.extractRawText({ arrayBuffer: e.target.result })
+        .then(function(result) {
+          processResumeText(result.value, file);
+        })
+        .catch(function(err) {
+          console.warn('mammoth error, falling back:', err);
+          extractRawTextFallback(e.target.result, file);
+        });
+    };
+    reader.onerror = function() { showToast('Error reading file', true); };
+    reader.readAsArrayBuffer(file);
+  } else {
+    const reader = new FileReader();
+    reader.onerror = function() { showToast('Error reading file', true); };
+    reader.onload = function(e) { extractRawTextFallback(e.target.result, file); };
+    reader.readAsArrayBuffer(file);
+  }
+
+  input.value = '';
+}
+
+function extractRawTextFallback(arrayBuffer, file) {
+  let text = '';
+  try {
+    const bytes = new Uint8Array(arrayBuffer);
+    const raw = new TextDecoder('utf-8', {fatal:false}).decode(bytes);
+    text = raw.replace(/<[^>]+>/g, ' ')
+              .replace(/[^a-zA-Z0-9 .,@()\-:+\/\n]/g, ' ')
+              .replace(/ {2,}/g, ' ')
+              .trim();
+    if (text.length < 100) {
+      text = file.name.replace(/[_.-]/g, ' ').replace(/resume/gi, '').trim();
+    }
+  } catch(err) {
+    text = file.name;
+  }
+  processResumeText(text, file);
+}
+
+function processResumeText(text, file) {
+  STATE.resumeText = text;
+  localStorage.setItem('resume_text', text.slice(0, 8000));
+
+  try {
+    const parsed = parseResumeText(text);
+    STATE.parsedResume = parsed;
+    if (parsed) renderParsedResume(parsed);
+  } catch(err) {
+    console.error('Parse error:', err);
+  }
+
+  // Fix 3: Save to Railway DB — use Firebase uid if available, else guest key
+  const uid = (firebaseAuth && firebaseAuth.currentUser)
+    ? firebaseAuth.currentUser.uid
+    : ('guest_' + (STATE.userEmail || 'user').replace(/[^a-z0-9]/gi,'_'));
+
+  saveUserData(uid, {
+    name: STATE.userName,
+    email: STATE.userEmail,
+    resumeName: file.name,
+    resumeText: text.slice(0, 8000),
+    resumeDate: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})
+  });
+
+  showToast('✓ Resume saved: ' + file.name);
+
+  // Auto-refresh jobs using the role detected from resume
+  STATE.jobs = [];
+  fetchJobs();
+}
+
+function downloadResume() {
+  // Generate a clean HTML resume from parsed data and trigger download
+  const p = STATE.parsedResume || {};
+  const name = p.name || STATE.userName || 'Resume';
+  const skills = (p.skills || []).join(' • ') || '';
+  const exp = (p.expSections || []).join('\n') || p.summary || '';
+  const edu = p.education || '';
+  const email = p.email || STATE.userEmail || '';
+  const phone = p.phone || '';
+  const linkedin = p.linkedin || '';
+  const title = p.title || 'QA Engineer';
+  const contact = [email, phone, linkedin].filter(Boolean).join('  |  ');
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>${name} — Resume</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 750px; margin: 40px auto; padding: 0 30px; color: #222; font-size: 14px; line-height: 1.6; }
+  h1 { font-size: 26px; margin-bottom: 2px; letter-spacing: 1px; }
+  .subtitle { font-size: 14px; color: #555; margin-bottom: 4px; }
+  .contact { font-size: 12px; color: #555; margin-bottom: 20px; }
+  hr { border: none; border-top: 1px solid #ccc; margin: 14px 0; }
+  h2 { font-size: 12px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; color: #444; margin: 18px 0 6px; }
+  p { margin: 4px 0; }
+  .skills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skill { background: #f0f0f0; padding: 2px 10px; border-radius: 3px; font-size: 12px; }
+  @media print { body { margin: 20px; } }
+</style></head><body>
+<h1>${name.toUpperCase()}</h1>
+<div class="subtitle">${title}</div>
+<div class="contact">${contact}</div>
+<hr>
+${skills ? '<h2>Skills</h2><div class="skills">' + skills.split(' • ').map(s => '<span class="skill">' + s + '</span>').join('') + '</div><hr>' : ''}
+${exp ? '<h2>Experience</h2>' + exp.split('\n').map(line => '<p>' + line + '</p>').join('') + '<hr>' : ''}
+${edu ? '<h2>Education</h2><p>' + edu + '</p>' : ''}
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (name.replace(/ /g, '_') || 'Resume') + '.html';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  showToast('Resume downloaded — open in browser and Print → Save as PDF');
+}
+
+function startApp() {
+  STATE.prefs.title = document.getElementById('pref-title').value || 'Frontend Engineer';
+  STATE.prefs.location = document.getElementById('pref-location').value || 'Remote';
+  goTo('pg-app');
+  buildChart();
+  fetchJobs();
+}
+
+// ═══════════════════════════════════════
+// JSEARCH API — FETCH REAL JOBS
+// ═══════════════════════════════════════
+function updateApiModeBadge(isDemo) {
+  const b = document.getElementById('api-mode-badge');
+  if (!b) return;
+  if (isDemo) {
+    b.textContent = '● Demo mode';
+    b.style.background = 'var(--amber-dim)';
+    b.style.color = 'var(--amber)';
+    b.style.borderColor = 'rgba(245,200,66,.2)';
+  } else {
+    b.textContent = '● Live API';
+    b.style.background = 'var(--green-dim)';
+    b.style.color = 'var(--green)';
+    b.style.borderColor = 'rgba(0,196,122,.2)';
+  }
+}
+
+function setApiStatusBar(state) {
+  const bar = document.getElementById('api-status-bar');
+  if (!bar) return;
+  const sources = ['LinkedIn','Indeed','Glassdoor','ZipRecruiter'];
+  if (state === 'loading') {
+    bar.innerHTML = sources.map(s => '<div class="api-src-pill loading"><i class="ti ti-loader"></i>' + s + '</div>').join('');
+  } else if (state === 'live') {
+    bar.innerHTML = sources.map(s => '<div class="api-src-pill done"><i class="ti ti-check"></i>' + s + '</div>').join('') + '<div class="api-src-pill done"><i class="ti ti-check"></i>+20 more</div>';
+  } else if (state === 'demo') {
+    bar.innerHTML = '<div class="api-src-pill" style="color:var(--amber)"><i class="ti ti-info-circle"></i>Demo mode</div>';
+  } else if (state === 'error') {
+    bar.innerHTML = '<div class="api-src-pill error"><i class="ti ti-alert-triangle"></i>API error</div>';
+  }
+}
+
+function updateApiModeBadge(isDemo) {
+  const badge = document.getElementById('api-mode-badge');
+  if (!badge) return;
+  if (isDemo) {
+    badge.textContent = 'Demo mode';
+    badge.style.background = 'rgba(253,203,110,.15)';
+    badge.style.color = '#fdcb6e';
+    badge.style.borderColor = 'rgba(253,203,110,.3)';
+  } else {
+    badge.textContent = 'Live API';
+    badge.style.background = 'rgba(0,196,122,.15)';
+    badge.style.color = 'var(--green)';
+    badge.style.borderColor = 'rgba(0,196,122,.3)';
+  }
+}
+
+function loadDemoJobs() {
+  STATE.jobs = getDemoJobs();
+  STATE.demoMode = true;
+  setApiStatusBar('demo');
+  renderJobs();
+  updateDashStats();
+  updateApiModeBadge(true);
+  addActivity('Loaded demo jobs — paste your API key in Settings for live data', 'amber');
+  populateTailorPicker();
+}
+
+async function fetchJobs() {
+  const list = document.getElementById('job-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text2)"><div class="spinner" style="margin:0 auto 1rem"></div><div>Finding jobs matched to your profile...</div></div>';
+  setApiStatusBar('loading');
+
+  if (!STATE.anthropicKey) {
+    const list = document.getElementById('job-list');
+    if (list) list.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text2)"><div style="font-size:28px;margin-bottom:1rem">🔑</div><div style="font-size:15px;font-weight:600;margin-bottom:.5rem">Add your Claude API key</div><div style="font-size:13px;margin-bottom:1rem">Go to <b>Settings → Claude AI</b> and paste your key from <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent-light)">console.anthropic.com</a></div><button class="btn btn-primary" onclick="navTo(document.querySelector('[onclick*=sp-settings]'),'sp-settings')">Go to Settings</button></div>';
+    setApiStatusBar('demo');
+    return;
+  }
+
+  const title = (STATE.prefs && STATE.prefs.title) || (STATE.parsedResume && STATE.parsedResume.title) || 'Quality Engineer';
+  const loc = (STATE.prefs && STATE.prefs.location) || 'Remote';
+  const skills = (STATE.parsedResume && STATE.parsedResume.skills) ? STATE.parsedResume.skills.slice(0,8).join(', ') : 'QA, Testing, Automation, Selenium';
+
+  const prompt = 'Generate 25 realistic job listings for a ' + title + ' with skills: ' + skills + '. Location: ' + loc + '. Return ONLY a valid JSON array, no markdown fences, no explanation. Each object must have: id (unique short string), title, company (use real companies like Google, Salesforce, Atlassian, ServiceNow, Oracle, Adobe, Cisco, JPMorgan, Deloitte, Accenture), location, salary (like "$120k-$150k"), description (2 sentences about the role and requirements), applyUrl (like https://careers.google.com/jobs/123), source (one of: linkedin, indeed, glassdoor, remoteok, other), match (integer 78-97), tags (array of 3 skill strings).';
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'x-api-key': STATE.anthropicKey
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 6000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!resp.ok) { throw new Error('API error ' + resp.status); }
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
+    if (!data.content || !data.content[0]) throw new Error('Empty response');
+
+    let text = data.content[0].text.trim();
+    text = text.replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'').trim();
+    const jobs = JSON.parse(text);
+    if (!Array.isArray(jobs) || jobs.length === 0) throw new Error('Invalid jobs array');
+
+    STATE.jobs = jobs.map(function(j) {
+      return {
+        id: j.id || Math.random().toString(36).slice(2),
+        title: j.title || title,
+        company: j.company || 'Company',
+        location: j.location || loc,
+        salary: j.salary || 'Competitive',
+        description: j.description || '',
+        applyUrl: j.applyUrl || '#',
+        source: j.source || 'other',
+        match: j.match || 85,
+        tags: j.tags || [],
+        logo: (j.company||'CO').slice(0,2).toUpperCase(),
+        logoColor: getLogoColor(j.company||''),
+        remote: (j.location||'').toLowerCase().includes('remote'),
+        type: 'FULLTIME',
+        applied: false,
+        appStatus: null
+      };
+    });
+
+    STATE.demoMode = false;
+    setApiStatusBar('live');
+    renderJobs();
+    updateDashStats();
+    updateApiModeBadge(false);
+    populateTailorPicker();
+    const fc = document.getElementById('feed-count');
+    if (fc) fc.textContent = STATE.jobs.length;
+    addActivity('Found ' + STATE.jobs.length + ' jobs matched to your profile', 'green');
+
+  } catch(e) {
+    console.error('fetchJobs error:', e.message, e.stack);
+    // Show error visually so we can debug
+    const list = document.getElementById('job-list');
+    if (list) list.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--red)">Error: ' + e.message + '<br><br><button class="btn" onclick="loadDemoJobs()">Load demo jobs</button></div>';
+    loadDemoJobs();
+  }
+}
+
+function normalizeJob(j) {
+  const src = (j.job_publisher || '').toLowerCase();
+  let source = 'other';
+  if (src.includes('linkedin')) source = 'linkedin';
+  else if (src.includes('indeed')) source = 'indeed';
+  else if (src.includes('glassdoor')) source = 'glassdoor';
+  else if (src.includes('zip') || src.includes('remote')) source = 'remoteok';
+
+  const sal = j.job_min_salary && j.job_max_salary
+    ? `$${Math.round(j.job_min_salary/1000)}k–$${Math.round(j.job_max_salary/1000)}k`
+    : j.job_salary_currency ? 'Salary listed' : 'Not listed';
+
+  return {
+    id: j.job_id || Math.random().toString(36).slice(2),
+    title: j.job_title || 'Software Engineer',
+    company: j.employer_name || 'Company',
+    location: j.job_city ? `${j.job_city}, ${j.job_country || ''}` : (j.job_is_remote ? 'Remote' : j.job_country || 'Unknown'),
+    remote: !!j.job_is_remote,
+    type: j.job_employment_type || 'FULLTIME',
+    salary: sal,
+    source: source,
+    publisher: j.job_publisher || 'Job board',
+    description: j.job_description ? j.job_description.slice(0, 200) + '...' : '',
+    applyUrl: j.job_apply_link || '#',
+    logo: (j.employer_name || 'Co').slice(0,2).toUpperCase(),
+    logoColor: getLogoColor(j.employer_name || ''),
+    match: Math.floor(Math.random() * 25 + 72),
+    applied: false,
+    datePosted: j.job_posted_at_datetime_utc || new Date().toISOString()
+  };
+}
+
+function getDemoJobs() {
+  return [
+    {id:'d1',title:'Senior Frontend Engineer',company:'Stripe',location:'San Francisco, CA',remote:true,type:'FULLTIME',salary:'$140k–$180k',source:'linkedin',publisher:'LinkedIn',description:'Build the next generation of payment interfaces. Work with React, TypeScript, and GraphQL on products used by millions.',applyUrl:'#',logo:'ST',logoColor:'#162035,#5ba8f5',match:96,applied:false},
+    {id:'d2',title:'Product Engineer',company:'Notion',location:'Remote',remote:true,type:'FULLTIME',salary:'$120k–$160k',source:'indeed',publisher:'Indeed',description:'Join the product team to build the future of productivity tools. We love React, TypeScript, and thoughtful design.',applyUrl:'#',logo:'NO',logoColor:'#1c1530,#a29bfe',match:91,applied:false},
+    {id:'d3',title:'Full Stack Engineer',company:'Linear',location:'Remote',remote:true,type:'FULLTIME',salary:'$130k–$170k',source:'glassdoor',publisher:'Glassdoor',description:'Build tools that developers love. We work on a fast codebase with React, Node.js, and PostgreSQL.',applyUrl:'#',logo:'LI',logoColor:'#102418,#00c47a',match:88,applied:false},
+    {id:'d4',title:'Frontend Engineer II',company:'Vercel',location:'New York, NY',remote:false,type:'FULLTIME',salary:'$110k–$150k',source:'linkedin',publisher:'LinkedIn',description:'Shape the future of frontend deployment. Work across Next.js, React, and our edge infrastructure.',applyUrl:'#',logo:'VE',logoColor:'#1a1a1a,#ffffff',match:84,applied:false},
+    {id:'d5',title:'Software Engineer, Frontend',company:'Rippling',location:'San Francisco, CA',remote:false,type:'FULLTIME',salary:'$125k–$165k',source:'indeed',publisher:'Indeed',description:'Help us build the OS for businesses. Our stack is React, TypeScript, and Python.',applyUrl:'#',logo:'RI',logoColor:'#0e1a2b,#5ba8f5',match:81,applied:false},
+    {id:'d6',title:'UI Engineer',company:'Figma',location:'Remote',remote:true,type:'FULLTIME',salary:'$135k–$175k',source:'glassdoor',publisher:'Glassdoor',description:'Design and build the interfaces that designers use. Deep knowledge of canvas, WebGL, and browser APIs a plus.',applyUrl:'#',logo:'FI',logoColor:'#1a0e2b,#c8b4ff',match:79,applied:false},
+    {id:'d7',title:'React Developer',company:'Shopify',location:'Remote',remote:true,type:'FULLTIME',salary:'$115k–$155k',source:'linkedin',publisher:'LinkedIn',description:'Build commerce experiences for millions of merchants worldwide. React, TypeScript, and GraphQL stack.',applyUrl:'#',logo:'SH',logoColor:'#0e1f14,#96bf48',match:77,applied:false},
+    {id:'d8',title:'Frontend Infrastructure Engineer',company:'Airbnb',location:'San Francisco, CA',remote:false,type:'FULLTIME',salary:'$150k–$195k',source:'indeed',publisher:'Indeed',description:'Own the frontend build system, design system, and developer experience for Airbnb.com.',applyUrl:'#',logo:'AB',logoColor:'#2a0e14,#ff5a5f',match:74,applied:false},
+  ];
+}
+
+function getLogoColor(name) {
+  const colors = ['#162035,#5ba8f5','#1c1530,#a29bfe','#102418,#00c47a','#1a1a1a,#ffffff','#0e1a2b,#74b9ff','#1a0e2b,#c8b4ff','#0e1f14,#96bf48','#2a0e14,#ff5a5f'];
+  let h = 0;
+  for (let c of name) h = (h * 31 + c.charCodeAt(0)) % colors.length;
+  return colors[h];
+}
+
+function sourceLabel(src) {
+  const map = { linkedin:'LinkedIn', indeed:'Indeed', glassdoor:'Glassdoor', remoteok:'RemoteOK', other:'Other' };
+  return map[src] || src;
+}
+
+function sourceClass(src) {
+  const map = { linkedin:'src-linkedin', indeed:'src-indeed', glassdoor:'src-glassdoor', remoteok:'src-remoteok', other:'src-other' };
+  return map[src] || 'src-other';
+}
+
+function renderJobs(jobs) {
+  const list = jobs || filterJobList();
+  const el = document.getElementById('job-list');
+  document.getElementById('job-count').textContent = list.length;
+  document.getElementById('feed-count').textContent = list.length;
+
+  if (list.length === 0) {
+    el.innerHTML = `<div class="empty-state"><i class="ti ti-briefcase-off" aria-hidden="true"></i><h3>No jobs found</h3><p>Try a different search or add your API key in Settings</p></div>`;
+    return;
+  }
+
+  // source counts for dashboard
+  const counts = { linkedin:0, indeed:0, glassdoor:0, other:0 };
+  STATE.jobs.forEach(j => {
+    if (j.source === 'linkedin') counts.linkedin++;
+    else if (j.source === 'indeed') counts.indeed++;
+    else if (j.source === 'glassdoor') counts.glassdoor++;
+    else counts.other++;
+  });
+  const set = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  set('src-linkedin', counts.linkedin + ' jobs');
+  set('src-indeed', counts.indeed + ' jobs');
+  set('src-glassdoor', counts.glassdoor + ' jobs');
+  set('src-other', counts.other + ' jobs');
+  set('dash-found', STATE.jobs.length);
+
+  el.innerHTML = list.map(j => {
+    const [bg,fg] = (j.logoColor || '#162035,#5ba8f5').split(',');
+    const typeLabel = j.type === 'FULLTIME' ? 'Full-time' : j.type === 'PARTTIME' ? 'Part-time' : j.type || 'Full-time';
+    return `
+    <div class="job-card-item ${j.applied?'applied':''}" data-id="${j.id}" data-source="${j.source}" data-remote="${j.remote}">
+      <div class="job-top-row">
+        <div style="display:flex;gap:.75rem;align-items:flex-start">
+          <div class="company-logo-box" style="background:${bg};color:${fg}">${j.logo}</div>
+          <div>
+            <div class="job-title-main">${escHtml(j.title)}</div>
+            <div class="job-company-name">${escHtml(j.company)} · ${escHtml(j.location)}</div>
+          </div>
+        </div>
+        ${j.applied ? '<span class="badge badge-green">Applied</span>' : '<span class="badge badge-gray">New</span>'}
+      </div>
+      <div class="job-tags">
+        <span class="source-badge ${sourceClass(j.source)}">${sourceLabel(j.source)}</span>
+        ${j.remote ? '<div class="tag">Remote</div>' : '<div class="tag">On-site</div>'}
+        <div class="tag">${j.salary}</div>
+        <div class="tag">${typeLabel}</div>
+        <div class="match-pct">${j.match}% match</div>
+      </div>
+      ${j.description ? `<div class="job-desc">${escHtml(j.description)}</div>` : ''}
+      <div class="job-actions-row">
+        ${j.applied
+          ? `<button class="btn btn-success" style="font-size:12px;cursor:default">Opened job page</button><a href="${j.applyUrl}" target="_blank" class="btn" style="font-size:12px">View job</a>`
+          : `<button class="btn btn-primary" style="font-size:12px" onclick="applyJob('${j.id}',this)">Apply now</button>
+             <button class="btn" style="font-size:12px;color:var(--accent-light);border-color:var(--accent-light)" onclick="tailorFromJobCard('${j.id}',this)">&#10024; Tailor resume</button>
+             <button class="btn" style="font-size:12px" onclick="skipJob('${j.id}',this)">Skip</button>`
+        }
+      </div>
+      <div id="tailor-${j.id}" style="display:none;margin-top:.75rem;padding:.75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap"></div>
+    </div>`;
+  }).join('');
+}
+
+function filterJobList() {
+  const q = (document.getElementById('job-search')?.value || '').toLowerCase();
+  const src = document.querySelector('#sp-feed .pill.active')?.textContent.toLowerCase() || 'all';
+  let jobs = STATE.jobs.filter(j => {
+    const text = `${j.title} ${j.company} ${j.location} ${j.description}`.toLowerCase();
+    const matchQ = !q || text.includes(q);
+    const matchSrc = src === 'all' || (src === 'remote only' ? j.remote : j.source === src);
+    return matchQ && matchSrc;
+  });
+  const sort = document.getElementById('sort-select')?.value || 'match';
+  if (sort === 'match') jobs.sort((a,b) => b.match - a.match);
+  else if (sort === 'date') jobs.sort((a,b) => new Date(b.datePosted) - new Date(a.datePosted));
+  return jobs;
+}
+
+function filterJobs() { renderJobs(); }
+function filterSource(el, src) {
+  el.closest('.feed-toolbar').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  renderJobs();
+}
+function sortJobs() { renderJobs(); }
+function filterPill(el) {
+  el.closest('div').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  // Only filter application table pills (not interview pills)
+  const tbody = document.getElementById('app-table-body');
+  if (!tbody) return;
+  const filter = el.textContent.trim().toLowerCase();
+  if (filter === 'all') { renderAppTable(); return; }
+  const filtered = STATE.applications.filter(j => {
+    const s = (j.appStatus || 'opened').toLowerCase();
+    if (filter === 'applied') return s === 'applied';
+    if (filter === 'reviewing') return s === 'reviewing';
+    if (filter === 'interview') return s === 'interview';
+    if (filter === 'declined') return s === 'declined';
+    return true;
+  });
+  renderAppTable(filtered);
+}
+
+// ═══════════════════════════════════════
+// APPLY TO JOB
+// ═══════════════════════════════════════
+function applyJob(id, btn) {
+  const job = STATE.jobs.find(j => j.id === id);
+  if (!job || job.applied) return;
+  if (job.applyUrl && job.applyUrl !== '#') window.open(job.applyUrl, '_blank');
+  btn.textContent = 'Opened ↗';
+  btn.disabled = true;
+  btn.style.opacity = '.6';
+  setTimeout(() => {
+    job.applied = true;
+    job.appStatus = 'opened';
+    // Prevent duplicate applications
+    if (!STATE.applications.find(a => a.id === job.id || (a.title === job.title && a.company === job.company))) {
+      STATE.applications.unshift(job);
+    }
+    document.getElementById('app-count').textContent = STATE.applications.length;
+    try { localStorage.setItem('applications', JSON.stringify(STATE.applications)); } catch(e) {}
+    renderJobs();
+    renderAppTable();
+    addActivity('Opened ' + job.company + ' — ' + job.title, 'amber');
+    addTailoredVersion(job);
+    showToast('Job page opened — mark as Applied once you submit!');
+  }, 800);
+}
+
+function markApplied(id) {
+  const idx = STATE.applications.findIndex(j => j.id === id);
+  if (idx === -1) { showToast('Job not found', true); return; }
+  STATE.applications[idx].appStatus = 'applied';
+  STATE.appliedCount++;
+  // Persist both back to localStorage
+  localStorage.setItem('applied_count', STATE.appliedCount);
+  try { localStorage.setItem('applications', JSON.stringify(STATE.applications)); } catch(e) {}
+  const dt = document.getElementById('dash-today'); if(dt) dt.textContent = STATE.appliedCount;
+  const aa = document.getElementById('agent-applied'); if(aa) aa.textContent = STATE.appliedCount;
+  renderAppTable();
+  addActivity('Applied to ' + STATE.applications[idx].company + ' — ' + STATE.applications[idx].title, 'green');
+  showToast('Marked as Applied to ' + STATE.applications[idx].company + '!');
+  // Trigger AI resume tailoring for this job
+  tailorResumeForJob(STATE.applications[idx], null);
+}
+
+function updateAppStatus(id, newStatus) {
+  const idx = STATE.applications.findIndex(j => j.id === id);
+  if (idx === -1) return;
+  const prev = STATE.applications[idx].appStatus;
+  STATE.applications[idx].appStatus = newStatus;
+  // Track applied count
+  if (newStatus === 'applied' && prev !== 'applied') {
+    STATE.appliedCount++;
+    localStorage.setItem('applied_count', STATE.appliedCount);
+    const dt = document.getElementById('dash-today'); if(dt) dt.textContent = STATE.appliedCount;
+    const aa = document.getElementById('agent-applied'); if(aa) aa.textContent = STATE.appliedCount;
+    // Trigger AI tailoring on first mark-applied
+    tailorResumeForJob(STATE.applications[idx], null);
+  }
+  if (newStatus === 'interview') {
+    STATE.appliedCount = Math.max(0, STATE.appliedCount);
+    const ic = document.getElementById('int-count');
+    const interviewCount = STATE.applications.filter(a => a.appStatus === 'interview').length;
+    if (ic) ic.textContent = interviewCount;
+    const di = document.getElementById('dash-interviews'); if(di) di.textContent = interviewCount;
+    addActivity('Interview scheduled at ' + STATE.applications[idx].company + '!', 'accent');
+    showToast('Interview status set for ' + STATE.applications[idx].company + ' 🎉');
+  } else if (newStatus === 'declined') {
+    addActivity('Declined by ' + STATE.applications[idx].company, 'red');
+    showToast('Marked as declined.');
+  } else if (newStatus === 'reviewing') {
+    addActivity('Application reviewing at ' + STATE.applications[idx].company, 'accent-light');
+    showToast('Marked as Reviewing.');
+  }
+  try { localStorage.setItem('applications', JSON.stringify(STATE.applications)); } catch(e) {}
+  renderAppTable();
+}
+
+function tailorFromJobCard(id, btn) {
+  var job = STATE.jobs.find(function(j){return j.id===id;});
+  if (!job) return;
+  if (!STATE.resumeText || STATE.resumeText.length < 50) { showToast('Upload your resume first', true); return; }
+  var resultEl = document.getElementById('tailor-' + id);
+  if (!resultEl) return;
+  if (resultEl.style.display === 'block' && resultEl.dataset.done === '1') {
+    resultEl.style.display = 'none';
+    btn.innerHTML = '&#10024; Tailor resume';
+    return;
+  }
+  resultEl.style.display = 'block';
+  resultEl.dataset.done = '0';
+  resultEl.innerHTML = '<i class="ti ti-loader"></i> Tailoring for ' + escHtml(job.company) + '... (~10 sec)';
+  btn.innerHTML = '&#8987; Tailoring...';
+  btn.disabled = true;
+  tailorResumeForJob(job, resultEl).then(function() {
+    btn.innerHTML = '&#10003; Done';
+    btn.disabled = false;
+    resultEl.dataset.done = '1';
+    if (!resultEl.nextElementSibling || !resultEl.nextElementSibling.classList.contains('tailor-dl-btn')) {
+      var dl = document.createElement('button');
+      dl.className = 'btn btn-primary tailor-dl-btn';
+      dl.style.cssText = 'font-size:11px;margin-top:.4rem;padding:4px 12px';
+      dl.textContent = 'Download tailored resume';
+      dl.onclick = function(){ downloadTailoredResume(job, resultEl.textContent); };
+      resultEl.after(dl);
+    }
+  }).catch(function() {
+    btn.innerHTML = '&#10024; Tailor resume';
+    btn.disabled = false;
+  });
+}
+
+async function tailorResumeForJob(job, resultEl) {
+  var prompt = 'You are a professional resume writer. Rewrite ONLY the summary and top 3-4 bullet points of this resume to better match the job. Be concise, ATS-friendly, and use keywords from the job naturally.\n\nRESUME:\n' + STATE.resumeText.slice(0,3000) + '\n\nJOB TITLE: ' + job.title + '\nCOMPANY: ' + job.company + '\nDESCRIPTION: ' + (job.description || job.title + ' role') + '\n\nRespond with ONLY the rewritten sections.';
+  var resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      'x-api-key': STATE.anthropicKey
+    },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{role:'user',content:prompt}] })
+  });
+  var data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  var text = data.content && data.content[0] ? data.content[0].text : 'Could not generate.';
+  if (resultEl) resultEl.textContent = text;
+  return text;
+}
+
+function downloadTailoredResume(job, tailoredText) {
+  var name = (STATE.parsedResume && STATE.parsedResume.name) ? STATE.parsedResume.name : (STATE.userName || 'Resume');
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + name + '</title>'
+    + '<style>body{font-family:Georgia,serif;max-width:750px;margin:40px auto;padding:0 30px;color:#222;font-size:14px;line-height:1.6}'
+    + 'h1{font-size:26px;margin-bottom:4px}h2{font-size:11px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#444;margin:16px 0 6px}'
+    + 'hr{border:none;border-top:1px solid #ccc;margin:12px 0}p{margin:3px 0}</style></head><body>'
+    + '<h1>' + name.toUpperCase() + '</h1>'
+    + '<p style="color:#555">' + (STATE.userEmail||'') + '</p><hr>'
+    + '<h2>Tailored for ' + job.company + ' — ' + job.title + '</h2>'
+    + tailoredText.split('\n').map(function(l){return '<p>'+l+'</p>';}).join('')
+    + '</body></html>';
+  var blob = new Blob([html],{type:'text/html'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = name.replace(/ /g,'_')+'_'+job.company.replace(/ /g,'_')+'.html';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(url);a.remove();},1000);
+  showToast('Downloaded — open in Chrome, Print to save as PDF');
+}
+
+function populateTailorPicker() {
+  var sel = document.getElementById('tailor-job-picker');
+  if (!sel || !STATE.jobs.length) return;
+  sel.innerHTML = '<option value="">— Select a job —</option>';
+  STATE.jobs.forEach(function(j) {
+    var opt = document.createElement('option');
+    opt.value = j.id;
+    opt.textContent = j.company + ' — ' + j.title;
+    sel.appendChild(opt);
+  });
+}
+
+function tailorFromPicker() {
+  var sel = document.getElementById('tailor-job-picker');
+  if (!sel || !sel.value) { showToast('Select a job first', true); return; }
+  var job = STATE.jobs.find(function(j){return j.id===sel.value;});
+  if (!job) { showToast('Job not found — refresh jobs', true); return; }
+  if (!STATE.resumeText || STATE.resumeText.length < 50) { showToast('Upload your resume first', true); return; }
+  var resultEl = document.getElementById('tailor-picker-result');
+  resultEl.style.display = 'block';
+  resultEl.textContent = 'Tailoring for ' + job.company + '... (~10 sec)';
+  tailorResumeForJob(job, resultEl).then(function(text) {
+    // Add download button if not there
+    var existing = document.getElementById('tailor-picker-dl');
+    if (!existing) {
+      var dl = document.createElement('button');
+      dl.id = 'tailor-picker-dl';
+      dl.className = 'btn btn-primary';
+      dl.style.cssText = 'font-size:11px;margin-top:.5rem;padding:4px 12px';
+      dl.textContent = 'Download tailored resume';
+      dl.onclick = function(){ downloadTailoredResume(job, resultEl.textContent); };
+      resultEl.after(dl);
+    }
+    showToast('Resume tailored for ' + job.company + '!');
+  }).catch(function(e){ showToast('Error: ' + e.message, true); });
+}
+
+function skipJob(id, btn) {
+  STATE.jobs = STATE.jobs.filter(j => j.id !== id);
+  renderJobs();
+}
+
+// ═══════════════════════════════════════
+// APPLICATIONS TABLE
+// ═══════════════════════════════════════
+function renderAppTable(list) {
+  const tbody = document.getElementById('app-table-body');
+  if (!tbody) return;
+  const apps = list || STATE.applications;
+  if (apps.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text2)">' + (list ? 'No applications with this status' : 'No applications yet — apply to jobs in the Job feed') + '</td></tr>';
+    return;
+  }
+  const rows = apps.map(j => {
+    const [bg,fg] = (j.logoColor||'#162035,#5ba8f5').split(',');
+    const statusColors = { applied:'var(--green)', reviewing:'var(--accent-light)', interview:'#a29bfe', declined:'var(--red)', opened:'#fdcb6e' };
+    const statusColor = statusColors[j.appStatus] || statusColors.opened;
+    const statusLabel = j.appStatus ? (j.appStatus.charAt(0).toUpperCase() + j.appStatus.slice(1)) : 'Opened';
+    const statusDropdown = '<select class="status-select-btn" data-jid="' + escHtml(j.id) + '" style="background:transparent;border:1px solid ' + statusColor + ';color:' + statusColor + ';border-radius:20px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;outline:none">'
+      + ['Opened','Applied','Reviewing','Interview','Declined'].map(s => '<option value="' + s.toLowerCase() + '"' + (j.appStatus === s.toLowerCase() ? ' selected' : '') + '>' + (j.appStatus === s.toLowerCase() ? '&#9679; ' : '') + s + '</option>').join('')
+      + '</select>';
+    return '<tr>'
+      + '<td><div style="display:flex;align-items:center;gap:.5rem"><div class="company-logo-box" style="background:' + bg + ';color:' + fg + ';width:28px;height:28px;font-size:10px">' + j.logo + '</div>' + escHtml(j.company) + '</div></td>'
+      + '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(j.title) + '</td>'
+      + '<td><span class="source-badge ' + sourceClass(j.source) + '">' + sourceLabel(j.source) + '</span></td>'
+      + '<td style="color:var(--text2)">' + new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) + '</td>'
+      + '<td>' + statusDropdown + '</td>'
+      + '<td style="color:var(--green);font-weight:600">' + j.match + '%</td>'
+      + '</tr>';
+  }).join('');
+  tbody.innerHTML = rows;
+  // Wire status dropdowns
+  tbody.querySelectorAll('.status-select-btn').forEach(sel => {
+    sel.addEventListener('change', () => updateAppStatus(sel.dataset.jid, sel.value));
+  });
+}
+
+// ═══════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════
+function addActivity(text, color) {
+  const feed = document.getElementById('activity-feed');
+  if (!feed) return;
+  const colors = { green:'var(--green)', accent:'var(--accent)', amber:'var(--amber)', red:'var(--red)', 'accent-light':'var(--accent-light)' };
+  const dot = colors[color] || 'var(--accent-light)';
+  const item = document.createElement('div');
+  item.className = 'activity-item';
+  item.innerHTML = `<div class="act-dot" style="background:${dot}"></div><div><div style="font-size:13px">${escHtml(text)}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Just now</div></div>`;
+  feed.insertBefore(item, feed.firstChild);
+  if (feed.children.length > 8) feed.removeChild(feed.lastChild);
+}
+
+
+
+function updateDashStats() {
+  const el = document.getElementById('dash-found');
+  if (el) el.textContent = STATE.jobs.length;
+}
+
+function buildChart() {
+  const vals = [0,0,0,0,0,0,STATE.appliedCount||0];
+  const max = Math.max(...vals,1);
+  const c = document.getElementById('mini-chart');
+  if (!c) return;
+  c.innerHTML = vals.map((v,i) => `<div class="chart-bar${i===6?' today':''}" style="height:${Math.max(4,Math.round(v/max*100))}%" title="${v} apps"></div>`).join('');
+}
+
+function refreshJobs() { STATE.jobs=[]; fetchJobs(); showToast('Refreshing jobs from all sources...'); }
+
+function savePrefsAndRefresh() {
+  const t = document.getElementById('set-title');
+  const l = document.getElementById('set-location');
+  if (t) STATE.prefs.title = t.value;
+  if (l) STATE.prefs.location = l.value;
+  showToast('Preferences saved! Refreshing jobs...');
+  setTimeout(() => { STATE.jobs=[]; fetchJobs(); }, 500);
+}
+
+function toggleAgent() {
+  STATE.agentRunning = !STATE.agentRunning;
+  const btn = document.getElementById('agent-btn');
+  const dot = document.getElementById('agent-status');
+  if (STATE.agentRunning) {
+    btn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i> Pause agent';
+    dot.style.background = 'var(--green-dim)'; dot.style.color = 'var(--green)';
+    showToast('Agent resumed — applying to new jobs');
+  } else {
+    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Resume agent';
+    dot.style.background = 'var(--amber-dim)'; dot.style.color = 'var(--amber)';
+    showToast('Agent paused');
+  }
+}
+
+function markAllRead() {
+  const c = document.getElementById('notif-count');
+  if (c) { c.textContent = '0'; c.style.display = 'none'; }
+  showToast('All notifications marked as read');
+}
+
+function settingsTab(el, panelId) {
+  el.closest('.card').querySelectorAll('.s-nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  const panels = ['st-profile','st-api','st-preferences','st-notifications','st-billing'];
+  panels.forEach(id => { const p=document.getElementById(id); if(p) p.style.display = id===panelId?'':'none'; });
+  if (panelId === 'st-api') {
+    const inp = document.getElementById('settings-api-key');
+    if (inp) inp.value = STATE.apiKey || '';
+    const antInp = document.getElementById('settings-anthropic-key');
+  if (antInp && STATE.anthropicKey) antInp.value = STATE.anthropicKey;
+  const pinp = document.getElementById('settings-proxy-url');
+    if (pinp) pinp.value = STATE.proxyUrl || '';
+  }
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _toastTimer;
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = isError ? 'error' : '';
+  t.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.style.display = 'none', 3500);
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  if (STATE.apiKey) document.getElementById('api-key-input').value = STATE.apiKey;
+  const dt = document.getElementById('dash-today'); if(dt) dt.textContent = STATE.appliedCount;
+  const aa = document.getElementById('agent-applied'); if(aa) aa.textContent = STATE.appliedCount;
+  const ac = document.getElementById('app-count'); if(ac) ac.textContent = STATE.applications.length;
+  if (STATE.applications.length > 0) renderAppTable();
+  buildChart();
+});
+
+function showDemoModal(){var m=document.getElementById('demo-modal');if(m)m.style.display='flex';}
+function hideDemoModal(){var m=document.getElementById('demo-modal');if(m)m.style.display='none';}
+</script>
+
+<div id="demo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)hideDemoModal()">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);max-width:600px;width:92%;padding:2rem;position:relative;max-height:90vh;overflow-y:auto">
+    <button onclick="hideDemoModal()" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">&#10005;</button>
+    <div style="font-size:18px;font-weight:600;margin-bottom:1.5rem">How ApplyAI works</div>
+    <div style="display:flex;flex-direction:column;gap:.65rem">
+      <div style="display:flex;gap:1rem;padding:.9rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:20px;font-weight:700;color:var(--accent-light);min-width:28px">01</div>
+        <div><div style="font-size:13px;font-weight:600;margin-bottom:.2rem">Upload your resume</div><div style="font-size:12px;color:var(--text2)">Upload PDF or DOCX. AI parses your skills, experience and title automatically.</div></div>
+      </div>
+      <div style="display:flex;gap:1rem;padding:.9rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:20px;font-weight:700;color:var(--accent-light);min-width:28px">02</div>
+        <div><div style="font-size:13px;font-weight:600;margin-bottom:.2rem">AI finds matching jobs</div><div style="font-size:12px;color:var(--text2)">Jobs from LinkedIn, Indeed &amp; Glassdoor scored against your resume. Best matches first.</div></div>
+      </div>
+      <div style="display:flex;gap:1rem;padding:.9rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:20px;font-weight:700;color:var(--accent-light);min-width:28px">03</div>
+        <div><div style="font-size:13px;font-weight:600;margin-bottom:.2rem">&#10024; Tailor resume per job</div><div style="font-size:12px;color:var(--text2)">Click Tailor on any job card. Claude rewrites your bullets to match that job in ~10 seconds. Download and apply.</div></div>
+      </div>
+      <div style="display:flex;gap:1rem;padding:.9rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+        <div style="font-size:20px;font-weight:700;color:var(--accent-light);min-width:28px">04</div>
+        <div><div style="font-size:13px;font-weight:600;margin-bottom:.2rem">Track every application</div><div style="font-size:12px;color:var(--text2)">Apply on the job site, mark it done. Update status as you hear back: Reviewing, Interview, Declined.</div></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:1.25rem;font-size:13px" onclick="hideDemoModal();goTo('pg-signup')">Get started free</button>
+  </div>
+</div>
+</body>
+</html>
