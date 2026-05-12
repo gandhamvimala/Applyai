@@ -729,7 +729,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
     <div class="nav-section">
       <span class="nav-section-label">Account</span>
       <div class="nav-item" onclick="navTo(this,'sp-resume')"><i class="ti ti-file-text" aria-hidden="true"></i> My resume</div>
-      <div class="nav-item" onclick="navTo(this,'sp-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications <span class="nav-count" id="notif-count" style="display:none">0</span></div>
+      <div class="nav-item" onclick="navTo(this,'sp-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications <span class="nav-count" id="notif-count">5</span></div>
       <div class="nav-item" onclick="navTo(this,'sp-settings')"><i class="ti ti-settings" aria-hidden="true"></i> Settings</div>
     </div>
     <div class="sidebar-bottom">
@@ -908,9 +908,11 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
             </div>
             <div class="card">
               <div class="dash-section-title">Resume score</div>
-              <div style="font-size:36px;font-weight:600;color:var(--green);margin-bottom:.25rem" id="resume-score-val">–<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span></div>
-              <div id="resume-score-bars" style="display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem">
-                <div style="font-size:13px;color:var(--text2);text-align:center;padding:.5rem">Upload your resume to see score</div>
+              <div style="font-size:36px;font-weight:600;color:var(--green);margin-bottom:.25rem">87<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span></div>
+              <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem">
+                <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Keywords</span><span style="color:var(--green)">92%</span></div><div class="progress"><div class="progress-fill" style="width:92%;background:var(--green)"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Formatting</span><span style="color:var(--green)">88%</span></div><div class="progress"><div class="progress-fill" style="width:88%"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Impact statements</span><span style="color:var(--amber)">74%</span></div><div class="progress"><div class="progress-fill" style="width:74%;background:var(--amber)"></div></div></div>
               </div>
             </div>
           </div>
@@ -924,10 +926,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
           <button class="btn btn-ghost" style="font-size:12px" onclick="markAllRead()">Mark all read</button>
         </div>
         <div class="card" style="padding:.5rem 1rem" id="notif-list">
-          <div id="notif-empty" style="font-size:13px;color:var(--text2);padding:2rem;text-align:center">
-            <i class="ti ti-bell-off" style="font-size:28px;color:var(--text3);display:block;margin-bottom:.5rem"></i>
-            No notifications yet
-          </div>
+          <div style="font-size:13px;color:var(--text2);padding:.75rem;text-align:center">No notifications yet</div>
         </div>
       </div>
 
@@ -936,7 +935,7 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
         <div class="settings-grid">
           <div class="card" style="padding:.5rem">
             <div class="s-nav-item active" onclick="settingsTab(this,'st-profile')"><i class="ti ti-user" aria-hidden="true"></i> Profile</div>
-            
+            <div class="s-nav-item" onclick="settingsTab(this,'st-api')"><i class="ti ti-plug" aria-hidden="true"></i> API & Sources</div>
             <div class="s-nav-item" onclick="settingsTab(this,'st-preferences')"><i class="ti ti-sliders" aria-hidden="true"></i> Job preferences</div>
             <div class="s-nav-item" onclick="settingsTab(this,'st-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications</div>
             <div class="s-nav-item" onclick="settingsTab(this,'st-billing')"><i class="ti ti-credit-card" aria-hidden="true"></i> Billing</div>
@@ -951,10 +950,10 @@ html,body{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);colo
                 <button class="btn" style="font-size:12px"><i class="ti ti-upload" aria-hidden="true"></i> Change photo</button>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
-                <div class="field"><label>First name</label><input id="profile-fname" value=""></div>
-                <div class="field"><label>Last name</label><input id="profile-lname" value=""></div>
+                <div class="field"><label>First name</label><input value="Jane"></div>
+                <div class="field"><label>Last name</label><input value="Smith"></div>
               </div>
-              <div class="field"><label>Email</label><input type="email" id="profile-email" value=""></div>
+              <div class="field"><label>Email</label><input type="email" value="jane@email.com"></div>
               <div class="field"><label>Phone (SMS alerts)</label><input type="tel" placeholder="+1 (555) 000-0000"></div>
               <button class="btn btn-primary" onclick="showToast('Profile saved')">Save changes</button>
             </div>
@@ -1059,30 +1058,7 @@ function initFirebase() {
     firebaseStorage = firebase.storage();
     firebaseAuth.onAuthStateChanged(user => {
       if (user) {
-        // User is already logged in (page refresh) - go straight to app
-        const currentPage = document.querySelector('.page.active');
-        const isOnAuthPage = currentPage && (currentPage.id === 'pg-signin' || currentPage.id === 'pg-signup' || currentPage.id === 'pg-landing');
-        if (isOnAuthPage) {
-          handleFirebaseUser(user);
-        } else {
-          // Already on app - just update user info
-          const name = user.displayName || user.email.split('@')[0];
-          STATE.userEmail = user.email;
-          STATE.userName = name;
-          const initials = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-          const setEl = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-          setEl('user-email', user.email);
-          setEl('user-name', name);
-          setEl('user-avatar', initials);
-          // Fill settings profile
-          const fn = document.getElementById('profile-fname');
-          const ln = document.getElementById('profile-lname');
-          const em = document.getElementById('profile-email');
-          if (fn) fn.value = name.split(' ')[0] || name;
-          if (ln) ln.value = name.split(' ').slice(1).join(' ') || '';
-          if (em) em.value = user.email;
-          document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS'||a.textContent.trim()==='') a.textContent=initials; });
-        }
+        handleFirebaseUser(user);
         loadUserData(user.uid);
       }
     });
@@ -1118,7 +1094,7 @@ async function loadUserData(uid) {
       if (data.applications && data.applications.length > 0) {
         STATE.applications = data.applications;
         STATE.appliedCount = data.applications.length;
-        const ac = document.getElementById('app-count'); if(ac) ac.textContent = STATE.applications.length;
+        document.getElementById('app-count').textContent = STATE.applications.length;
         document.getElementById('dash-today').textContent = STATE.appliedCount;
         document.getElementById('agent-applied').textContent = STATE.appliedCount;
         renderAppTable();
@@ -1195,15 +1171,6 @@ async function handleFirebaseUser(user) {
   setEl('res-name', name);
   document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS') a.textContent=initials; });
   localStorage.setItem('jsearch_api_key', STATE.apiKey);
-
-  // Fill settings profile fields
-  const fn = document.getElementById('profile-fname');
-  const ln = document.getElementById('profile-lname');
-  const em = document.getElementById('profile-email');
-  const nameParts = name.split(' ');
-  if (fn) fn.value = nameParts[0] || name;
-  if (ln) ln.value = nameParts.slice(1).join(' ') || '';
-  if (em) em.value = email;
 
   // Check if resume already uploaded for this user
   if (firebaseDB) {
@@ -1535,27 +1502,6 @@ function renderParsedResume(parsed) {
       <div style="font-size:11px;color:var(--text3);margin-top:2px">${STATE.resumeSize || ''} - ${STATE.resumeUploadDate || 'Recently uploaded'}</div>
     </div>
   `;
-
-  // Update resume score based on actual content
-  const scoreEl = document.getElementById('resume-score-val');
-  const barsEl = document.getElementById('resume-score-bars');
-  if (scoreEl && parsed) {
-    const skillScore = Math.min(99, 60 + (parsed.skills ? parsed.skills.length * 3 : 0));
-    const hasEdu = parsed.education ? 1 : 0;
-    const hasSummary = parsed.summary ? 1 : 0;
-    const hasExp = (parsed.expSections && parsed.expSections.length > 0) ? 1 : 0;
-    const formatScore = Math.min(99, 70 + (hasEdu + hasSummary + hasExp) * 8);
-    const impactScore = Math.min(99, 60 + (hasSummary * 15) + (hasExp * 10));
-    const total = Math.round((skillScore + formatScore + impactScore) / 3);
-    scoreEl.innerHTML = total + '<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span>';
-    scoreEl.style.color = total >= 80 ? 'var(--green)' : total >= 60 ? 'var(--amber)' : 'var(--red)';
-    if (barsEl) {
-      barsEl.innerHTML =
-        '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Skills detected</span><span style="color:var(--green)">'+skillScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+skillScore+'%;background:var(--green)"></div></div></div>' +
-        '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Formatting</span><span style="color:var(--green)">'+formatScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+formatScore+'%"></div></div></div>' +
-        '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Impact statements</span><span style="color:var(--amber)">'+impactScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+impactScore+'%;background:var(--amber)"></div></div></div>';
-    }
-  }
 
   // Also update the job search prefs with detected title
   if (parsed.title) {
@@ -2019,7 +1965,7 @@ function applyJob(id, btn) {
     STATE.applications.unshift({...job});
     document.getElementById('dash-today').textContent = STATE.appliedCount;
     document.getElementById('agent-applied').textContent = STATE.appliedCount;
-    const ac = document.getElementById('app-count'); if(ac) ac.textContent = STATE.applications.length;
+    document.getElementById('app-count').textContent = STATE.applications.length;
     buildChart();
     renderJobs();
     renderAppTable();
@@ -2141,13 +2087,12 @@ function addActivity(text, color) {
 function addTailoredVersion(job) {
   const el = document.getElementById('tailored-versions');
   if (!el) return;
-  if (el.querySelector('[style*="text-align"]')) el.innerHTML = '';
+  if (el.querySelector('.version-item') === null && el.querySelector('[style*="text-align"]')) el.innerHTML = '';
+  const [bg,fg] = (job.logoColor||'#162035,#5ba8f5').split(',');
   const div = document.createElement('div');
   div.className = 'version-item';
-  div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;border-radius:var(--r);border:1px solid var(--border);margin-bottom:.4rem;background:var(--surface2);cursor:pointer';
-  div.title = 'Click to view original job posting';
-  div.onclick = function() { if (job.applyUrl && job.applyUrl !== '#') window.open(job.applyUrl, '_blank'); else showToast('No job URL available'); };
-  div.innerHTML = '<div><div style="font-size:13px;font-weight:500">' + escHtml(job.company) + ' version</div><div style="font-size:11px;color:var(--text2)">Tailored for ' + escHtml(job.title) + ' - click to view job</div></div><i class="ti ti-external-link" style="color:var(--text2);font-size:14px"></i>';
+  div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;border-radius:var(--r);border:1px solid var(--border);margin-bottom:.4rem;background:var(--surface2)';
+  div.innerHTML = `<div><div style="font-size:13px;font-weight:500">${escHtml(job.company)} version</div><div style="font-size:11px;color:var(--text2)">Tailored for ${escHtml(job.title)}</div></div><button class="btn btn-ghost" style="font-size:11px;padding:.25rem .5rem"><i class="ti ti-download" aria-hidden="true"></i></button>`;
   el.insertBefore(div, el.firstChild);
 }
 
@@ -2343,21 +2288,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (inp && STATE.apiKey) inp.value = STATE.apiKey;
   buildChart();
   renderInterviews();
-  // If Firebase not initialized yet, try init
-  if (!firebaseApp) initFirebase();
-  // Check if user was previously logged in (handles page refresh)
-  setTimeout(() => {
-    if (firebaseAuth && firebaseAuth.currentUser) {
-      const user = firebaseAuth.currentUser;
-      const activePage = document.querySelector('.page.active');
-      if (activePage && (activePage.id === 'pg-landing' || activePage.id === 'pg-signin')) {
-        // Restore session - go to app
-        goTo('pg-app');
-        buildChart();
-        fetchJobs();
+  // Restore interviews from Firestore if logged in
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (uid && firebaseDB) {
+    firebaseDB.collection('users').doc(uid).get().then(doc => {
+      if (doc.exists && doc.data().interviews) {
+        STATE.interviews = doc.data().interviews;
+        renderInterviews();
       }
-    }
-  }, 800); // Wait for Firebase to restore session
+    }).catch(()=>{});
+  }
 });
 </script>
 </body>
