@@ -1,7 +1,0 @@
-flask
-waitress
-werkzeug
-stripe
-requests
-psycopg2-binary>=2.9.0
-Pillow>=10.0.0
