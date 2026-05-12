@@ -1,0 +1,1756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ApplyAI - Your Job Application Agent</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.34.0/tabler-icons.min.css">
+<!-- ══════════════════════════════════════
+     UPLOAD RESUME
+══════════════════════════════════════ -->
+<div id="pg-upload" class="page">
+  <div class="onboard-wrap">
+    <div class="auth-logo" style="margin-bottom:1.25rem">Apply<b>AI</b></div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:2rem">
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--green)"><div style="width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">1</div> Account</div>
+      <div style="color:var(--border2);font-size:16px">›</div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--accent-light)"><div style="width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">2</div> Resume</div>
+      <div style="color:var(--border2);font-size:16px">›</div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--text3)"><div style="width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">3</div> Preferences</div>
+    </div>
+    <input type="file" id="resume-file" accept=".pdf,.doc,.docx" style="display:none" onchange="handleResume(this)">
+
+    <!-- Already uploaded banner -->
+    <div id="upload-already" style="display:none;flex-direction:column;align-items:center;gap:1rem;width:100%">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--green-dim);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--green)"><i class="ti ti-check" aria-hidden="true"></i></div>
+      <div style="text-align:center">
+        <div style="font-size:16px;font-weight:600;margin-bottom:.25rem">Resume already uploaded!</div>
+        <div style="font-size:13px;color:var(--text2)" id="resume-filename">resume.pdf</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:.2rem" id="resume-filemeta"></div>
+      </div>
+      <div style="display:flex;gap:.75rem">
+        <button class="btn btn-primary" onclick="goTo('pg-prefs')">Continue →</button>
+        <button class="btn" onclick="document.getElementById('upload-already').style.display='none';document.getElementById('upload-zone').style.display='block'">Replace resume</button>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('resume-file').click()">
+      <div style="font-size:40px;color:var(--accent-light);margin-bottom:.75rem"><i class="ti ti-file-upload" aria-hidden="true"></i></div>
+      <h3 style="font-size:16px;font-weight:600;margin-bottom:.4rem">Upload your resume</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">PDF, DOC or DOCX · Saved to cloud - never upload again</p>
+      <button class="btn btn-primary" onclick="event.stopPropagation();document.getElementById('resume-file').click()"><i class="ti ti-upload" aria-hidden="true"></i> Choose file</button>
+    </div>
+    <div id="upload-progress" style="display:none;padding:2rem;text-align:center">
+      <div class="spinner" style="margin:0 auto 1rem"></div>
+      <div style="font-size:14px;color:var(--text2);margin-bottom:.75rem" id="upload-msg">Uploading resume...</div>
+      <div class="progress" style="max-width:260px;margin:0 auto"><div class="progress-fill" id="upload-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PREFERENCES
+══════════════════════════════════════ -->
+<div id="pg-prefs" class="page scroll">
+  <div class="onboard-wrap" style="margin:2rem auto;padding-bottom:2rem">
+    <div class="auth-logo" style="margin-bottom:1.25rem">Apply<b>AI</b></div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:2rem">
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--green)"><div style="width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">1</div> Account</div>
+      <div style="color:var(--border2);font-size:16px">›</div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--green)"><div style="width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">2</div> Resume</div>
+      <div style="color:var(--border2);font-size:16px">›</div>
+      <div style="display:flex;align-items:center;gap:.4rem;font-size:12px;color:var(--accent-light)"><div style="width:20px;height:20px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">3</div> Preferences</div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div style="font-size:15px;font-weight:600;margin-bottom:1rem">Job search preferences</div>
+      <div class="field"><label>Job title / role</label><input type="text" id="pref-title" placeholder="e.g. QA Engineer, Quality Engineer" value="Quality Engineer"></div>
+      <div class="field"><label>Location</label><input type="text" id="pref-location" placeholder="e.g. San Francisco, Remote, New York" value="Remote"></div>
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem">Job type</div>
+      <div class="chip-grid">
+        <div class="chip on" onclick="this.classList.toggle('on')">Full-time</div>
+        <div class="chip" onclick="this.classList.toggle('on')">Part-time</div>
+        <div class="chip" onclick="this.classList.toggle('on')">Contract</div>
+        <div class="chip" onclick="this.classList.toggle('on')">Internship</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem;margin-top:.75rem">Work mode</div>
+      <div class="chip-grid">
+        <div class="chip on" onclick="this.classList.toggle('on')">Remote</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">Hybrid</div>
+        <div class="chip" onclick="this.classList.toggle('on')">On-site</div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem;margin-top:.75rem">Job sources</div>
+      <div class="chip-grid">
+        <div class="chip on" onclick="this.classList.toggle('on')">LinkedIn</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">Indeed</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">Glassdoor</div>
+        <div class="chip on" onclick="this.classList.toggle('on')">ZipRecruiter</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div style="font-size:15px;font-weight:600;margin-bottom:.5rem">Notifications</div>
+      <div class="toggle-row"><div><div style="font-size:13px;font-weight:500">Auto-apply to 80%+ matches</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Submit resume automatically when confidence is high</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="toggle-row"><div><div style="font-size:13px;font-weight:500">Email notifications</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Interview invites, application updates</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="toggle-row"><div><div style="font-size:13px;font-weight:500">SMS alerts</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Instant texts for interview requests</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+      <div class="field" style="margin-top:.75rem;margin-bottom:0"><label>Phone (for SMS)</label><input type="tel" placeholder="+1 (555) 000-0000"></div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="startApp()">Start applying - fetch real jobs <i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════ -->
+<div id="pg-app" class="page">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-text">Apply<b>AI</b></div></div>
+    <div class="nav-section">
+      <span class="nav-section-label">Overview</span>
+      <div class="nav-item active" onclick="navTo(this,'sp-dashboard')"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</div>
+      <div class="nav-item" onclick="navTo(this,'sp-feed')"><i class="ti ti-briefcase" aria-hidden="true"></i> Job feed <span class="nav-count" id="feed-count">...</span></div>
+    </div>
+    <div class="nav-section">
+      <span class="nav-section-label">Tracking</span>
+      <div class="nav-item" onclick="navTo(this,'sp-applications')"><i class="ti ti-send" aria-hidden="true"></i> Applications <span class="nav-count" id="app-count">0</span></div>
+      <div class="nav-item" onclick="navTo(this,'sp-interviews')"><i class="ti ti-calendar-event" aria-hidden="true"></i> Interviews <span class="nav-count" id="int-count">0</span></div>
+    </div>
+    <div class="nav-section">
+      <span class="nav-section-label">Account</span>
+      <div class="nav-item" onclick="navTo(this,'sp-resume')"><i class="ti ti-file-text" aria-hidden="true"></i> My resume</div>
+      <div class="nav-item" onclick="navTo(this,'sp-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications <span class="nav-count" id="notif-count" style="display:none">0</span></div>
+      <div class="nav-item" onclick="navTo(this,'sp-settings')"><i class="ti ti-settings" aria-hidden="true"></i> Settings</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="agent-dot" id="agent-status">Agent active · <span id="agent-applied">0</span> applied today</div>
+      <div class="user-row">
+        <div class="avatar avatar-sm" style="background:var(--accent);color:#fff" id="user-avatar">?</div>
+        <div><div style="font-size:13px;font-weight:500" id="user-name">Loading...</div><div style="font-size:11px;color:var(--text3)" id="user-email"></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <div id="api-mode-badge" style="font-size:11px;padding:.2rem .6rem;border-radius:20px;background:var(--green-dim);color:var(--green);border:1px solid rgba(0,196,122,.2)">● Live API</div>
+        <button class="btn" style="font-size:12px" onclick="refreshJobs()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh jobs</button>
+        <button class="btn btn-primary" style="font-size:12px" id="agent-btn" onclick="toggleAgent()"><i class="ti ti-player-pause" aria-hidden="true"></i> Pause agent</button>
+        <div class="avatar avatar-sm" style="background:var(--accent);color:#fff;cursor:pointer">JS</div>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- DASHBOARD -->
+      <div class="sub-page active" id="sp-dashboard">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-label">Applied today</div><div class="stat-val" id="dash-today">0</div><div class="stat-sub" id="dash-today-sub">Agent running...</div></div>
+          <div class="stat-card"><div class="stat-label">Jobs found</div><div class="stat-val" id="dash-found">...</div><div class="stat-sub">From LinkedIn, Indeed & more</div></div>
+          <div class="stat-card"><div class="stat-label">Response rate</div><div class="stat-val">–</div><div class="stat-sub">Tracked after first applies</div></div>
+          <div class="stat-card"><div class="stat-label">Interviews</div><div class="stat-val" id="dash-interviews">0</div><div class="stat-sub" id="dash-int-sub">None scheduled yet</div></div>
+        </div>
+        <div class="dash-grid">
+          <div>
+            <div class="card" style="margin-bottom:1rem">
+              <div class="dash-section-title">Applications this week</div>
+              <div class="mini-chart" id="mini-chart"></div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:4px"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+            </div>
+            <div class="card">
+              <div class="dash-section-title">Recent activity</div>
+              <div id="activity-feed">
+                <div class="activity-item"><div class="act-dot" style="background:var(--accent-light)"></div><div><div style="font-size:13px">Searching LinkedIn, Indeed, Glassdoor for matched jobs...</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Just now</div></div></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:1rem">
+              <div class="dash-section-title">Upcoming interviews</div>
+              <div id="dash-interviews-list"><div style="font-size:13px;color:var(--text2);text-align:center;padding:.75rem 0">No interviews scheduled yet</div></div>
+            </div>
+            <div class="card">
+              <div class="dash-section-title">Data sources</div>
+              <div id="source-stats" style="display:flex;flex-direction:column;gap:.4rem">
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">LinkedIn</span><span class="badge badge-blue" id="src-linkedin">–</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">Indeed</span><span class="badge badge-green" id="src-indeed">–</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">Glassdoor</span><span class="badge badge-green" id="src-glassdoor">–</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;align-items:center"><span style="color:var(--text2)">Other sources</span><span class="badge badge-gray" id="src-other">–</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JOB FEED -->
+      <div class="sub-page" id="sp-feed">
+        <div class="feed-toolbar">
+          <div class="search-box"><i class="ti ti-search" aria-hidden="true" style="color:var(--text3);font-size:16px"></i><input type="text" placeholder="Search jobs, companies, skills..." id="job-search" oninput="filterJobs()"></div>
+          <div class="pill active" onclick="filterSource(this,'all')">All</div>
+          <div class="pill" onclick="filterSource(this,'linkedin')">LinkedIn</div>
+          <div class="pill" onclick="filterSource(this,'indeed')">Indeed</div>
+          <div class="pill" onclick="filterSource(this,'glassdoor')">Glassdoor</div>
+          <div class="pill" onclick="filterSource(this,'remote')">Remote only</div>
+        </div>
+        <div class="api-status-bar" id="api-status-bar"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
+          <div style="font-size:13px;color:var(--text2)"><span id="job-count">0</span> jobs found</div>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <select id="sort-select" onchange="sortJobs()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.35rem .65rem;color:var(--text2);font-size:12px;outline:none;cursor:pointer">
+              <option value="match">Sort: Match score</option>
+              <option value="date">Sort: Newest</option>
+              <option value="salary">Sort: Salary</option>
+            </select>
+            <button class="btn" style="font-size:12px" onclick="refreshJobs()"><i class="ti ti-refresh" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        <div id="job-list">
+          <div style="text-align:center;padding:3rem;color:var(--text2)"><div class="spinner" style="margin:0 auto 1rem"></div><div>Fetching jobs from LinkedIn, Indeed, Glassdoor...</div></div>
+        </div>
+      </div>
+
+      <!-- APPLICATIONS -->
+      <div class="sub-page" id="sp-applications">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <div class="pill active" onclick="filterApps(this,'all')">All</div>
+            <div class="pill" onclick="filterApps(this,'applied')">Applied</div>
+            <div class="pill" onclick="filterApps(this,'reviewing')">Reviewing</div>
+            <div class="pill" onclick="filterApps(this,'interview')">Interview</div>
+            <div class="pill" onclick="filterApps(this,'declined')">Declined</div>
+          </div>
+          <button class="btn" style="font-size:12px" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="app-table">
+            <thead><tr><th>Company</th><th>Role</th><th>Source</th><th>Applied</th><th>Status</th><th>Match</th><th></th></tr></thead>
+            <tbody id="app-table-body">
+              <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text2)">No applications yet - apply to jobs in the Job feed</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- INTERVIEWS -->
+      <div class="sub-page" id="sp-interviews">
+        <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
+          <div style="display:flex;gap:.5rem">
+            <div class="pill active" onclick="filterPill(this)">Upcoming (3)</div>
+            <div class="pill" onclick="filterPill(this)">Completed (0)</div>
+          </div>
+          <button class="btn btn-primary" style="font-size:12px"><i class="ti ti-calendar-plus" aria-hidden="true"></i> Add manually</button>
+        </div>
+        <div id="interviews-list">
+          <div style="text-align:center;padding:3rem 1rem;color:var(--text2)">
+            <i class="ti ti-calendar-off" style="font-size:36px;color:var(--text3);display:block;margin-bottom:.75rem"></i>
+            <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:.35rem">No interviews yet</div>
+            <div style="font-size:13px;color:var(--text2);margin-bottom:1rem">When recruiters schedule interviews, they will appear here automatically.</div>
+            <button class="btn btn-primary" style="font-size:12px" onclick="showAddInterview()"><i class="ti ti-plus"></i> Add manually</button>
+          </div>
+        </div>
+        <!-- Add Interview Modal -->
+        <div id="add-interview-modal" style="display:none;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r2);padding:1.25rem;margin-top:1rem">
+          <div style="font-size:15px;font-weight:600;margin-bottom:1rem">Add interview</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+            <div class="field"><label>Company</label><input id="int-company" placeholder="e.g. Google"></div>
+            <div class="field"><label>Role</label><input id="int-role" placeholder="e.g. QA Engineer"></div>
+            <div class="field"><label>Date</label><input type="date" id="int-date"></div>
+            <div class="field"><label>Time</label><input type="time" id="int-time"></div>
+            <div class="field"><label>Platform</label><input id="int-platform" placeholder="e.g. Zoom, Google Meet"></div>
+            <div class="field"><label>Duration</label><input id="int-duration" placeholder="e.g. 45 min"></div>
+          </div>
+          <div style="display:flex;gap:.5rem;margin-top:.5rem">
+            <button class="btn btn-primary" onclick="saveInterview()">Save interview</button>
+            <button class="btn" onclick="document.getElementById('add-interview-modal').style.display='none'">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESUME -->
+      <div class="sub-page" id="sp-resume">
+        <div class="resume-main">
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:.75rem">
+              <h2 style="font-size:16px;font-weight:600">Resume</h2>
+              <div style="display:flex;gap:.5rem">
+                <button class="btn" style="font-size:12px" onclick="goTo('pg-upload')"><i class="ti ti-upload" aria-hidden="true"></i> Re-upload</button>
+                <button class="btn btn-primary" style="font-size:12px"><i class="ti ti-download" aria-hidden="true"></i> Download</button>
+              </div>
+            </div>
+            <div class="resume-preview" id="resume-preview-box">
+              <!-- Dynamic resume content injected by parseAndDisplayResume() -->
+              <div id="resume-parsed-content">
+                <div style="text-align:center;padding:2rem;color:var(--text2)">
+                  <i class="ti ti-file-upload" style="font-size:32px;color:var(--text3);display:block;margin-bottom:.75rem"></i>
+                  <div style="font-size:14px;font-weight:500;margin-bottom:.4rem">No resume uploaded yet</div>
+                  <div style="font-size:12px;color:var(--text3);margin-bottom:1rem">Upload your resume to see it parsed here</div>
+                  <button class="btn btn-primary" style="font-size:12px" onclick="goTo('pg-upload')"><i class="ti ti-upload"></i> Upload resume</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:.75rem">
+              <div class="dash-section-title">AI-tailored versions</div>
+              <div id="tailored-versions"><div style="font-size:13px;color:var(--text2);text-align:center;padding:1rem">Apply to jobs to generate tailored versions</div></div>
+            </div>
+            <div class="card">
+              <div class="dash-section-title">Resume score</div>
+              <div style="font-size:36px;font-weight:600;color:var(--green);margin-bottom:.25rem" id="resume-score-val">–<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span></div>
+              <div id="resume-score-bars" style="display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem">
+                <div style="font-size:13px;color:var(--text2);text-align:center;padding:.5rem">Upload your resume to see score</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NOTIFICATIONS -->
+      <div class="sub-page" id="sp-notifications">
+        <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
+          <div style="display:flex;gap:.5rem"><div class="pill active" onclick="filterPill(this)">All</div><div class="pill" onclick="filterPill(this)">Interviews</div><div class="pill" onclick="filterPill(this)">Applications</div></div>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="markAllRead()">Mark all read</button>
+        </div>
+        <div class="card" style="padding:.5rem 1rem" id="notif-list">
+          <div id="notif-empty" style="font-size:13px;color:var(--text2);padding:2rem;text-align:center">
+            <i class="ti ti-bell-off" style="font-size:28px;color:var(--text3);display:block;margin-bottom:.5rem"></i>
+            No notifications yet
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="sub-page" id="sp-settings">
+        <div class="settings-grid">
+          <div class="card" style="padding:.5rem">
+            <div class="s-nav-item active" onclick="settingsTab(this,'st-profile')"><i class="ti ti-user" aria-hidden="true"></i> Profile</div>
+            
+            <div class="s-nav-item" onclick="settingsTab(this,'st-preferences')"><i class="ti ti-sliders" aria-hidden="true"></i> Job preferences</div>
+            <div class="s-nav-item" onclick="settingsTab(this,'st-notifications')"><i class="ti ti-bell" aria-hidden="true"></i> Notifications</div>
+            <div class="s-nav-item" onclick="settingsTab(this,'st-billing')"><i class="ti ti-credit-card" aria-hidden="true"></i> Billing</div>
+          </div>
+          <div>
+            <!-- PROFILE -->
+            <div class="settings-panel" id="st-profile">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Profile</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Your personal information</div>
+              <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.25rem">
+                <div class="avatar avatar-lg" style="background:var(--accent);color:#fff" id="user-avatar">?</div>
+                <button class="btn" style="font-size:12px"><i class="ti ti-upload" aria-hidden="true"></i> Change photo</button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+                <div class="field"><label>First name</label><input id="profile-fname" value=""></div>
+                <div class="field"><label>Last name</label><input id="profile-lname" value=""></div>
+              </div>
+              <div class="field"><label>Email</label><input type="email" id="profile-email" value=""></div>
+              <div class="field"><label>Phone (SMS alerts)</label><input type="tel" placeholder="+1 (555) 000-0000"></div>
+              <button class="btn btn-primary" onclick="showToast('Profile saved')">Save changes</button>
+            </div>
+            <!-- API SETTINGS -->
+            <div class="settings-panel" id="st-api" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">API & Job Sources</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Manage your JSearch API key and connected job boards</div>
+              <div style="margin-bottom:1.25rem;padding:1rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+                <div style="font-size:13px;font-weight:600;margin-bottom:.5rem">JSearch API (RapidAPI)</div>
+                <div style="font-size:12px;color:var(--text2);margin-bottom:.75rem">Powers LinkedIn, Indeed, Glassdoor, ZipRecruiter & 20+ sources</div>
+                <div class="field" style="margin-bottom:.5rem"><label>API Key</label><input type="password" id="settings-api-key" placeholder="Paste your RapidAPI key..." value=""></div>
+                <div class="field" style="margin-bottom:.75rem"><label>Cloudflare Worker Proxy URL</label><input type="url" id="settings-proxy-url" placeholder="https://your-worker.your-subdomain.workers.dev" value=""></div>
+                <div style="font-size:11px;color:var(--text3);margin-bottom:.75rem;padding:.5rem .65rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--amber-dim)"><i class="ti ti-info-circle" style="color:var(--amber)"></i> Deploy <b>worker.js</b> to Cloudflare Workers (free), then paste the URL above. This fixes CORS so live jobs load on GitHub Pages.</div>
+                <div style="display:flex;gap:.5rem">
+                  <button class="btn btn-primary" style="font-size:12px" onclick="updateApiKey()">Save settings</button>
+                  <button class="btn" style="font-size:12px" onclick="testApiKey()">Test connection</button>
+                  <div id="settings-test-result" style="font-size:12px;display:flex;align-items:center;gap:.35rem"></div>
+                </div>
+              </div>
+              <div style="font-size:13px;font-weight:600;margin-bottom:.75rem">Active sources</div>
+              <div style="display:flex;flex-direction:column;gap:.5rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">LinkedIn</span><span class="source-badge src-linkedin">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">Indeed</span><span class="source-badge src-indeed">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">Glassdoor</span><span class="source-badge src-glassdoor">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)"><div style="display:flex;align-items:center;gap:.6rem"><span style="font-size:13px;font-weight:500">ZipRecruiter & others</span><span class="source-badge src-other">via JSearch</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+              </div>
+            </div>
+            <!-- PREFERENCES -->
+            <div class="settings-panel" id="st-preferences" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Job preferences</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Controls what jobs the agent searches for</div>
+              <div class="field"><label>Target role</label><input id="set-title" value="Quality Engineer"></div>
+              <div class="field"><label>Location</label><input id="set-location" value="Remote"></div>
+              <div class="field"><label>Min salary</label><input type="number" value="90000"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-top:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">Auto-apply to 80%+ matches</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Automatically submit tailored resume</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+              <button class="btn btn-primary" style="margin-top:1rem" onclick="savePrefsAndRefresh()">Save & refresh jobs</button>
+            </div>
+            <!-- NOTIFICATIONS SETTINGS -->
+            <div class="settings-panel" id="st-notifications" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Notifications</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Choose how you're alerted</div>
+              <div style="display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">Email notifications</div><div style="font-size:12px;color:var(--text2)">Application updates, interview alerts</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--border)"><div><div style="font-size:13px;font-weight:500">SMS alerts</div><div style="font-size:12px;color:var(--text2)">Urgent alerts only</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0"><div><div style="font-size:13px;font-weight:500">Weekly summary</div><div style="font-size:12px;color:var(--text2)">Email every Monday morning</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+              </div>
+              <button class="btn btn-primary" style="margin-top:1rem" onclick="showToast('Saved')">Save</button>
+            </div>
+            <!-- BILLING -->
+            <div class="settings-panel" id="st-billing" style="display:none">
+              <h3 style="font-size:16px;font-weight:600;margin-bottom:.25rem">Billing</h3>
+              <div style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">Manage your subscription</div>
+              <div class="card" style="background:var(--accent-dim);border-color:rgba(108,92,231,.3);margin-bottom:1rem"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:15px;font-weight:600">Pro Plan</div><div style="font-size:13px;color:var(--text2);margin-top:2px">Unlimited applications · All sources</div></div><span class="badge badge-purple">Active</span></div><div style="font-size:28px;font-weight:600;margin-top:.75rem;color:var(--accent-light)">$29<span style="font-size:14px;font-weight:400;color:var(--text2)">/month</span></div><div style="font-size:12px;color:var(--text2);margin-top:.25rem">Next billing: June 10, 2026</div></div>
+              <div style="display:flex;gap:.5rem"><button class="btn" style="font-size:12px"><i class="ti ti-download" aria-hidden="true"></i> Invoice</button><button class="btn btn-danger" style="font-size:12px">Cancel plan</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- page-body -->
+  </div><!-- main-content -->
+</div><!-- pg-app -->
+
+<div id="toast"></div>
+
+<script>
+
+// ═══════════════════════════════════════
+// FIREBASE AUTH - Google & GitHub OAuth
+// ═══════════════════════════════════════
+// 🔧 SETUP REQUIRED (one-time, 5 min):
+// 1. Go to https://console.firebase.google.com
+// 2. Create project → Add web app → copy config below
+// 3. Authentication → Sign-in methods → Enable Google + GitHub
+// 4. For GitHub: create OAuth app at github.com/settings/developers
+//    Callback URL: https://YOUR-PROJECT.firebaseapp.com/__/auth/handler
+// 5. Replace the firebaseConfig below with your own values
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCTKQcpzjTOxYywF5-UKqqEv3ImrkgHwc8",
+  authDomain: "applyai-e64eb.firebaseapp.com",
+  projectId: "applyai-e64eb",
+  storageBucket: "applyai-e64eb.firebasestorage.app",
+  messagingSenderId: "177421444976",
+  appId: "1:177421444976:web:05fb4c551bb983d33451b5",
+  measurementId: "G-07LR2ERLRT"
+};
+
+let firebaseApp = null;
+let firebaseAuth = null;
+
+let firebaseDB = null;
+let firebaseStorage = null;
+
+function initFirebase() {
+  if (firebaseApp) return true;
+  if (typeof firebase === 'undefined') {
+    setTimeout(initFirebase, 500);
+    return false;
+  }
+  try {
+    if (!firebase.apps.length) {
+      firebaseApp = firebase.initializeApp(firebaseConfig);
+    } else {
+      firebaseApp = firebase.apps[0];
+    }
+    firebaseAuth = firebase.auth();
+    firebaseDB = firebase.firestore();
+    firebaseStorage = firebase.storage();
+    firebaseAuth.onAuthStateChanged(user => {
+      if (user) {
+        const currentPage = document.querySelector('.page.active');
+        const isOnAuthPage = currentPage && (currentPage.id === 'pg-landing' || currentPage.id === 'pg-signin' || currentPage.id === 'pg-signup');
+        if (isOnAuthPage) {
+          handleFirebaseUser(user);
+        } else {
+          const name = user.displayName || user.email.split('@')[0];
+          STATE.userEmail = user.email;
+          STATE.userName = name;
+          const initials = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+          const setEl = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+          setEl('user-email', user.email);
+          setEl('user-name', name);
+          setEl('user-avatar', initials);
+          const fn = document.getElementById('profile-fname');
+          const ln = document.getElementById('profile-lname');
+          const em = document.getElementById('profile-email');
+          if (fn) fn.value = name.split(' ')[0] || name;
+          if (ln) ln.value = name.split(' ').slice(1).join(' ') || '';
+          if (em) em.value = user.email;
+          document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS'||a.textContent.trim()==='') a.textContent=initials; });
+        }
+        loadUserData(user.uid);
+      }
+    });
+    return true;
+  } catch(e) { console.error('Firebase init error:', e); return false; }
+}
+
+// ═══════════════════════════════════════
+// FIRESTORE - Save & Load User Data
+// ═══════════════════════════════════════
+async function saveUserData(uid, data) {
+  if (!firebaseDB) return;
+  try {
+    await firebaseDB.collection('users').doc(uid).set(data, { merge: true });
+  } catch(e) { console.error('Save error:', e); }
+}
+
+async function loadUserData(uid) {
+  if (!firebaseDB) return;
+  try {
+    const doc = await firebaseDB.collection('users').doc(uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      // Restore resume info
+      if (data.resumeName) {
+        STATE.resumeName = data.resumeName;
+        STATE.resumeURL = data.resumeURL || '';
+        STATE.resumeSize = data.resumeSize || '';
+        STATE.resumeUploadDate = data.resumeUploadDate || '';
+        updateResumeUI(data);
+      }
+      // Restore applications
+      if (data.applications && data.applications.length > 0) {
+        STATE.applications = data.applications;
+        STATE.appliedCount = data.applications.length;
+        const ac = document.getElementById('app-count'); if(ac) ac.textContent = STATE.applications.length;
+        document.getElementById('dash-today').textContent = STATE.appliedCount;
+        document.getElementById('agent-applied').textContent = STATE.appliedCount;
+        renderAppTable();
+      }
+      // Restore prefs
+      if (data.prefs) {
+        STATE.prefs = { ...STATE.prefs, ...data.prefs };
+        const t = document.getElementById('pref-title');
+        const l = document.getElementById('pref-location');
+        if (t) t.value = data.prefs.title || STATE.prefs.title;
+        if (l) l.value = data.prefs.location || STATE.prefs.location;
+      }
+    }
+  } catch(e) { console.error('Load error:', e); }
+}
+
+function updateResumeUI(data) {
+  // Update resume page display
+  const fname = document.getElementById('resume-filename');
+  const fmeta = document.getElementById('resume-filemeta');
+  const fzone = document.getElementById('upload-zone');
+  const fpreview = document.getElementById('resume-uploaded-banner');
+
+  if (fname) fname.textContent = data.resumeName;
+  if (fmeta) fmeta.textContent = `Uploaded ${data.resumeUploadDate || 'recently'}  ${data.resumeSize || ''}`;
+
+  // Show uploaded state in resume page
+  const resumeCard = document.getElementById('resume-file-card');
+  if (resumeCard) {
+    resumeCard.innerHTML = `
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
+        <div style="width:36px;height:42px;background:var(--accent-dim);border:1px solid rgba(108,92,231,.3);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--accent-light);font-size:18px"><i class="ti ti-file-text" aria-hidden="true"></i></div>
+        <div>
+          <div style="font-size:13px;font-weight:600">${data.resumeName}</div>
+          <div style="font-size:11px;color:var(--text2)">Uploaded ${data.resumeUploadDate || 'recently'} - ${data.resumeSize || ''}</div>
+        </div>
+      </div>
+      ${data.resumeURL ? `<a href="${data.resumeURL}" target="_blank" class="btn" style="font-size:12px;width:100%;justify-content:center"><i class="ti ti-download" aria-hidden="true"></i> Download resume</a>` : ''}
+    `;
+  }
+
+  // Hide upload prompt, show success on upload page
+  if (fzone) fzone.style.display = 'none';
+  const uploaded = document.getElementById('upload-already');
+  if (uploaded) uploaded.style.display = 'flex';
+}
+
+// ═══════════════════════════════════════
+// FIREBASE STORAGE - Upload Resume
+// ═══════════════════════════════════════
+async function uploadResumeToFirebase(file, uid) {
+  if (!firebaseStorage) return null;
+  try {
+    const ref = firebaseStorage.ref(`resumes/${uid}/${file.name}`);
+    const snapshot = await ref.put(file);
+    const url = await snapshot.ref.getDownloadURL();
+    return url;
+  } catch(e) {
+    console.error('Upload error:', e);
+    return null;
+  }
+}
+
+async function handleFirebaseUser(user) {
+  const name = user.displayName || user.email.split('@')[0];
+  const email = user.email;
+  STATE.userEmail = email;
+  STATE.userName = name;
+  const initials = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+  const setEl = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  setEl('user-email', email);
+  setEl('user-name', name);
+  setEl('user-avatar', initials);
+  setEl('res-name', name);
+  document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS') a.textContent=initials; });
+  localStorage.setItem('jsearch_api_key', STATE.apiKey);
+
+  // Fill settings profile fields
+  const fn = document.getElementById('profile-fname');
+  const ln = document.getElementById('profile-lname');
+  const em = document.getElementById('profile-email');
+  const nameParts = name.split(' ');
+  if (fn) fn.value = nameParts[0] || name;
+  if (ln) ln.value = nameParts.slice(1).join(' ') || '';
+  if (em) em.value = email;
+
+  // Check if resume already uploaded for this user
+  if (firebaseDB) {
+    try {
+      const doc = await firebaseDB.collection('users').doc(user.uid).get();
+      if (doc.exists && doc.data().resumeName) {
+        const data = doc.data();
+        STATE.resumeName = data.resumeName;
+        STATE.resumeURL = data.resumeURL;
+        // Show already-uploaded state
+        const alreadyEl = document.getElementById('upload-already');
+        const zoneEl = document.getElementById('upload-zone');
+        const fnEl = document.getElementById('resume-filename');
+        const fmEl = document.getElementById('resume-filemeta');
+        if (alreadyEl) alreadyEl.style.display = 'flex';
+        if (zoneEl) zoneEl.style.display = 'none';
+        if (fnEl) fnEl.textContent = data.resumeName;
+        if (fmEl) fmEl.textContent = `Uploaded ${data.resumeUploadDate || 'previously'} - ${data.resumeSize || ''}`;
+        goTo('pg-upload');
+        showToast('Welcome back ' + name + ' - resume already saved!');
+        return;
+      }
+    } catch(e) { console.error(e); }
+  }
+  goTo('pg-upload');
+  showToast('Signed in as ' + name);
+}
+
+async function signInWithGoogle() {
+  if (!initFirebase()) {
+    // Firebase not configured - show setup modal
+    showFirebaseSetupNotice('Google');
+    return;
+  }
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('email');
+    provider.addScope('profile');
+    const result = await firebaseAuth.signInWithPopup(provider);
+    handleFirebaseUser(result.user);
+  } catch(e) {
+    if (e.code === 'auth/popup-closed-by-user') return;
+    showAuthError('si', 'Google sign-in failed: ' + (e.message || e.code));
+  }
+}
+
+async function signInWithGitHub() {
+  if (!initFirebase()) {
+    showFirebaseSetupNotice('GitHub');
+    return;
+  }
+  try {
+    const provider = new firebase.auth.GithubAuthProvider();
+    provider.addScope('user:email');
+    const result = await firebaseAuth.signInWithPopup(provider);
+    handleFirebaseUser(result.user);
+  } catch(e) {
+    if (e.code === 'auth/popup-closed-by-user') return;
+    showAuthError('si', 'GitHub sign-in failed: ' + (e.message || e.code));
+  }
+}
+
+function showFirebaseSetupNotice(provider) {
+  // Show a helpful modal explaining setup steps
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:1.5rem;max-width:460px;width:100%">
+      <div style="font-size:16px;font-weight:600;margin-bottom:.5rem">${provider} OAuth - Quick Setup Needed</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:1rem;line-height:1.6">
+        To enable real ${provider} login, connect Firebase Auth (free, 5 min):
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:1rem;margin-bottom:1rem;font-size:12px;color:var(--text2);line-height:1.8">
+        1. Go to <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent-light)">console.firebase.google.com</a><br>
+        2. Create project → Add web app → copy config<br>
+        3. Authentication → Sign-in methods → Enable <b style="color:var(--text)">${provider}</b><br>
+        4. Replace <code style="color:var(--accent-light)">firebaseConfig</code> in index.html with your values<br>
+        5. Redeploy to GitHub Pages
+      </div>
+      <div style="font-size:12px;color:var(--amber);margin-bottom:1rem;padding:.5rem .75rem;background:var(--amber-dim);border-radius:8px;border:1px solid rgba(245,200,66,.2)">
+        💡 For now, use email sign-in below - it works without any setup!
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button onclick="this.closest('div[style*=fixed]').remove()" class="btn btn-primary" style="flex:1;justify-content:center">Got it</button>
+        <button onclick="window.open('https://console.firebase.google.com','_blank');this.closest('div[style*=fixed]').remove()" class="btn" style="flex:1;justify-content:center">Open Firebase →</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+}
+
+function showAuthError(form, msg) {
+  const el = document.getElementById(form + '-error');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+  else showToast(msg, true);
+}
+
+async function doSignIn() {
+  const e = document.getElementById('si-email').value.trim();
+  const p = document.getElementById('si-password')?.value || '';
+  const btn = document.getElementById('si-btn');
+  const errEl = document.getElementById('si-error');
+  if (errEl) errEl.style.display = 'none';
+
+  if (!e) { showAuthError('si','Please enter your email'); return; }
+
+  // Try Firebase email/password if configured
+  if (initFirebase() && p) {
+    btn.textContent = 'Signing in...'; btn.disabled = true;
+    try {
+      const result = await firebaseAuth.signInWithEmailAndPassword(e, p);
+      handleFirebaseUser(result.user);
+    } catch(err) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        showAuthError('si','Invalid email or password');
+      } else {
+        // Fall through to local auth
+        localSignIn(e);
+      }
+    } finally { btn.textContent = 'Sign in'; btn.disabled = false; }
+    return;
+  }
+
+  // Local sign-in (no Firebase)
+  localSignIn(e);
+}
+
+function localSignIn(email) {
+  STATE.userEmail = email;
+  document.getElementById('user-email').textContent = email;
+  localStorage.setItem('jsearch_api_key', STATE.apiKey);
+  goTo('pg-upload');
+  showToast('Connected! LinkedIn, Indeed & Glassdoor ready!');
+}
+
+async function doSignUp() {
+  const e = document.getElementById('su-email').value.trim();
+  const n = document.getElementById('su-fname').value.trim();
+  const p = document.getElementById('su-password')?.value || '';
+  const btn = document.getElementById('su-btn');
+  const errEl = document.getElementById('su-error');
+  if (errEl) errEl.style.display = 'none';
+
+  if (!e) { showAuthError('su','Please enter your email'); return; }
+
+  // Try Firebase email/password if configured
+  if (initFirebase() && p) {
+    btn.textContent = 'Creating account...'; btn.disabled = true;
+    try {
+      const result = await firebaseAuth.createUserWithEmailAndPassword(e, p);
+      if (n) await result.user.updateProfile({ displayName: n + ' Smith' });
+      handleFirebaseUser(result.user);
+    } catch(err) {
+      if (err.code === 'auth/email-already-in-use') {
+        showAuthError('su','Email already in use - try signing in');
+      } else if (err.code === 'auth/weak-password') {
+        showAuthError('su','Password must be at least 6 characters');
+      } else {
+        localSignUp(e, n);
+      }
+    } finally { btn.textContent = 'Create account ->'; btn.disabled = false; }
+    return;
+  }
+
+  localSignUp(e, n);
+}
+
+function localSignUp(email, fname) {
+  STATE.userEmail = email;
+  STATE.userName = (fname || '') || 'User';
+  const initials = (fname || 'J').charAt(0).toUpperCase() + 'S';
+  document.getElementById('user-email').textContent = email;
+  document.getElementById('user-name').textContent = STATE.userName;
+  document.querySelectorAll('.avatar').forEach(a => { if(a.textContent.trim()==='JS') a.textContent=initials; });
+  document.getElementById('res-name').textContent = STATE.userName;
+  localStorage.setItem('jsearch_api_key', STATE.apiKey);
+  goTo('pg-upload');
+  showToast('Account created! Welcome to ApplyAI!');
+}
+
+async function forgotPassword() {
+  const e = document.getElementById('si-email').value.trim();
+  if (!e) { showAuthError('si','Enter your email first, then click Forgot password'); return; }
+  if (!initFirebase()) { showToast('Enter your email - password reset requires Firebase setup', true); return; }
+  try {
+    await firebaseAuth.sendPasswordResetEmail(e);
+    showToast('Password reset email sent to ' + e);
+  } catch(err) {
+    showAuthError('si', 'Could not send reset email: ' + err.message);
+  }
+}
+
+// ═══════════════════════════════════════
+// RESUME PARSING - Read actual PDF/DOCX
+// ═══════════════════════════════════════
+
+async function extractTextFromPDF(file) {
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      fullText += pageText + '\n';
+    }
+    return fullText;
+  } catch(e) {
+    console.error('PDF parse error:', e);
+    return null;
+  }
+}
+
+function parseResumeText(text) {
+  if (!text) return null;
+  const lines = text.split(/\n|\r/).map(l => l.trim()).filter(l => l.length > 0);
+
+  // Extract name - usually first non-empty line
+  const name = lines[0] || STATE.userName;
+
+  // Extract email
+  const emailMatch = text.match(/[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}/);
+  const email = emailMatch ? emailMatch[0] : '';
+
+  // Extract phone
+  const phoneMatch = text.match(/(\+?1?\s?)?(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
+  const phone = phoneMatch ? phoneMatch[0] : '';
+
+  // Extract LinkedIn
+  const linkedinMatch = text.match(/linkedin\.com\/in\/[\w-]+/i);
+  const linkedin = linkedinMatch ? linkedinMatch[0] : '';
+
+  // Extract location - look for City, State pattern
+  const locationMatch = text.match(/([A-Z][a-zA-Z\s]+,\s*[A-Z]{2})/);
+  const location = locationMatch ? locationMatch[0] : '';
+
+  // Extract skills - look for common skill keywords
+  const skillKeywords = ['Python','Java','JavaScript','TypeScript','React','Angular','Vue','Node','SQL','AWS','Azure','GCP',
+    'Docker','Kubernetes','Git','Linux','HTML','CSS','REST','API','Agile','Scrum','JIRA','Selenium','Playwright',
+    'Automation','Testing','QA','Quality','Cypress','TestNG','JUnit','Jenkins','CI/CD','DevOps','Postman',
+    'Performance','Load Testing','Security','Manual Testing','Test Cases','ISTQB','SDLC','STLC',
+    'C#','C++','Ruby','Swift','Kotlin','Go','R','MATLAB','Excel','Power BI','Tableau','Figma',
+    'MongoDB','PostgreSQL','MySQL','Redis','GraphQL','Spring','Django','Flask','Angular','Next.js',
+    'Machine Learning','AI','TensorFlow','PyTorch','Pandas','NumPy','Scikit'];
+  const textLower = text.toLowerCase();
+  const foundSkills = skillKeywords.filter(s => textLower.includes(s.toLowerCase()));
+  const skills = foundSkills.slice(0, 12);
+
+  // Extract title - look for common job title patterns near top
+  const titlePatterns = ['Engineer','Developer','Manager','Analyst','Designer','Architect','Consultant',
+    'Specialist','Lead','Director','Coordinator','QA','Quality','Tester','DevOps','Data'];
+  let title = '';
+  for (const line of lines.slice(0, 10)) {
+    if (titlePatterns.some(t => line.includes(t)) && line.length < 80) {
+      title = line; break;
+    }
+  }
+
+  // Extract experience sections
+  const expSections = [];
+  var expPattern = null; // experience extracted differently
+  let match;
+  const expText = text.slice(0, 3000);
+  // expSections filled by line-based parser below
+
+  // Extract education
+  var eduText = text.slice(0,3000); var eduIdx = eduText.search(/(Bachelor|Master|B\.S\.|M\.S\.|MBA|PhD|B\.Tech|M\.Tech)/i); var education = eduIdx>=0 ? eduText.slice(eduIdx,eduIdx+80).split('\n')[0].trim() : '';
+  // education already declared above
+
+  // Extract summary - first long paragraph
+  let summary = '';
+  for (const line of lines.slice(1, 15)) {
+    if (line.length > 60 && !emailMatch?.[0]?.includes(line)) {
+      summary = line.slice(0, 200);
+      break;
+    }
+  }
+
+  return { name, email, phone, linkedin, location, title, skills, expSections, education, summary, rawText: text.slice(0, 5000) };
+}
+
+function renderParsedResume(parsed) {
+  if (!parsed) return;
+  const el = document.getElementById('resume-parsed-content');
+  if (!el) return;
+
+  const skillsHTML = parsed.skills.length
+    ? parsed.skills.map(s => `<span class="skill-chip">${s}</span>`).join('')
+    : '<span style="color:var(--text3);font-size:12px">No skills detected - try a text-based PDF</span>';
+
+  const expHTML = parsed.expSections.length
+    ? parsed.expSections.map(e => `<div style="margin-bottom:.6rem"><div style="font-size:13px;font-weight:600;color:var(--text)">${e}</div></div>`).join('')
+    : '<div style="font-size:12px;color:var(--text3)">Could not extract experience - raw text available below</div>';
+
+  el.innerHTML = `
+    <div style="text-align:center;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border)">
+      <div style="font-size:20px;font-weight:600;color:var(--text)">${parsed.name || STATE.userName}</div>
+      ${parsed.title ? `<div style="font-size:13px;color:var(--text2);margin-top:.25rem">${parsed.title}</div>` : ''}
+      <div style="font-size:12px;color:var(--text3);margin-top:.2rem;display:flex;justify-content:center;gap:1rem;flex-wrap:wrap">
+        ${parsed.email ? `<span>${parsed.email}</span>` : ''}
+        ${parsed.phone ? `<span>${parsed.phone}</span>` : ''}
+        ${parsed.location ? `<span>${parsed.location}</span>` : ''}
+      </div>
+    </div>
+    ${parsed.summary ? `
+    <div class="resume-section">
+      <div class="resume-section-title">Summary</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.6">${parsed.summary}</div>
+    </div>` : ''}
+    <div class="resume-section">
+      <div class="resume-section-title">Skills detected</div>
+      <div class="skill-chips">${skillsHTML}</div>
+    </div>
+    ${parsed.expSections.length ? `
+    <div class="resume-section">
+      <div class="resume-section-title">Experience</div>
+      ${expHTML}
+    </div>` : ''}
+    ${parsed.education ? `
+    <div class="resume-section">
+      <div class="resume-section-title">Education</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text)">${parsed.education}</div>
+    </div>` : ''}
+    <div style="margin-top:1rem;padding:.75rem;background:var(--surface2);border-radius:var(--r);border:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.06em">File</div>
+      <div style="font-size:13px;color:var(--accent-light);font-weight:500">${STATE.resumeName || 'Uploaded resume'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${STATE.resumeSize || ''} - ${STATE.resumeUploadDate || 'Recently uploaded'}</div>
+    </div>
+  `;
+
+  // Update resume score based on actual content
+  const scoreEl = document.getElementById('resume-score-val');
+  const barsEl = document.getElementById('resume-score-bars');
+  if (scoreEl && parsed) {
+    const skillScore = Math.min(99, 60 + (parsed.skills ? parsed.skills.length * 3 : 0));
+    const hasEdu = parsed.education ? 1 : 0;
+    const hasSummary = parsed.summary ? 1 : 0;
+    const hasExp = (parsed.expSections && parsed.expSections.length > 0) ? 1 : 0;
+    const formatScore = Math.min(99, 70 + (hasEdu + hasSummary + hasExp) * 8);
+    const impactScore = Math.min(99, 60 + (hasSummary * 15) + (hasExp * 10));
+    const total = Math.round((skillScore + formatScore + impactScore) / 3);
+    scoreEl.innerHTML = total + '<span style="font-size:16px;font-weight:400;color:var(--text2)">/100</span>';
+    scoreEl.style.color = total >= 80 ? 'var(--green)' : total >= 60 ? 'var(--amber)' : 'var(--red)';
+    if (barsEl) {
+      barsEl.innerHTML =
+        '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Skills detected</span><span style="color:var(--green)">'+skillScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+skillScore+'%;background:var(--green)"></div></div></div>' +
+        '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Formatting</span><span style="color:var(--green)">'+formatScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+formatScore+'%"></div></div></div>' +
+        '<div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>Impact statements</span><span style="color:var(--amber)">'+impactScore+'%</span></div><div class="progress"><div class="progress-fill" style="width:'+impactScore+'%;background:var(--amber)"></div></div></div>';
+    }
+  }
+
+  // Also update the job search prefs with detected title
+  if (parsed.title) {
+    const titleInput = document.getElementById('pref-title');
+    const setTitle = document.getElementById('set-title');
+    if (titleInput && !titleInput.value) titleInput.value = parsed.title;
+    if (setTitle) setTitle.value = parsed.title;
+    STATE.prefs.title = parsed.title;
+  }
+
+  // Update skills in STATE for AI matching
+  if (parsed.skills.length) STATE.resumeSkills = parsed.skills;
+}
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const STATE = {
+  apiKey: localStorage.getItem('jsearch_api_key') || '8a85c9ed3bmshb465717d10fa749p1b9438jsn52b1147d7149',
+  proxyUrl: localStorage.getItem('proxy_url') || 'https://applyai-production-7152.up.railway.app', // Railway backend
+  demoMode: false,
+  jobs: [],
+  applications: [],
+  appliedCount: 0,
+  agentRunning: true,
+  prefs: { title: 'Quality Engineer', location: 'Remote' },
+  userName: '',
+  userEmail: ''
+};
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function scrollToSection(sectionId) {
+  const el = document.getElementById(sectionId);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function goTo(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function navTo(el, subId) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.sub-page').forEach(s => s.classList.remove('active'));
+  document.getElementById(subId).classList.add('active');
+  const titles = { 'sp-dashboard':'Dashboard','sp-feed':'Job feed','sp-applications':'Applications','sp-interviews':'Interviews','sp-resume':'My resume','sp-notifications':'Notifications','sp-settings':'Settings' };
+  document.getElementById('topbar-title').textContent = titles[subId] || '';
+  if (subId === 'sp-feed' && STATE.jobs.length === 0) fetchJobs();
+  if (subId === 'sp-resume') {
+    // Render parsed resume if available
+    if (STATE.parsedResume) {
+      renderParsedResume(STATE.parsedResume);
+    } else {
+      // Try localStorage fallback
+      const stored = localStorage.getItem('parsed_resume');
+      if (stored) { try { STATE.parsedResume = JSON.parse(stored); renderParsedResume(STATE.parsedResume); } catch(e){} }
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════
+// API KEY
+// ═══════════════════════════════════════
+async function testApiKey() {
+  const key = document.getElementById('api-key-input')?.value || document.getElementById('settings-api-key')?.value || '';
+  const resultEl = document.getElementById('api-test-result') || document.getElementById('settings-test-result');
+  if (!key) { showToast('Paste your API key first', true); return; }
+  resultEl.innerHTML = '<span style="color:var(--amber)">Testing...</span>';
+  try {
+    const res = await fetch('https://jsearch.p.rapidapi.com/search?query=software+engineer&page=1&num_pages=1', {
+      headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' }
+    });
+    if (res.ok) {
+      resultEl.innerHTML = '<i class="ti ti-check" style="color:var(--green)"></i><span style="color:var(--green)">Connected!</span>';
+      showToast('API key works! Connected to JSearch.');
+    } else {
+      resultEl.innerHTML = '<i class="ti ti-x" style="color:var(--red)"></i><span style="color:var(--red)">Invalid key</span>';
+    }
+  } catch {
+    resultEl.innerHTML = '<i class="ti ti-x" style="color:var(--red)"></i><span style="color:var(--red)">Connection failed</span>';
+  }
+}
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (key) {
+    STATE.apiKey = key;
+    localStorage.setItem('jsearch_api_key', key);
+    STATE.demoMode = false;
+  } else {
+    STATE.demoMode = true;
+  }
+  goTo('pg-upload');
+}
+
+function skipApiKey() {
+  STATE.demoMode = true;
+  showToast('Using demo data - add your API key in Settings anytime');
+  goTo('pg-upload');
+}
+
+function updateApiKey() {
+  const key = document.getElementById('settings-api-key').value.trim();
+  const proxy = (document.getElementById('settings-proxy-url')?.value || '').trim().replace(/\/$/, '');
+  if (!key) { showToast('Paste your API key first', true); return; }
+  STATE.apiKey = key;
+  localStorage.setItem('jsearch_api_key', key);
+  if (proxy) {
+    STATE.proxyUrl = proxy;
+    localStorage.setItem('proxy_url', proxy);
+  }
+  STATE.demoMode = false;
+  showToast('Settings saved! Refreshing jobs...');
+  setTimeout(() => { STATE.jobs = []; fetchJobs(); }, 500);
+}
+
+// ═══════════════════════════════════════
+// RESUME UPLOAD
+// ═══════════════════════════════════════
+async function handleResume(input) {
+  if (!input.files[0]) return;
+  const file = input.files[0];
+  document.getElementById('upload-zone').style.display = 'none';
+  document.getElementById('upload-progress').style.display = 'block';
+
+  // Animate progress bar
+  const msgs = ['Uploading resume...','Parsing your skills...','Saving to cloud...','Matching to job database...','All done!'];
+  let pct = 0, mi = 0;
+  const iv = setInterval(() => {
+    pct = Math.min(pct + 2, 85); // stop at 85 until Firebase upload done
+    document.getElementById('upload-bar').style.width = pct + '%';
+    if (pct % 20 === 0 && mi < msgs.length) document.getElementById('upload-msg').textContent = msgs[mi++];
+  }, 40);
+
+  // Get file info
+  const sizeKB = (file.size / 1024).toFixed(0);
+  const sizeMB = file.size > 1024*1024 ? (file.size/1024/1024).toFixed(1) + ' MB' : sizeKB + ' KB';
+  const uploadDate = new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+
+  // Parse PDF text in background
+  document.getElementById('upload-msg').textContent = 'Reading your resume...';
+  let parsed = null;
+  if (file.type === 'application/pdf') {
+    parsed = parseResumeText(await extractTextFromPDF(file));
+  }
+  if (parsed) {
+    STATE.parsedResume = parsed;
+    // Save parsed data to localStorage for persistence
+    localStorage.setItem('parsed_resume', JSON.stringify({
+      name: parsed.name, title: parsed.title, skills: parsed.skills,
+      education: parsed.education, summary: parsed.summary,
+      expSections: parsed.expSections, email: parsed.email, location: parsed.location
+    }));
+  }
+
+  // Immediately finish progress bar
+  clearInterval(iv);
+  document.getElementById('upload-bar').style.width = '100%';
+  document.getElementById('upload-msg').textContent = 'Resume saved!';
+
+  const uid = firebaseAuth?.currentUser?.uid;
+  const resumeData = {
+    resumeName: file.name,
+    resumeURL: '',
+    resumeSize: sizeMB,
+    resumeUploadDate: uploadDate,
+  };
+
+  STATE.resumeName = file.name;
+  STATE.resumeSize = sizeMB;
+  STATE.resumeUploadDate = uploadDate;
+
+  // Save metadata to Firestore immediately (fast)
+  if (uid && firebaseDB) {
+    saveUserData(uid, resumeData); // no await - fire and forget
+  }
+  localStorage.setItem('resume_data', JSON.stringify(resumeData));
+
+  // Upload file to Storage in background (non-blocking)
+  if (uid && firebaseStorage) {
+    uploadResumeToFirebase(file, uid).then(url => {
+      if (url) {
+        STATE.resumeURL = url;
+        resumeData.resumeURL = url;
+        if (uid && firebaseDB) saveUserData(uid, { resumeURL: url });
+        localStorage.setItem('resume_data', JSON.stringify({...resumeData, resumeURL: url}));
+      }
+    }).catch(e => console.warn('Background upload failed:', e));
+  }
+
+  setTimeout(() => goTo('pg-prefs'), 600);
+}
+
+function startApp() {
+  STATE.prefs.title = document.getElementById('pref-title').value || 'Frontend Engineer';
+  STATE.prefs.location = document.getElementById('pref-location').value || 'Remote';
+  // Save prefs
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (uid && firebaseDB) saveUserData(uid, { prefs: STATE.prefs });
+  goTo('pg-app');
+  buildChart();
+  fetchJobs();
+}
+
+// ═══════════════════════════════════════
+// JSEARCH API - FETCH REAL JOBS
+// ═══════════════════════════════════════
+function updateApiModeBadge(isDemo) {
+  const b = document.getElementById('api-mode-badge');
+  if (!b) return;
+  if (isDemo) {
+    b.textContent = 'Demo mode';
+    b.style.background = 'var(--amber-dim)';
+    b.style.color = 'var(--amber)';
+    b.style.borderColor = 'rgba(245,200,66,.2)';
+  } else {
+    b.textContent = 'Live API';
+    b.style.background = 'var(--green-dim)';
+    b.style.color = 'var(--green)';
+    b.style.borderColor = 'rgba(0,196,122,.2)';
+  }
+}
+
+function loadDemoJobs() {
+  STATE.jobs = getDemoJobs();
+  STATE.demoMode = true;
+  setApiStatusBar('demo');
+  renderJobs();
+  updateDashStats();
+  updateApiModeBadge(true);
+  addActivity('Using demo jobs - live jobs will load on next refresh', 'amber');
+}
+
+async function fetchJobs() {
+  const list = document.getElementById('job-list');
+  list.innerHTML = `<div style="text-align:center;padding:3rem;color:var(--text2)"><div class="spinner" style="margin:0 auto 1rem"></div><div>Fetching jobs from LinkedIn, Indeed, Glassdoor...</div></div>`;
+  setApiStatusBar('loading');
+
+  const key = STATE.apiKey;
+  const PROXY = STATE.proxyUrl || '';
+  const useProxy = !!PROXY;
+
+  // If no key and no proxy, use demo
+  if (!key && !useProxy) { loadDemoJobs(); return; }
+
+  try {
+    const title = STATE.prefs.title || 'Software Engineer';
+    const loc   = STATE.prefs.location || 'Remote';
+
+    // Fire 3 parallel queries for maximum results
+    const queries = [`${title} ${loc}`, `${title} remote`, title];
+
+    const makeHeaders = () => useProxy
+      ? { 'Content-Type': 'application/json' }
+      : { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'jsearch.p.rapidapi.com' };
+
+    const makeUrl = (q) => useProxy
+      ? `${PROXY}/search?query=${encodeURIComponent(q)}&page=1&num_pages=1&date_posted=all`
+      : `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(q)}&page=1&num_pages=1&date_posted=all`;
+
+    const fetches = queries.map(q =>
+      fetch(makeUrl(q), { headers: makeHeaders() })
+        .then(r => r.ok ? r.json() : { data: [] })
+        .catch(() => ({ data: [] }))
+    );
+
+    const results = await Promise.all(fetches);
+    const seen = new Set();
+    const allJobs = [];
+    results.forEach(r => {
+      (r.data || []).forEach(j => {
+        if (!seen.has(j.job_id)) { seen.add(j.job_id); allJobs.push(normalizeJob(j)); }
+      });
+    });
+
+    if (allJobs.length === 0) throw new Error('No jobs returned');
+
+    STATE.jobs = allJobs;
+    STATE.demoMode = false;
+    setApiStatusBar('live');
+    renderJobs();
+    updateDashStats();
+    updateApiModeBadge(false);
+    addActivity('Fetched ' + allJobs.length + ' real jobs from LinkedIn, Indeed, Glassdoor', 'green');
+  } catch (err) {
+    console.warn('JSearch fetch failed, using demo data:', err.message);
+    loadDemoJobs();
+  }
+}
+
+function normalizeJob(j) {
+  const src = (j.job_publisher || '').toLowerCase();
+  let source = 'other';
+  if (src.includes('linkedin')) source = 'linkedin';
+  else if (src.includes('indeed')) source = 'indeed';
+  else if (src.includes('glassdoor')) source = 'glassdoor';
+  else if (src.includes('zip') || src.includes('remote')) source = 'remoteok';
+
+  const sal = j.job_min_salary && j.job_max_salary
+    ? `$${Math.round(j.job_min_salary/1000)}k-$${Math.round(j.job_max_salary/1000)}k`
+    : j.job_salary_currency ? 'Salary listed' : 'Not listed';
+
+  return {
+    id: j.job_id || Math.random().toString(36).slice(2),
+    title: j.job_title || 'Software Engineer',
+    company: j.employer_name || 'Company',
+    location: j.job_city ? `${j.job_city}, ${j.job_country || ''}` : (j.job_is_remote ? 'Remote' : j.job_country || 'Unknown'),
+    remote: !!j.job_is_remote,
+    type: j.job_employment_type || 'FULLTIME',
+    salary: sal,
+    source: source,
+    publisher: j.job_publisher || 'Job board',
+    description: j.job_description ? j.job_description.slice(0, 200) + '...' : '',
+    applyUrl: j.job_apply_link || '#',
+    logo: (j.employer_name || 'Co').slice(0,2).toUpperCase(),
+    logoColor: getLogoColor(j.employer_name || ''),
+    match: Math.floor(Math.random() * 25 + 72),
+    applied: false,
+    datePosted: j.job_posted_at_datetime_utc || new Date().toISOString()
+  };
+}
+
+function getDemoJobs() {
+  return [
+    {id:'d1',title:'Senior Frontend Engineer',company:'Stripe',location:'San Francisco, CA',remote:true,type:'FULLTIME',salary:'$140k-$180k',source:'linkedin',publisher:'LinkedIn',description:'Build the next generation of payment interfaces. Work with React, TypeScript, and GraphQL on products used by millions.',applyUrl:'#',logo:'ST',logoColor:'#162035,#5ba8f5',match:96,applied:false},
+    {id:'d2',title:'Product Engineer',company:'Notion',location:'Remote',remote:true,type:'FULLTIME',salary:'$120k-$160k',source:'indeed',publisher:'Indeed',description:'Join the product team to build the future of productivity tools. We love React, TypeScript, and thoughtful design.',applyUrl:'#',logo:'NO',logoColor:'#1c1530,#a29bfe',match:91,applied:false},
+    {id:'d3',title:'Full Stack Engineer',company:'Linear',location:'Remote',remote:true,type:'FULLTIME',salary:'$130k-$170k',source:'glassdoor',publisher:'Glassdoor',description:'Build tools that developers love. We work on a fast codebase with React, Node.js, and PostgreSQL.',applyUrl:'#',logo:'LI',logoColor:'#102418,#00c47a',match:88,applied:false},
+    {id:'d4',title:'Frontend Engineer II',company:'Vercel',location:'New York, NY',remote:false,type:'FULLTIME',salary:'$110k-$150k',source:'linkedin',publisher:'LinkedIn',description:'Shape the future of frontend deployment. Work across Next.js, React, and our edge infrastructure.',applyUrl:'#',logo:'VE',logoColor:'#1a1a1a,#ffffff',match:84,applied:false},
+    {id:'d5',title:'Software Engineer, Frontend',company:'Rippling',location:'San Francisco, CA',remote:false,type:'FULLTIME',salary:'$125k-$165k',source:'indeed',publisher:'Indeed',description:'Help us build the OS for businesses. Our stack is React, TypeScript, and Python.',applyUrl:'#',logo:'RI',logoColor:'#0e1a2b,#5ba8f5',match:81,applied:false},
+    {id:'d6',title:'UI Engineer',company:'Figma',location:'Remote',remote:true,type:'FULLTIME',salary:'$135k-$175k',source:'glassdoor',publisher:'Glassdoor',description:'Design and build the interfaces that designers use. Deep knowledge of canvas, WebGL, and browser APIs a plus.',applyUrl:'#',logo:'FI',logoColor:'#1a0e2b,#c8b4ff',match:79,applied:false},
+    {id:'d7',title:'React Developer',company:'Shopify',location:'Remote',remote:true,type:'FULLTIME',salary:'$115k-$155k',source:'linkedin',publisher:'LinkedIn',description:'Build commerce experiences for millions of merchants worldwide. React, TypeScript, and GraphQL stack.',applyUrl:'#',logo:'SH',logoColor:'#0e1f14,#96bf48',match:77,applied:false},
+    {id:'d8',title:'Frontend Infrastructure Engineer',company:'Airbnb',location:'San Francisco, CA',remote:false,type:'FULLTIME',salary:'$150k-$195k',source:'indeed',publisher:'Indeed',description:'Own the frontend build system, design system, and developer experience for Airbnb.com.',applyUrl:'#',logo:'AB',logoColor:'#2a0e14,#ff5a5f',match:74,applied:false},
+  ];
+}
+
+function getLogoColor(name) {
+  const colors = ['#162035,#5ba8f5','#1c1530,#a29bfe','#102418,#00c47a','#1a1a1a,#ffffff','#0e1a2b,#74b9ff','#1a0e2b,#c8b4ff','#0e1f14,#96bf48','#2a0e14,#ff5a5f'];
+  let h = 0;
+  for (let c of name) h = (h * 31 + c.charCodeAt(0)) % colors.length;
+  return colors[h];
+}
+
+function sourceLabel(src) {
+  const map = { linkedin:'LinkedIn', indeed:'Indeed', glassdoor:'Glassdoor', remoteok:'RemoteOK', other:'Other' };
+  return map[src] || src;
+}
+
+function sourceClass(src) {
+  const map = { linkedin:'src-linkedin', indeed:'src-indeed', glassdoor:'src-glassdoor', remoteok:'src-remoteok', other:'src-other' };
+  return map[src] || 'src-other';
+}
+
+function renderJobs(jobs) {
+  const list = jobs || filterJobList();
+  const el = document.getElementById('job-list');
+  document.getElementById('job-count').textContent = list.length;
+  document.getElementById('feed-count').textContent = list.length;
+
+  if (list.length === 0) {
+    el.innerHTML = `<div class="empty-state"><i class="ti ti-briefcase-off" aria-hidden="true"></i><h3>No jobs found</h3><p>Try a different search or add your API key in Settings</p></div>`;
+    return;
+  }
+
+  // source counts for dashboard
+  const counts = { linkedin:0, indeed:0, glassdoor:0, other:0 };
+  STATE.jobs.forEach(j => {
+    if (j.source === 'linkedin') counts.linkedin++;
+    else if (j.source === 'indeed') counts.indeed++;
+    else if (j.source === 'glassdoor') counts.glassdoor++;
+    else counts.other++;
+  });
+  const set = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  set('src-linkedin', counts.linkedin + ' jobs');
+  set('src-indeed', counts.indeed + ' jobs');
+  set('src-glassdoor', counts.glassdoor + ' jobs');
+  set('src-other', counts.other + ' jobs');
+  set('dash-found', STATE.jobs.length);
+
+  el.innerHTML = list.map(j => {
+    const [bg,fg] = (j.logoColor || '#162035,#5ba8f5').split(',');
+    const typeLabel = j.type === 'FULLTIME' ? 'Full-time' : j.type === 'PARTTIME' ? 'Part-time' : j.type || 'Full-time';
+    return `
+    <div class="job-card-item ${j.applied?'applied':''}" data-id="${j.id}" data-source="${j.source}" data-remote="${j.remote}">
+      <div class="job-top-row">
+        <div style="display:flex;gap:.75rem;align-items:flex-start">
+          <div class="company-logo-box" style="background:${bg};color:${fg}">${j.logo}</div>
+          <div>
+            <div class="job-title-main">${escHtml(j.title)}</div>
+            <div class="job-company-name">${escHtml(j.company)} - ${escHtml(j.location)}</div>
+          </div>
+        </div>
+        ${j.applied ? '<span class="badge badge-green">Applied</span>' : '<span class="badge badge-gray">New</span>'}
+      </div>
+      <div class="job-tags">
+        <span class="source-badge ${sourceClass(j.source)}">${sourceLabel(j.source)}</span>
+        ${j.remote ? '<div class="tag">Remote</div>' : '<div class="tag">On-site</div>'}
+        <div class="tag">${j.salary}</div>
+        <div class="tag">${typeLabel}</div>
+        <div class="match-pct">${j.match}% match</div>
+      </div>
+      ${j.description ? `<div class="job-desc">${escHtml(j.description)}</div>` : ''}
+      <div class="job-actions-row">
+        ${j.applied
+          ? `<button class="btn btn-success" style="font-size:12px;cursor:default">Opened in new tab</button><button class="btn" style="font-size:12px">View resume</button>`
+          : `<button class="btn btn-primary" style="font-size:12px" onclick="applyJob('${j.id}',this)">Apply now</button>
+             <button class="btn" style="font-size:12px" onclick="window.open('${j.applyUrl}','_blank')"><i class="ti ti-external-link" aria-hidden="true"></i> Original post</button>
+             <button class="btn" style="font-size:12px" onclick="skipJob('${j.id}',this)">Skip</button>`
+        }
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterJobList() {
+  const q = (document.getElementById('job-search')?.value || '').toLowerCase();
+  const src = document.querySelector('#sp-feed .pill.active')?.textContent.toLowerCase() || 'all';
+  let jobs = STATE.jobs.filter(j => {
+    const text = `${j.title} ${j.company} ${j.location} ${j.description}`.toLowerCase();
+    const matchQ = !q || text.includes(q);
+    const matchSrc = src === 'all' || (src === 'remote only' ? j.remote : j.source === src);
+    return matchQ && matchSrc;
+  });
+  const sort = document.getElementById('sort-select')?.value || 'match';
+  if (sort === 'match') jobs.sort((a,b) => b.match - a.match);
+  else if (sort === 'date') jobs.sort((a,b) => new Date(b.datePosted) - new Date(a.datePosted));
+  return jobs;
+}
+
+function filterJobs() { renderJobs(); }
+function filterSource(el, src) {
+  el.closest('.feed-toolbar').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  renderJobs();
+}
+function sortJobs() { renderJobs(); }
+function filterPill(el) {
+  el.closest('div').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ═══════════════════════════════════════
+// APPLY TO JOB
+// ═══════════════════════════════════════
+function applyJob(id, btn) {
+  const job = STATE.jobs.find(j => j.id === id);
+  if (!job || job.applied) return;
+  // Open real job URL
+  if (job.applyUrl && job.applyUrl !== '#') window.open(job.applyUrl, '_blank');
+  btn.textContent = 'Opening job...';
+  btn.disabled = true;
+  btn.style.opacity = '.6';
+  setTimeout(() => {
+    job.applied = true;
+    job.status = 'applied';
+    job.appliedDate = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    STATE.appliedCount++;
+    STATE.applications.unshift({...job});
+    document.getElementById('dash-today').textContent = STATE.appliedCount;
+    document.getElementById('agent-applied').textContent = STATE.appliedCount;
+    const ac = document.getElementById('app-count'); if(ac) ac.textContent = STATE.applications.length;
+    buildChart();
+    renderJobs();
+    renderAppTable();
+    addActivity(`Opened job page - ${job.company} (${job.title})`, 'green');
+    addTailoredVersion(job);
+    showToast('Job page opened! Complete your application there.');
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid && firebaseDB) saveUserData(uid, { applications: STATE.applications.slice(0,50), appliedCount: STATE.appliedCount });
+  }, 600);
+}
+
+function skipJob(id, btn) {
+  STATE.jobs = STATE.jobs.filter(j => j.id !== id);
+  renderJobs();
+}
+
+// ═══════════════════════════════════════
+// APPLICATIONS TABLE
+// ═══════════════════════════════════════
+function renderAppTable(filter) {
+  filter = filter || 'all';
+  var tbody = document.getElementById('app-table-body');
+  if (!tbody) return;
+  var apps = STATE.applications;
+  if (filter !== 'all') apps = apps.filter(function(j) { return (j.status||'applied') === filter; });
+  if (apps.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text2)">' + (STATE.applications.length===0 ? 'No applications yet' : 'No applications with this status') + '</td></tr>';
+    return;
+  }
+  var rows = '';
+  apps.forEach(function(j) {
+    var parts = (j.logoColor||'#162035,#5ba8f5').split(',');
+    var bg = parts[0], fg = parts[1]||'#5ba8f5';
+    var id = escHtml(j.id||'');
+    var sel = '<select style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 6px;color:var(--text2);font-size:11px;cursor:pointer;outline:none" onchange="updateAppStatus(this.value,this)">';
+    sel += '<option value="applied"' + ((!j.status||j.status==='applied')?' selected':'') + '>Applied</option>';
+    sel += '<option value="reviewing"' + (j.status==='reviewing'?' selected':'') + '>Reviewing</option>';
+    sel += '<option value="interview"' + (j.status==='interview'?' selected':'') + '>Interview</option>';
+    sel += '<option value="offered"' + (j.status==='offered'?' selected':'') + '>Offered</option>';
+    sel += '<option value="declined"' + (j.status==='declined'?' selected':'') + '>Declined</option>';
+    sel += '</select>';
+    rows += '<tr>';
+    rows += '<td><div style="display:flex;align-items:center;gap:.5rem"><div class="company-logo-box" style="background:'+bg+';color:'+fg+';width:28px;height:28px;font-size:10px">'+j.logo+'</div><span>'+escHtml(j.company)+'</span></div></td>';
+    rows += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">'+escHtml(j.title)+'</td>';
+    rows += '<td><span class="source-badge '+sourceClass(j.source)+'">'+sourceLabel(j.source)+'</span></td>';
+    rows += '<td style="color:var(--text2);font-size:12px">'+(j.appliedDate||'Today')+'</td>';
+    rows += '<td>'+sel+'</td>';
+    rows += '<td style="color:var(--green);font-weight:600;font-size:13px">'+j.match+'%</td>';
+    rows += '<td><a href="'+(j.applyUrl||'#')+'" target="_blank" class="btn btn-ghost" style="font-size:11px;padding:.2rem .5rem"><i class="ti ti-external-link"></i></a></td>';
+    rows += '</tr>';
+  });
+  tbody.innerHTML = rows;
+}
+
+function updateAppStatus(newStatus, selectEl) {
+  var row = selectEl.closest('tr');
+  var company = row ? row.querySelector('span') : null;
+  var companyName = company ? company.textContent : '';
+  var job = STATE.applications.find(function(j) { return j.company === companyName || true; });
+  // Update by index position
+  var rows = document.querySelectorAll('#app-table-body tr');
+  var rowIdx = Array.from(rows).indexOf(row);
+  if (rowIdx >= 0 && STATE.applications[rowIdx]) {
+    STATE.applications[rowIdx].status = newStatus;
+    var uid = firebaseAuth && firebaseAuth.currentUser ? firebaseAuth.currentUser.uid : null;
+    if (uid && firebaseDB) saveUserData(uid, { applications: STATE.applications.slice(0,50) });
+    showToast('Status updated to: ' + newStatus);
+  }
+}
+
+function filterApps(el, status) {
+  el.closest('div').querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  renderAppTable(status);
+}
+
+function updateAppStatus(jobId, newStatus) {
+  const job = STATE.applications.find(j => j.id === jobId);
+  if (job) {
+    job.status = newStatus;
+    const uid = firebaseAuth?.currentUser?.uid;
+    if (uid && firebaseDB) saveUserData(uid, { applications: STATE.applications.slice(0,50) });
+    showToast('Status updated to: ' + newStatus);
+  }
+}
+
+function exportCSV() {
+  if (STATE.applications.length === 0) { showToast('No applications to export yet', true); return; }
+  const headers = ['Company','Role','Source','Applied Date','Status','Match %','Job URL'];
+  const rows = STATE.applications.map(j => [
+    j.company, j.title, sourceLabel(j.source),
+    j.appliedDate||'Today', j.status||'applied', j.match+'%', j.applyUrl||''
+  ]);
+    var csvRows = [headers].concat(rows);
+  var csv = csvRows.map(function(r){return r.map(function(v){return '"'+String(v||'').replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'applyai_applications_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  showToast('CSV downloaded!');
+}
+
+// ═══════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════
+function addActivity(text, color) {
+  const feed = document.getElementById('activity-feed');
+  if (!feed) return;
+  const colors = { green:'var(--green)', accent:'var(--accent)', amber:'var(--amber)', red:'var(--red)', 'accent-light':'var(--accent-light)' };
+  const dot = colors[color] || 'var(--accent-light)';
+  const item = document.createElement('div');
+  item.className = 'activity-item';
+  item.innerHTML = `<div class="act-dot" style="background:${dot}"></div><div><div style="font-size:13px">${escHtml(text)}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Just now</div></div>`;
+  feed.insertBefore(item, feed.firstChild);
+  if (feed.children.length > 8) feed.removeChild(feed.lastChild);
+}
+
+function addTailoredVersion(job) {
+  const el = document.getElementById('tailored-versions');
+  if (!el) return;
+  if (el.querySelector('[style*="text-align"]')) el.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'version-item';
+  div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.6rem .75rem;border-radius:var(--r);border:1px solid var(--border);margin-bottom:.4rem;background:var(--surface2);cursor:pointer';
+  div.title = 'Click to view original job posting';
+  div.onclick = function() { if (job.applyUrl && job.applyUrl !== '#') window.open(job.applyUrl, '_blank'); else showToast('No job URL available'); };
+  div.innerHTML = '<div><div style="font-size:13px;font-weight:500">' + escHtml(job.company) + ' version</div><div style="font-size:11px;color:var(--text2)">Tailored for ' + escHtml(job.title) + ' - click to view job</div></div><i class="ti ti-external-link" style="color:var(--text2);font-size:14px"></i>';
+  el.insertBefore(div, el.firstChild);
+}
+
+function setApiStatusBar(state) {
+  const bar = document.getElementById('api-status-bar');
+  if (!bar) return;
+  const sources = ['LinkedIn','Indeed','Glassdoor','ZipRecruiter'];
+  if (state === 'loading') {
+    bar.innerHTML = sources.map(s => `<div class="api-src-pill loading"><i class="ti ti-loader" aria-hidden="true"></i>${s}</div>`).join('');
+  } else if (state === 'live') {
+    bar.innerHTML = sources.map(s => `<div class="api-src-pill done"><i class="ti ti-check" aria-hidden="true"></i>${s}</div>`).join('') + '<div class="api-src-pill done"><i class="ti ti-check" aria-hidden="true"></i>+20 more</div>';
+  } else if (state === 'demo') {
+    bar.innerHTML = `<div class="api-src-pill" style="color:var(--amber);border-color:var(--amber-dim);background:var(--amber-dim)"><i class="ti ti-info-circle" aria-hidden="true"></i>Demo mode - <span style="cursor:pointer;text-decoration:underline" onclick="navTo(document.querySelector('[onclick*=sp-settings]'),\'sp-settings\')">add API key for live jobs</span></div>`;
+  } else if (state === 'error') {
+    bar.innerHTML = `<div class="api-src-pill error"><i class="ti ti-alert-triangle" aria-hidden="true"></i>API error - using demo data</div>`;
+  }
+}
+
+function updateDashStats() {
+  const el = document.getElementById('dash-found');
+  if (el) el.textContent = STATE.jobs.length;
+}
+
+function buildChart() {
+  const vals = [0,0,0,0,0,0,STATE.appliedCount||0];
+  const max = Math.max(...vals,1);
+  const c = document.getElementById('mini-chart');
+  if (!c) return;
+  c.innerHTML = vals.map((v,i) => `<div class="chart-bar${i===6?' today':''}" style="height:${Math.max(4,Math.round(v/max*100))}%" title="${v} apps"></div>`).join('');
+}
+
+function refreshJobs() { STATE.jobs=[]; fetchJobs(); showToast('Refreshing jobs from all sources...'); }
+
+function savePrefsAndRefresh() {
+  const t = document.getElementById('set-title');
+  const l = document.getElementById('set-location');
+  if (t) STATE.prefs.title = t.value;
+  if (l) STATE.prefs.location = l.value;
+  showToast('Preferences saved! Refreshing jobs...');
+  setTimeout(() => { STATE.jobs=[]; fetchJobs(); }, 500);
+}
+
+function toggleAgent() {
+  STATE.agentRunning = !STATE.agentRunning;
+  const btn = document.getElementById('agent-btn');
+  const dot = document.getElementById('agent-status');
+  if (STATE.agentRunning) {
+    btn.innerHTML = '<i class="ti ti-player-pause" aria-hidden="true"></i> Pause agent';
+    dot.style.background = 'var(--green-dim)'; dot.style.color = 'var(--green)';
+    showToast('Agent resumed - applying to new jobs');
+  } else {
+    btn.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Resume agent';
+    dot.style.background = 'var(--amber-dim)'; dot.style.color = 'var(--amber)';
+    showToast('Agent paused');
+  }
+}
+
+function markAllRead() {
+  const c = document.getElementById('notif-count');
+  if (c) c.style.display = 'none';
+  showToast('All notifications marked as read');
+}
+
+function settingsTab(el, panelId) {
+  el.closest('.card').querySelectorAll('.s-nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  const panels = ['st-profile','st-api','st-preferences','st-notifications','st-billing'];
+  panels.forEach(id => { const p=document.getElementById(id); if(p) p.style.display = id===panelId?'':'none'; });
+  if (panelId === 'st-api') {
+    const inp = document.getElementById('settings-api-key');
+    if (inp) inp.value = STATE.apiKey || '';
+    const pinp = document.getElementById('settings-proxy-url');
+    if (pinp) pinp.value = STATE.proxyUrl || '';
+  }
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _toastTimer;
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = isError ? 'error' : '';
+  t.style.display = 'block';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.style.display = 'none', 3500);
+}
+
+// ═══════════════════════════════════════
+// INTERVIEW MANAGEMENT
+// ═══════════════════════════════════════
+STATE.interviews = JSON.parse(localStorage.getItem('interviews') || '[]');
+
+function showAddInterview() {
+  const modal = document.getElementById('add-interview-modal');
+  if (modal) modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveInterview() {
+  const company = document.getElementById('int-company')?.value;
+  const role = document.getElementById('int-role')?.value;
+  const date = document.getElementById('int-date')?.value;
+  const time = document.getElementById('int-time')?.value;
+  const platform = document.getElementById('int-platform')?.value;
+  const duration = document.getElementById('int-duration')?.value;
+  if (!company || !date) { showToast('Company and date are required', true); return; }
+  const interview = { company, role, date, time, platform, duration, id: Date.now() };
+  STATE.interviews.push(interview);
+  localStorage.setItem('interviews', JSON.stringify(STATE.interviews));
+  renderInterviews();
+  document.getElementById('add-interview-modal').style.display = 'none';
+  showToast('Interview added!');
+  // Save to Firestore
+  const uid = firebaseAuth?.currentUser?.uid;
+  if (uid && firebaseDB) saveUserData(uid, { interviews: STATE.interviews });
+}
+
+function renderInterviews() {
+  const list = document.getElementById('interviews-list');
+  const dashList = document.getElementById('dash-interviews-list');
+  const count = STATE.interviews.length;
+
+  // Update counts
+  const intCount = document.getElementById('int-count');
+  const dashInt = document.getElementById('dash-interviews');
+  const dashIntSub = document.getElementById('dash-int-sub');
+  if (intCount) intCount.textContent = count;
+  if (dashInt) dashInt.textContent = count;
+  if (dashIntSub) dashIntSub.textContent = count > 0 ? count + ' scheduled' : 'None scheduled yet';
+
+  if (!list) return;
+  if (count === 0) {
+    list.innerHTML = '<div style="text-align:center;padding:3rem 1rem;color:var(--text2)"><i class="ti ti-calendar-off" style="font-size:36px;color:var(--text3);display:block;margin-bottom:.75rem"></i><div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:.35rem">No interviews yet</div><div style="font-size:13px;color:var(--text2);margin-bottom:1rem">When recruiters schedule interviews they will appear here.</div><button class="btn btn-primary" style="font-size:12px" onclick="showAddInterview()"><i class="ti ti-plus"></i> Add manually</button></div>';
+    if (dashList) dashList.innerHTML = '<div style="font-size:13px;color:var(--text2);text-align:center;padding:.75rem 0">No interviews scheduled yet</div>';
+    return;
+  }
+  // Sort by date
+  const sorted = [...STATE.interviews].sort((a,b) => new Date(a.date) - new Date(b.date));
+  list.innerHTML = sorted.map(i => {
+    const d = new Date(i.date);
+    const day = d.getDate();
+    const mon = d.toLocaleString('en',{month:'short'}).toUpperCase();
+    return '<div class="interview-card">' +
+      '<div class="interview-date-block"><div class="int-day" style="color:var(--accent-light)">'+day+'</div><div class="int-mon">'+mon+'</div></div>' +
+      '<div style="flex:1"><div style="font-size:14px;font-weight:600;margin-bottom:.25rem">'+escHtml(i.company)+' - '+escHtml(i.role||'Interview')+'</div>' +
+      '<div class="interview-meta">' +
+        (i.time ? '<span><i class="ti ti-clock"></i> '+i.time+'</span>' : '') +
+        (i.platform ? '<span><i class="ti ti-video"></i> '+escHtml(i.platform)+'</span>' : '') +
+        (i.duration ? '<span><i class="ti ti-clock"></i> '+escHtml(i.duration)+'</span>' : '') +
+      '</div></div>' +
+      '<div style="display:flex;flex-direction:column;gap:.4rem">' +
+        '<button class="btn btn-danger" style="font-size:11px" onclick="deleteInterview('+i.id+')">Remove</button>' +
+      '</div></div>';
+  }).join('');
+
+  // Update dashboard upcoming (show next 3)
+  if (dashList) {
+    dashList.innerHTML = sorted.slice(0,3).map(i => {
+      const d = new Date(i.date);
+      return '<div class="upcoming-item">' +
+        '<div class="cal-date-box"><div class="cal-day">'+d.getDate()+'</div><div class="cal-mon">'+d.toLocaleString('en',{month:'short'}).toUpperCase()+'</div></div>' +
+        '<div><div style="font-size:13px;font-weight:500">'+escHtml(i.company)+' - '+escHtml(i.role||'Interview')+'</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+(i.time||'')+(i.platform?' - '+i.platform:'')+'</div></div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+function deleteInterview(id) {
+  STATE.interviews = STATE.interviews.filter(i => i.id !== id);
+  localStorage.setItem('interviews', JSON.stringify(STATE.interviews));
+  renderInterviews();
+  showToast('Interview removed');
+}
+
+function viewResume() {
+  if (STATE.resumeURL) {
+    window.open(STATE.resumeURL, '_blank');
+  } else if (STATE.resumeName) {
+    showToast('Resume stored locally - download not available. Re-upload to enable download.');
+  } else {
+    showToast('No resume uploaded yet');
+  }
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('api-key-input');
+  if (inp && STATE.apiKey) inp.value = STATE.apiKey;
+  buildChart();
+  renderInterviews();
+  // Init Firebase after SDK loads
+  setTimeout(() => {
+    if (!firebaseApp) initFirebase();
+    // Check if user was previously logged in (handles page refresh)
+    setTimeout(() => {
+      if (firebaseAuth && firebaseAuth.currentUser) {
+        const user = firebaseAuth.currentUser;
+        const activePage = document.querySelector('.page.active');
+        if (activePage && (activePage.id === 'pg-landing' || activePage.id === 'pg-signin')) {
+          goTo('pg-app');
+          buildChart();
+          fetchJobs();
+        }
+      }
+    }, 1500);
+  }, 300);
+});
+</script>
+</body>
+</html>
